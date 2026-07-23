@@ -6,6 +6,7 @@ const bcrypt = require("bcryptjs");
 const cron = require("node-cron");
 const { load, save, log } = require("./store");
 const { runAgent } = require("./agents");
+const calendarApi = require("./calendar");
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -99,9 +100,62 @@ app.post("/api/claims/:id/approve", auth, (req, res) => {
 });
 
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------
-// Vapi: end-of-call report → call record + booking
-app.post("/webhooks/vapi", (req, res) => {
+
+function formatAvailability(out, dateISO) {
+  if (!out.configured) return "I'm not able to check the live calendar right now — let me have a team member confirm a time and call you back.";
+  if (out.closed) return `We're closed on ${dateISO}. Would another day work?`;
+  if (!out.slots.length) return `I don't see any open slots on ${dateISO} for that. Would another day work?`;
+  const times = out.slots
+    .map((iso) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: calendarApi.tz() }))
+    .join(", ");
+  return `On ${dateISO} I have ${times} open.`;
+}
+
+// Vapi: live tool calls during an active call, and the end-of-call report
+app.post("/webhooks/vapi", async (req, res) => {
+  if (process.env.VAPI_SERVER_SECRET && req.headers["x-vapi-secret"] !== process.env.VAPI_SERVER_SECRET) {
+    return res.sendStatus(403);
+  }
   const m = req.body?.message || req.body || {};
+
+  if (m.type === "tool-calls") {
+    const db = load();
+    const results = [];
+    for (const tc of m.toolCallList || []) {
+      try {
+        if (tc.name === "check_availability") {
+          const { date, service } = tc.arguments || {};
+          const out = await calendarApi.getAvailability(date, calendarApi.serviceDurationMinutes(service));
+          results.push({ toolCallId: tc.id, result: formatAvailability(out, date) });
+        } else if (tc.name === "book_appointment") {
+          const { date, time, name, phone, service } = tc.arguments || {};
+          const [hh, mm] = (time || "").split(":").map(Number);
+          const startISO = calendarApi.zonedTimeToISO(date, hh || 0, mm || 0, calendarApi.tz());
+          const out = await calendarApi.bookAppointment({ name, phone, service, startISO, durationMinutes: calendarApi.serviceDurationMinutes(service) });
+          if (out.eventId) {
+            db.appointments.unshift({
+              id: "A" + Date.now(), time: startISO, name, service, source: "AI line", status: "confirmed",
+              googleEventId: out.eventId, vapiCallId: m.call?.id,
+            });
+            const lead = db.leads.find((l) => l.phone === phone);
+            if (lead) lead.status = "booked";
+            save();
+            log("call", `Booked ${service || "appointment"} for ${name} at ${startISO} via AI line`);
+            results.push({ toolCallId: tc.id, result: `Booked — confirmed for ${startISO}.` });
+          } else {
+            results.push({ toolCallId: tc.id, result: "Sorry, I couldn't book that — the calendar isn't connected right now. A team member will confirm by phone." });
+          }
+        } else {
+          results.push({ toolCallId: tc.id, result: "Unknown tool." });
+        }
+      } catch (e) {
+        results.push({ toolCallId: tc.id, result: `Error checking the calendar: ${e.message}` });
+      }
+    }
+    return res.json({ results });
+  }
+
+  // end-of-call report → call record + booking
   const db = load();
   const analysis = m.analysis || {};
   const call = {
@@ -119,8 +173,13 @@ app.post("/webhooks/vapi", (req, res) => {
     if (lead && call.outcome === "booked") lead.status = "booked";
     if (lead && call.outcome === "not_interested") lead.status = "closed_lost";
   }
-  if (call.outcome === "booked" && analysis.structuredData?.slot) {
-    db.appointments.unshift({ id: "A" + Date.now(), time: analysis.structuredData.slot, name: call.who, service: analysis.structuredData.service || "", source: call.dir === "inbound" ? "AI line" : "Outbound", status: "unconfirmed" });
+  // Fallback booking path for calls that ended "booked" without a tool-call
+  // (e.g. assistant fell back to describing a time in speech only). Skipped
+  // when this call already booked for real via check_availability/book_appointment,
+  // to avoid writing a duplicate appointment row for the same call.
+  const alreadyBookedByTool = db.appointments.some((a) => a.vapiCallId === m.call?.id && a.googleEventId);
+  if (call.outcome === "booked" && analysis.structuredData?.slot && !alreadyBookedByTool) {
+    db.appointments.unshift({ id: "A" + Date.now(), time: analysis.structuredData.slot, name: call.who, service: analysis.structuredData.service || "", source: call.dir === "inbound" ? "AI line" : "Outbound", status: "unconfirmed", vapiCallId: m.call?.id });
   }
   save();
   log("call", `${call.dir === "inbound" ? "Inbound" : "Outbound"} · ${call.who}: ${call.summary}`);

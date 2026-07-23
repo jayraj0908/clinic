@@ -27,6 +27,7 @@ db.settings = {
   receptionistNumber: process.env.RECEPTIONIST_NUMBER || "(000) 000-0000",
   avgVisitValue: 405,
   receptionist: {
+    timezone: clinicProfile.timezone,
     hours: clinicProfile.hours,
     services: clinicProfile.services,
     insuranceAccepted: clinicProfile.insuranceAccepted,

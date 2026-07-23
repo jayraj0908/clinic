@@ -1,6 +1,7 @@
 {
   "_note": "Placeholder demo content for a fictional practice. Replace every field with the real client's details before going live — this same object feeds both the dashboard UI and the Vapi assistant prompts.",
   "name": "Innslake Dental",
+  "timezone": "America/New_York",
   "hours": [
     { "days": "Mon–Fri", "open": "8:00 AM", "close": "6:00 PM" },
     { "days": "Sat", "open": "9:00 AM", "close": "2:00 PM" },
