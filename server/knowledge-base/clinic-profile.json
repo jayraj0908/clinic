@@ -1,0 +1,27 @@
+{
+  "_note": "Placeholder demo content for a fictional practice. Replace every field with the real client's details before going live — this same object feeds both the dashboard UI and the Vapi assistant prompts.",
+  "name": "Innslake Dental",
+  "hours": [
+    { "days": "Mon–Fri", "open": "8:00 AM", "close": "6:00 PM" },
+    { "days": "Sat", "open": "9:00 AM", "close": "2:00 PM" },
+    { "days": "Sun", "open": null, "close": null }
+  ],
+  "services": [
+    { "name": "New patient exam & cleaning", "price": "$120–$180", "duration": "60 min" },
+    { "name": "Routine cleaning (returning patient)", "price": "$110–$150", "duration": "45 min" },
+    { "name": "Teeth whitening", "price": "$350–$450", "duration": "75 min" },
+    { "name": "Invisalign consultation", "price": "Free", "duration": "30 min" },
+    { "name": "Crown & bridge", "price": "$900–$1,500", "duration": "90 min" },
+    { "name": "Root canal", "price": "$700–$1,200", "duration": "90 min" },
+    { "name": "Pediatric cleaning", "price": "$95–$140", "duration": "45 min" },
+    { "name": "Emergency visit", "price": "$150–$300 (varies by treatment)", "duration": "same-day, 30–60 min" }
+  ],
+  "insuranceAccepted": ["Delta Dental", "Cigna", "Aetna", "MetLife", "Guardian"],
+  "selfPay": "Cash, card, and CareCredit financing accepted for uninsured patients.",
+  "policies": [
+    "24-hour notice required to cancel or reschedule without a fee.",
+    "New patients: bring photo ID and insurance card; arrive 15 minutes early for paperwork.",
+    "Severe trauma, uncontrolled bleeding, or facial swelling with fever → advise the caller to go to the ER or an urgent care, do not attempt to book a routine slot."
+  ],
+  "aiDisclosure": "This call may be handled by an AI assistant. State this at the start of every call — required by several states' AI-disclosure laws (see README Compliance section)."
+}

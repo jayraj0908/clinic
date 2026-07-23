@@ -1,0 +1,186 @@
+require("dotenv").config();
+const express = require("express");
+const path = require("path");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const cron = require("node-cron");
+const { load, save, log } = require("./store");
+const { runAgent } = require("./agents");
+
+const app = express();
+app.use(express.json({ limit: "2mb" }));
+app.use(express.static(path.join(__dirname, "..", "public")));
+
+const SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+
+// ---------- auth ----------
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body || {};
+  const u = load().users.find((x) => x.email === email);
+  if (!u || !bcrypt.compareSync(password || "", u.passHash))
+    return res.status(401).json({ error: "Invalid email or password" });
+  res.json({ token: jwt.sign({ id: u.id, role: u.role }, SECRET, { expiresIn: "7d" }), name: u.name });
+});
+
+function auth(req, res, next) {
+  try {
+    req.user = jwt.verify((req.headers.authorization || "").replace("Bearer ", ""), SECRET);
+    next();
+  } catch { res.status(401).json({ error: "Sign in required" }); }
+}
+
+// ---------- dashboard aggregate ----------
+app.get("/api/dashboard", auth, (req, res) => {
+  const db = load();
+  const today = new Date().toDateString();
+  const isToday = (ts) => new Date(ts).toDateString() === today;
+  const callsToday = db.calls.filter((c) => isToday(c.ts));
+  const leadsToday = db.leads.filter((l) => isToday(l.createdAt));
+  const booked = db.leads.filter((l) => ["booked", "seen", "audited", "billed"].includes(l.status));
+  res.json({
+    settings: db.settings,
+    funnel: {
+      leads: leadsToday.length || db.leads.length,
+      calls: callsToday.length,
+      booked: booked.length,
+      seen: db.leads.filter((l) => ["seen", "audited", "billed"].includes(l.status)).length,
+      claims: db.claims.length,
+    },
+    line: {
+      callsToday: callsToday.length,
+      missed: callsToday.filter((c) => c.outcome === "missed").length,
+      bookedByLine: callsToday.filter((c) => c.outcome === "booked").length,
+    },
+    revenueEst: booked.length * (db.settings.avgVisitValue || 0),
+    agents: db.agents,
+    integrations: db.integrations.map(({ envKey, ...i }) => ({ ...i, connected: !!process.env[envKey] || i.status === "connected" })),
+    calls: db.calls.slice(0, 8),
+    appointments: db.appointments.slice(0, 8),
+    claims: db.claims.filter((c) => c.status === "awaiting_approval"),
+    activity: db.activity.slice(0, 20),
+    leads: db.leads,
+  });
+});
+
+// ---------- agents ----------
+app.post("/api/agents/:id/toggle", auth, (req, res) => {
+  const db = load();
+  const a = db.agents.find((x) => x.id === req.params.id);
+  if (!a) return res.status(404).json({ error: "Agent not found" });
+  a.on = !a.on; save();
+  log("system", `${a.name} ${a.on ? "resumed" : "paused"} by owner`);
+  res.json(a);
+});
+
+app.post("/api/agents/:id/run", auth, async (req, res) => {
+  try { res.json({ result: await runAgent(req.params.id) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/agents/:id/schedule", auth, (req, res) => {
+  const db = load();
+  const a = db.agents.find((x) => x.id === req.params.id);
+  if (!a) return res.status(404).json({ error: "Agent not found" });
+  if (!cron.validate(req.body.schedule || "")) return res.status(400).json({ error: "Invalid cron expression" });
+  a.schedule = req.body.schedule;
+  a.scheduleLabel = req.body.scheduleLabel || req.body.schedule;
+  save(); bootSchedules();
+  res.json(a);
+});
+
+// ---------- claims approval (human gate) ----------
+app.post("/api/claims/:id/approve", auth, (req, res) => {
+  const db = load();
+  const c = db.claims.find((x) => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: "Claim not found" });
+  c.status = "approved"; c.approvedBy = req.user.id; save();
+  log("billing", `Claim ${c.id} approved — queued for clearinghouse submission`);
+  res.json(c);
+});
+
+// ---------- webhooks (no auth; verify per-provider signatures in prod) ----------
+// Vapi: end-of-call report → call record + booking
+app.post("/webhooks/vapi", (req, res) => {
+  const m = req.body?.message || req.body || {};
+  const db = load();
+  const analysis = m.analysis || {};
+  const call = {
+    id: "C" + Date.now(),
+    dir: m.call?.type === "outboundPhoneCall" ? "outbound" : "inbound",
+    who: m.customer?.name || m.customer?.number || "Unknown caller",
+    summary: analysis.summary || m.summary || "Call completed",
+    outcome: analysis.structuredData?.outcome || "completed",
+    ts: new Date().toISOString(),
+  };
+  db.calls.unshift(call);
+  const leadId = m.call?.metadata?.leadId;
+  if (leadId) {
+    const lead = db.leads.find((l) => l.id === leadId);
+    if (lead && call.outcome === "booked") lead.status = "booked";
+    if (lead && call.outcome === "not_interested") lead.status = "closed_lost";
+  }
+  if (call.outcome === "booked" && analysis.structuredData?.slot) {
+    db.appointments.unshift({ id: "A" + Date.now(), time: analysis.structuredData.slot, name: call.who, service: analysis.structuredData.service || "", source: call.dir === "inbound" ? "AI line" : "Outbound", status: "unconfirmed" });
+  }
+  save();
+  log("call", `${call.dir === "inbound" ? "Inbound" : "Outbound"} · ${call.who}: ${call.summary}`);
+  res.json({ ok: true });
+});
+
+// Meta Lead Ads: verification + lead payloads
+app.get("/webhooks/meta", (req, res) => {
+  if (req.query["hub.verify_token"] === process.env.META_VERIFY_TOKEN)
+    return res.send(req.query["hub.challenge"]);
+  res.sendStatus(403);
+});
+app.post("/webhooks/meta", (req, res) => {
+  const db = load();
+  let added = 0;
+  for (const entry of req.body?.entry || []) {
+    for (const ch of entry.changes || []) {
+      const f = Object.fromEntries((ch.value?.field_data || []).map((x) => [x.name, x.values?.[0]]));
+      if (!f.phone_number && !f.email) continue;
+      db.leads.unshift({ id: "L" + Date.now() + added, name: f.full_name || "Meta lead", phone: f.phone_number || "", email: f.email || "", source: "meta", service: f.service || "", status: "new", createdAt: new Date().toISOString() });
+      added++;
+    }
+  }
+  save();
+  if (added) log("lead", `${added} new Meta lead(s) received`);
+  res.json({ ok: true });
+});
+
+// Google Ads lead form webhook
+app.post("/webhooks/google", (req, res) => {
+  if (process.env.GOOGLE_ADS_WEBHOOK_KEY && req.body?.google_key !== process.env.GOOGLE_ADS_WEBHOOK_KEY)
+    return res.sendStatus(403);
+  const db = load();
+  const cols = Object.fromEntries((req.body?.user_column_data || []).map((x) => [x.column_id, x.string_value]));
+  db.leads.unshift({ id: "L" + Date.now(), name: cols.FULL_NAME || "Google lead", phone: cols.PHONE_NUMBER || "", email: cols.EMAIL || "", source: "google", service: "", status: "new", createdAt: new Date().toISOString() });
+  save();
+  log("lead", "New Google Ads lead received");
+  res.json({ ok: true });
+});
+
+// ---------- scheduler ----------
+let jobs = [];
+function bootSchedules() {
+  jobs.forEach((j) => j.stop());
+  jobs = [];
+  for (const a of load().agents) {
+    if (!cron.validate(a.schedule)) continue;
+    jobs.push(
+      cron.schedule(a.schedule, async () => {
+        const fresh = load().agents.find((x) => x.id === a.id);
+        if (!fresh?.on) return;
+        try { await runAgent(a.id); } catch (e) { log("error", `${a.name} failed: ${e.message}`); }
+      })
+    );
+  }
+  console.log(`Scheduler: ${jobs.length} agent schedule(s) armed`);
+}
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Clinic suite running → http://localhost:${PORT}`);
+  bootSchedules();
+});
