@@ -36,9 +36,13 @@ db.settings = {
   },
 };
 
+// setter defaults off: the seeded demo leads below have fake phone numbers,
+// and once real VAPI_* credentials are set this agent places real outbound
+// calls on its cron schedule — leaving it on would dial fake numbers for
+// real, on a live account, until someone notices. Owner opts in explicitly.
 db.agents = [
   { id: "intake", name: "Lead Intake", desc: "Pulls & qualifies leads from Google and Meta ads", schedule: "*/15 * * * *", scheduleLabel: "Every 15 min", on: true, lastRun: hrs(0.3), lastResult: "6 new leads", stat: "" },
-  { id: "setter", name: "Appointment Setter", desc: "Calls qualified leads and books open slots", schedule: "*/10 9-18 * * 1-6", scheduleLabel: "9 AM–7 PM · Mon–Sat", on: true, lastRun: hrs(0.1), lastResult: "booked Maria G.", stat: "" },
+  { id: "setter", name: "Appointment Setter", desc: "Calls qualified leads and books open slots", schedule: "*/10 9-18 * * 1-6", scheduleLabel: "9 AM–7 PM · Mon–Sat", on: false, lastRun: hrs(0.1), lastResult: "booked Maria G.", stat: "" },
   { id: "audit", name: "Visit Audit", desc: "Structures provider notes into billing-ready SOAP", schedule: "*/30 8-19 * * *", scheduleLabel: "After each visit", on: true, lastRun: hrs(1), lastResult: "visit #2291 audited", stat: "" },
   { id: "billing", name: "Insurance Billing", desc: "Codes visits, builds claims, submits after approval", schedule: "0 17 * * *", scheduleLabel: "Daily · 5:00 PM batch", on: false, lastRun: hrs(20), lastResult: "11 claims sent", stat: "" },
 ];
