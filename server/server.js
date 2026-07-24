@@ -8,6 +8,7 @@ const cron = require("node-cron");
 const { load, save, log, DB_PATH } = require("./store");
 const { runAgent } = require("./agents");
 const calendarApi = require("./calendar");
+const brainGraph = require("./brainGraph");
 
 // First boot (e.g. a fresh Railway deploy with no persistent volume yet):
 // seed so the owner login exists. Skipped whenever a database already
@@ -70,6 +71,17 @@ app.get("/api/dashboard", auth, (req, res) => {
     activity: db.activity.slice(0, 20),
     leads: db.leads,
   });
+});
+
+// ---------- agent brain graph ----------
+app.get("/api/brain/graph", auth, (req, res) => {
+  res.json(brainGraph.buildGraph(load()));
+});
+
+app.get("/api/brain/agents/:id", auth, (req, res) => {
+  const detail = brainGraph.buildAgentDetail(load(), req.params.id);
+  if (!detail) return res.status(404).json({ error: "Unknown agent" });
+  res.json(detail);
 });
 
 // ---------- agents ----------

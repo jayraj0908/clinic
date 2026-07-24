@@ -3,63 +3,80 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Front Office AI</title>
+<title>Front Office AI — Brain</title>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/force-graph@1/dist/force-graph.min.js"></script>
 <style>
   :root{
-    color-scheme:dark;
-    --page:#0d0d0d;--surface:#1a1a19;--surface-2:#202020;
-    --ink:#ffffff;--ink-2:#c3c2b7;--muted:#898781;
-    --line:rgba(255,255,255,.10);--grid:#2c2c2a;
-    --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;
-    --good:#0ca30c;--warning:#fab219;--serious:#ec835a;--critical:#d03b3b;
+    --bg:#0B1B33; --surface:#0F2140; --surface-2:#152A4F; --border:rgba(150,180,255,.14);
+    --ink:#ffffff; --ink-2:#B9C6E6; --muted:#7C8CB0;
+    --good:#22C55E; --warning:#F5B301; --critical:#E5484D;
   }
   *{box-sizing:border-box;margin:0}
-  body{background:var(--page);color:var(--ink);font-family:Archivo,sans-serif;-webkit-font-smoothing:antialiased}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:Archivo,sans-serif;overflow:hidden}
   .mono{font-family:'IBM Plex Mono',monospace}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
-  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
-  .dot{width:10px;height:10px;border-radius:50%;background:var(--c3);display:inline-block;position:relative}
-  .dot.pulse::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--c3);animation:ping 1.6s cubic-bezier(0,0,.2,1) infinite}
-  @keyframes ping{75%,100%{transform:scale(2.4);opacity:0}}
-  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-  button{font-family:'IBM Plex Mono',monospace;cursor:pointer;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:11px;font-weight:600;padding:6px 12px}
-  button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
-  button.primary{background:var(--c3);border-color:var(--c3);color:#04140f}
-  header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:var(--surface);border-bottom:1px solid var(--line)}
-  main{max-width:1120px;margin:0 auto;padding:32px 20px}
-  .grid{display:grid;gap:20px}
-  @media(min-width:820px){.cols4{grid-template-columns:repeat(4,1fr)}.cols5{grid-template-columns:3fr 2fr}.cols2{grid-template-columns:1fr 1fr}.cols23{grid-template-columns:2fr 3fr}}
-  .row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line);gap:12px;flex-wrap:wrap}
-  .row:first-of-type{border-top:none}
-  .pill{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
-  .hidden{display:none}
+  .hidden{display:none!important}
+  button{font-family:'IBM Plex Mono',monospace;cursor:pointer;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--ink);font-size:11px;font-weight:600;padding:7px 14px}
+  button:hover{background:var(--surface)}
+  button.primary{background:var(--good);border-color:var(--good);color:#04140f}
+  button:focus-visible{outline:2px solid var(--good);outline-offset:2px}
+
   /* login */
   #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-  #login .card{width:100%;max-width:380px;padding:32px}
-  input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:6px;background:var(--surface-2);color:var(--ink)}
+  #login .card{width:100%;max-width:380px;padding:32px;background:var(--surface);border:1px solid var(--border);border-radius:16px}
+  input{width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:6px;background:var(--surface-2);color:var(--ink)}
   label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
   .field{margin-bottom:16px}
-  /* stat tiles */
-  .stat{padding:20px}
-  .stat .v{font-weight:800;font-size:clamp(22px,3.4vw,32px);letter-spacing:-.01em}
-  .stat .l{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px}
-  /* pipeline */
-  .pipeline-track{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding:10px 4px 4px}
-  .pnode{display:flex;flex-direction:column;align-items:center;min-width:104px;position:relative}
-  .pnode .ring{width:64px;height:64px;border-radius:50%;border:2px solid var(--ringc);display:flex;align-items:center;justify-content:center;font-size:22px;background:radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--ringc) 18%, transparent), transparent 70%);box-shadow:0 0 18px color-mix(in srgb, var(--ringc) 35%, transparent)}
-  .pnode .name{font-weight:700;font-size:13px;margin-top:10px}
-  .pnode .desc{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;text-align:center}
-  .pnode .count{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--ringc);margin-top:6px}
-  .pconnect{flex:1;height:2px;background:linear-gradient(90deg,var(--line),var(--line));margin-top:32px;min-width:24px}
+
+  /* app shell */
+  #topbar{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:16px 22px;pointer-events:none}
+  #topbar > *{pointer-events:auto}
+  #topbar .brand{font-weight:800;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+  #topbar .brand .mark{width:26px;height:26px;border-radius:8px;background:#111;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px}
+  #topbar .right{display:flex;gap:10px;align-items:center}
+  #topbar a.ghost-link{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);text-decoration:none}
+  #topbar a.ghost-link:hover{color:var(--ink-2)}
+
+  #graph{position:absolute;inset:0}
+  #tooltip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transition:opacity .15s ease;z-index:20;white-space:nowrap}
+
+  /* inspector panel */
+  #inspector{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--surface);border-left:1px solid var(--border);box-shadow:-20px 0 60px rgba(0,0,0,.35);transform:translateX(100%);transition:transform .2s cubic-bezier(.25,.8,.25,1);z-index:15;overflow-y:auto}
+  #inspector.open{transform:translateX(0)}
+  #inspector .head{padding:24px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:flex-start}
+  #inspector .avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;flex-shrink:0}
+  #inspector h2{font-size:18px;font-weight:800}
+  #inspector .status-row{display:flex;align-items:center;gap:6px;margin-top:4px}
+  #inspector .status-dot{width:7px;height:7px;border-radius:50%}
+  #inspector .status-label{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  #inspector .close{margin-left:auto;background:none;border:none;color:var(--muted);font-size:20px;padding:2px 6px;line-height:1}
+  #inspector .section{padding:20px 24px;border-bottom:1px solid var(--border)}
+  #inspector .section:last-child{border-bottom:none}
+  #inspector .micro{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+  #inspector .stat-row{display:flex;justify-content:space-between;font-size:13px;padding:6px 0}
+  #inspector .stat-row .v{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--good)}
+  #inspector .chip-row{display:flex;flex-wrap:wrap;gap:6px}
+  #inspector .chip{font-family:'IBM Plex Mono',monospace;font-size:10.5px;padding:4px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--ink-2)}
+  #inspector .chip.connected{color:var(--good);border-color:color-mix(in srgb, var(--good) 40%, transparent)}
+  #inspector .wf-list{display:flex;flex-direction:column;gap:8px}
+  #inspector .wf-row{font-size:13px;display:flex;align-items:center;gap:8px}
+  #inspector .wf-dot{width:7px;height:7px;border-radius:50%;background:var(--warning);flex-shrink:0}
+  #inspector .activity-row{padding:10px 0;border-top:1px solid var(--border)}
+  #inspector .activity-row:first-child{border-top:none}
+  #inspector .activity-row .summary{font-size:13px;line-height:1.4}
+  #inspector .activity-row .meta{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+  #inspector .activity-row .ts{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--muted)}
+  #inspector .activity-row .status-pill{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
+  #inspector .approve-btn{margin-top:6px}
+  #inspector .empty{font-size:12.5px;color:var(--muted)}
 </style>
 </head>
 <body>
 
 <div id="login">
   <div class="card">
-    <div style="width:38px;height:38px;border-radius:10px;background:var(--c1);display:flex;align-items:center;justify-content:center;margin-bottom:18px">
+    <div style="width:38px;height:38px;border-radius:10px;background:#2F6BFF;display:flex;align-items:center;justify-content:center;margin-bottom:18px">
       <span style="color:#04140f;font-weight:800;font-size:16px">⌁</span>
     </div>
     <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.01em">Front Office AI</h1>
@@ -72,113 +89,48 @@
 </div>
 
 <div id="app" class="hidden">
-  <header>
-    <div style="display:flex;gap:12px;align-items:center">
-      <div style="width:34px;height:34px;border-radius:10px;background:var(--c1);display:flex;align-items:center;justify-content:center;color:#04140f;font-weight:800">⌁</div>
-      <div>
-        <div id="clinicName" style="font-weight:800;font-size:16px;letter-spacing:-0.01em"></div>
-        <div id="dateLine" class="mono" style="font-size:11px;color:var(--muted)"></div>
-      </div>
-    </div>
-    <div style="display:flex;gap:10px;align-items:center">
-      <div id="agentPill" style="display:flex;gap:8px;align-items:center;background:color-mix(in srgb, var(--c3) 16%, transparent);padding:6px 12px;border-radius:999px">
-        <span class="dot pulse"></span><span class="mono" id="agentCount" style="font-size:12px;color:var(--c3);font-weight:600"></span>
-      </div>
+  <div id="topbar">
+    <div class="brand"><span class="mark">⌁</span><span id="clinicName">Clinic</span></div>
+    <div class="right">
+      <span class="mono" id="statsline" style="font-size:11.5px;color:var(--muted)"></span>
+      <a class="ghost-link" href="/dashboard-classic.html">Classic view</a>
       <button onclick="logout()">Sign out</button>
     </div>
-  </header>
+  </div>
+  <div id="graph"></div>
+  <div id="tooltip"></div>
 
-  <main>
-    <p id="narrative" class="mono" style="font-size:13px;color:var(--ink-2);max-width:760px;line-height:1.6;margin-bottom:20px"></p>
-
-    <div class="grid cols4" id="stats"></div>
-
-    <div class="grid cols5" style="margin-top:20px">
-      <div class="card" style="padding:28px">
-        <div class="eyebrow">AI receptionist · line open</div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span class="dot pulse"></span>
-          <span id="lineNumber" class="mono" style="font-weight:600;font-size:clamp(26px,5vw,42px);letter-spacing:.02em;color:var(--c1)"></span>
-        </div>
-        <p style="font-size:14px;color:var(--ink-2);max-width:420px;margin-top:8px">Answers every call, books open slots, routes billing questions with a note. After-hours calls are captured, never missed.</p>
-        <div id="liveFeed" class="card" style="background:var(--surface-2);border-radius:12px;padding:16px;margin-top:22px" aria-live="polite"></div>
-        <div style="display:flex;gap:28px;margin-top:20px" id="lineStats"></div>
+  <div id="inspector">
+    <div class="head">
+      <div class="avatar" id="insAvatar"></div>
+      <div>
+        <h2 id="insName"></h2>
+        <div class="status-row"><span class="status-dot" id="insStatusDot"></span><span class="status-label mono" id="insStatusLabel"></span></div>
       </div>
-
-      <div class="card" style="padding:24px">
-        <div class="eyebrow">Est. booked revenue</div>
-        <div id="revenue" style="font-weight:800;font-size:40px;color:var(--c3)"></div>
-        <div class="mono" style="font-size:11px;color:var(--muted);margin-top:4px">month to date, demo estimate</div>
-        <div style="border-top:1px dashed var(--line);margin-top:20px;padding-top:16px">
-          <div class="eyebrow" style="margin-bottom:10px">Agents live</div>
-          <div id="agentMini" class="mono" style="font-size:12px;color:var(--ink-2)"></div>
-        </div>
-      </div>
+      <button class="close" onclick="closeInspector()">&times;</button>
     </div>
-
-    <div class="card" style="padding:24px 20px;margin-top:36px">
-      <div class="eyebrow">The care pathway — inquiry to follow-up</div>
-      <div class="pipeline-track" id="pipeline"></div>
+    <div class="section">
+      <div class="micro">Today</div>
+      <div id="insStats"></div>
     </div>
-
-    <div class="card" style="padding:20px;margin-top:36px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0">
-        <div class="eyebrow" style="margin-bottom:0">Leads — your growing customer base</div>
-        <button onclick="exportLeadsCSV()">Export CSV</button>
-      </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;margin-top:8px;min-width:640px">
-          <thead><tr class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">
-            <th style="text-align:left;padding:8px 10px 8px 0;border-bottom:1px solid var(--line)">Name</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)">Phone</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)">Source</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)">Service</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)">Status</th>
-            <th style="text-align:left;padding:8px 0 8px 10px;border-bottom:1px solid var(--line)">Received</th>
-          </tr></thead>
-          <tbody id="leadsTable"></tbody>
-        </table>
-      </div>
+    <div class="section">
+      <div class="micro">Workflows</div>
+      <div class="wf-list" id="insWorkflows"></div>
     </div>
-
-    <div style="margin-top:36px">
-      <div class="eyebrow">Agents &amp; schedules</div>
-      <div class="grid cols2" id="agents"></div>
+    <div class="section">
+      <div class="micro">Uses</div>
+      <div class="chip-row" id="insTools"></div>
     </div>
-
-    <div class="card" style="padding:24px;margin-top:36px">
-      <div class="eyebrow">What the AI receptionist knows</div>
-      <div class="grid cols2" id="kb"></div>
+    <div class="section">
+      <div class="micro">Recent activity</div>
+      <div id="insActivity"></div>
     </div>
-
-    <div class="grid cols23" style="margin-top:36px">
-      <div class="card" style="padding:20px">
-        <div class="eyebrow">Connections</div>
-        <div id="integrations"></div>
-      </div>
-      <div class="card" style="padding:20px">
-        <div class="eyebrow">Booked by AI · today</div>
-        <div id="appts"></div>
-        <div class="eyebrow" style="margin-top:24px">Claims awaiting your approval</div>
-        <div id="claims"></div>
-      </div>
-    </div>
-
-    <div class="card" style="padding:20px;margin-top:36px">
-      <div class="eyebrow">Activity</div>
-      <div id="activity"></div>
-    </div>
-
-    <footer class="mono" style="text-align:center;font-size:11px;color:var(--muted);padding:32px 0 20px">
-      Front Office AI · agents run on schedule · data refreshes every 10s
-    </footer>
-  </main>
+  </div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let token = sessionStorage.getItem("token");
-let feedIdx = 0, feedCalls = [];
 
 async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers: { "content-type": "application/json", Authorization: "Bearer " + token, ...(opts.headers || {}) } });
@@ -193,175 +145,243 @@ async function doLogin() {
   if (!res.ok) { $("loginErr").textContent = data.error || "Sign-in failed"; return; }
   token = data.token; sessionStorage.setItem("token", token);
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
-  refresh(); startTimers();
+  boot();
 }
 function logout(){ sessionStorage.removeItem("token"); location.reload(); }
 $("pw").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
 
-function fmtTime(ts){ return new Date(ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}); }
+function fmtRelative(ts) {
+  const diffMs = Date.now() - new Date(ts).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  return Math.round(hrs / 24) + "d ago";
+}
 function esc(s){ const d=document.createElement("div"); d.textContent=s??""; return d.innerHTML; }
 
-const PIPELINE_STAGES = [
-  { key: "leads",  name: "Capture", desc: "Intake",  icon: "◎", color: "var(--c1)" },
-  { key: "calls",  name: "Call",    desc: "AI setter", icon: "☎", color: "var(--c2)" },
-  { key: "booked", name: "Confirm", desc: "Calendar", icon: "✓", color: "var(--c3)" },
-  { key: "seen",   name: "Chart",   desc: "Visit audit", icon: "▤", color: "var(--c4)" },
-  { key: "claims", name: "Bill",    desc: "Insurance", icon: "$", color: "var(--c5)" },
-];
+const STATUS_COLOR = { active: "var(--good)", idle: "var(--muted)", needs_review: "var(--critical)", offline: "var(--muted)" };
+const STATUS_TEXT = { active: "ACTIVE", idle: "IDLE", needs_review: "NEEDS REVIEW", offline: "NOT CONNECTED" };
 
-let leadsData = [];
-const LEAD_STATUS_COLOR = {
-  new: "var(--muted)", qualified: "var(--c4)", call_scheduled: "var(--c2)",
-  booked: "var(--good)", seen: "var(--c3)", audited: "var(--c3)", billed: "var(--good)",
-  closed_lost: "var(--critical)",
-};
-function exportLeadsCSV(){
-  const cols = ["name","phone","source","service","status","createdAt"];
-  const rows = [cols.join(",")].concat(leadsData.map(l => cols.map(c => `"${String(l[c]??"").replace(/"/g,'""')}"`).join(",")));
-  const blob = new Blob([rows.join("\n")], {type:"text/csv"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "leads.csv"; a.click();
+let Graph, tooltip, hoveredNode = null, neighbors = new Set(), selectedAgent = null;
+let graphData = { nodes: [], links: [] };
+
+function initGraph() {
+  tooltip = $("tooltip");
+  Graph = ForceGraph()($("graph"))
+    .backgroundColor("#0B1B33")
+    .nodeId("id")
+    .linkSource("source")
+    .linkTarget("target")
+    .d3AlphaDecay(0.02)
+    .d3VelocityDecay(0.35)
+    .warmupTicks(80)
+    .cooldownTime(4000)
+    .linkColor((l) => (l.kind === "handoff" ? "rgba(255,255,255,0.35)" : "rgba(150,180,255,0.16)"))
+    .linkWidth((l) => (l.kind === "handoff" ? 1.6 : 0.6))
+    .linkDirectionalParticles((l) => (l.kind === "handoff" ? 2 : 0))
+    .linkDirectionalParticleWidth(2.4)
+    .linkDirectionalParticleColor(() => "rgba(255,255,255,0.9)")
+    .linkDirectionalParticleSpeed(0.006)
+    .nodeCanvasObject(paintNode)
+    .onNodeHover(onHover)
+    .onNodeClick(onClick)
+    .onBackgroundClick(() => { closeInspector(); Graph.zoom(Graph.zoom(), 400); });
+
+  Graph.d3Force("charge").strength(-160);
+  Graph.d3Force("link").distance((l) => (l.kind === "handoff" ? 140 : l.kind === "spoke" ? 110 : 30));
+  Graph.onEngineStop(() => Graph.zoomToFit(400, 80));
+  [300, 1000, 2500, 4500].forEach((ms) => setTimeout(() => Graph.zoomToFit(300, 80), ms));
+
+  window.addEventListener("resize", () => Graph.width(window.innerWidth).height(window.innerHeight));
+  window.addEventListener("mousemove", (e) => {
+    tooltip.style.left = (e.clientX + 14) + "px";
+    tooltip.style.top = (e.clientY - 10) + "px";
+  });
 }
 
-async function refresh() {
-  const d = await api("/api/dashboard");
-  $("clinicName").textContent = d.settings.clinicName + " — Front Office AI";
-  $("dateLine").textContent = new Date().toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"});
-  $("lineNumber").textContent = d.settings.receptionistNumber;
-  const agentsOn = d.agents.filter(a=>a.on).length;
-  $("agentCount").textContent = agentsOn + "/" + d.agents.length + " agents running";
-  $("lineStats").innerHTML = [[d.line.callsToday,"calls today"],[d.line.missed,"missed"],[d.line.bookedByLine,"booked by line"]]
-    .map(([n,l])=>`<div><div style="font-weight:800;font-size:26px">${n}</div><div class="mono" style="font-size:11px;color:var(--muted)">${l}</div></div>`).join("");
-  $("revenue").textContent = "$" + (d.revenueEst||0).toLocaleString();
-  $("agentMini").innerHTML = d.agents.map(a=>`<div class="row" style="padding:6px 0"><span>${esc(a.name)}</span><span style="color:${a.on?"var(--c3)":"var(--muted)"}">${a.on?"● running":"○ paused"}</span></div>`).join("");
+function paintNode(node, ctx, globalScale) {
+  if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+  const dimmed = hoveredNode && !neighbors.has(node.id) && node.id !== hoveredNode.id;
+  const alpha = dimmed ? 0.12 : 1;
 
-  const f = d.funnel;
-  $("narrative").textContent = `Your ${agentsOn} active agent(s) have captured ${f.leads} new patient inquiries, placed ${f.calls} AI calls, and booked ${f.booked} appointment(s) today — ${f.claims} claim(s) drafted and waiting on your approval.`;
-
-  $("stats").innerHTML = [
-    ["$" + (d.revenueEst||0).toLocaleString(), "revenue booked"],
-    [f.calls, "AI calls today"],
-    [f.booked, "booked by AI"],
-    [f.claims, "claims awaiting approval"],
-  ].map(([v,l])=>`<div class="card stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
-
-  $("pipeline").innerHTML = PIPELINE_STAGES.map((s,i)=>{
-    const node = `<div class="pnode" style="--ringc:${s.color}">
-      <div class="ring">${s.icon}</div>
-      <div class="name">${s.name}</div>
-      <div class="desc">${s.desc}</div>
-      <div class="count">${f[s.key] ?? 0}</div>
-    </div>`;
-    return i < PIPELINE_STAGES.length - 1 ? node + `<div class="pconnect"></div>` : node;
-  }).join("");
-
-  $("agents").innerHTML = d.agents.map(a=>`
-    <div class="card" style="padding:20px;opacity:${a.on?1:.6}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <div><div style="font-weight:700;font-size:15px">${esc(a.name)}</div>
-        <div style="font-size:12.5px;color:var(--ink-2)">${esc(a.desc)}</div></div>
-        <button class="${a.on?"primary":""}" onclick="toggleAgent('${a.id}')">${a.on?"Running":"Paused"}</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;border-top:1px dashed var(--line);margin-top:12px;padding-top:10px">
-        <div><div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Schedule</div>
-        <div style="font-size:13px;font-weight:600">${esc(a.scheduleLabel)}</div></div>
-        <div><div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Last run</div>
-        <div style="font-size:13px;font-weight:600;color:${a.on?"var(--c3)":"var(--muted)"}">${a.lastRun?fmtTime(a.lastRun):"—"}</div></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12.5px">
-        <span style="color:var(--ink-2)">${esc(a.lastResult||"")}</span>
-        <button onclick="runNow('${a.id}',this)">Run now</button>
-      </div>
-    </div>`).join("");
-
-  const kb = d.settings.receptionist;
-  if (kb) {
-    const hoursLine = kb.hours.map(h => h.open ? `${esc(h.days)} ${esc(h.open)}–${esc(h.close)}` : `${esc(h.days)} closed`).join(" · ");
-    $("kb").innerHTML = `
-      <div>
-        <div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Services &amp; pricing</div>
-        ${kb.services.map(s=>`<div class="row" style="padding:7px 0"><span style="font-size:13px">${esc(s.name)}</span><span class="mono" style="font-size:12px;color:var(--c3);font-weight:600">${esc(s.price)}</span></div>`).join("")}
-      </div>
-      <div>
-        <div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Hours</div>
-        <div style="font-size:13px;margin-bottom:16px">${hoursLine}</div>
-        <div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Insurance accepted</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">${kb.insuranceAccepted.map(x=>`<span class="pill">${esc(x)}</span>`).join("")}</div>
-        <div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Policies</div>
-        <ul style="font-size:12.5px;color:var(--ink-2);padding-left:18px;margin:0">${kb.policies.map(p=>`<li style="margin-bottom:4px">${esc(p)}</li>`).join("")}</ul>
-      </div>`;
+  if (node.type === "clinic") {
+    const size = 16;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = "rgba(255,255,255,0.5)"; ctx.shadowBlur = 12;
+    ctx.fillStyle = "#111";
+    roundRect(ctx, node.x - size, node.y - size, size * 2, size * 2, 6); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.restore();
+    if (globalScale > 0.5) drawLabel(ctx, node.x, node.y + size + 12, node.name, alpha, 12);
+    return;
   }
 
-  $("integrations").innerHTML = d.integrations.map(i=>`
-    <div class="row">
-      <div><div style="font-size:13.5px;font-weight:600">${esc(i.name)}</div>
-      <div style="font-size:11.5px;color:var(--ink-2)">${esc(i.role)}</div></div>
-      ${i.connected
-        ? `<span class="mono" style="font-size:11px;color:var(--good);font-weight:600">✓ Connected</span>`
-        : `<span class="pill" style="background:color-mix(in srgb, var(--warning) 16%, transparent);color:var(--warning);border-color:transparent">Add key in .env</span>`}
-    </div>`).join("");
+  if (node.type === "agent") {
+    const size = 17;
+    const active = node.status === "active";
+    const t = window.__brainT || 0;
+    const pulse = active ? 1 + 0.1 * Math.sin(t / 18) : 1;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = node.color; ctx.shadowBlur = active ? 26 : 14;
+    const grad = ctx.createRadialGradient(node.x, node.y, 1, node.x, node.y, size * pulse);
+    grad.addColorStop(0, node.color); grad.addColorStop(1, shade(node.color, -20));
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(node.x, node.y, size * pulse, 0, 2 * Math.PI); ctx.fill();
+    ctx.strokeStyle = node.id === selectedAgent ? "#22C55E" : "rgba(255,255,255,0.85)";
+    ctx.lineWidth = node.id === selectedAgent ? 3 : 2; ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#fff"; ctx.font = "14px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(node.glyph, node.x, node.y + 1);
+    ctx.restore();
+    if (globalScale > 0.4) drawLabel(ctx, node.x, node.y + size * pulse + 15, node.name, alpha, 13, true);
+    return;
+  }
 
-  $("appts").innerHTML = d.appointments.map(p=>`
-    <div class="row">
-      <div style="display:flex;gap:14px;align-items:center">
-        <span class="mono" style="font-size:12.5px;font-weight:600;color:var(--c1);min-width:62px">${fmtTime(p.time)}</span>
-        <div><div style="font-size:13.5px;font-weight:600">${esc(p.name)}</div>
-        <div style="font-size:12px;color:var(--ink-2)">${esc(p.service)}</div></div>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center">
-        <span class="pill">${esc(p.source)}</span>
-        <span class="mono" style="font-size:11.5px;font-weight:600;color:${p.status==="confirmed"?"var(--good)":"var(--warning)"}">${esc(p.status)}</span>
-      </div>
-    </div>`).join("") || `<div style="font-size:13px;color:var(--muted);padding:8px 0">No AI-booked appointments yet today.</div>`;
+  if (node.type === "workflow") { drawGlowDot(ctx, node, 4, "#F5B301", alpha); return; }
 
-  $("claims").innerHTML = d.claims.map(c=>`
-    <div class="row">
-      <div><span class="mono" style="font-size:12.5px;font-weight:600">${esc(c.id)}</span>
-      <span style="font-size:12.5px;color:var(--ink-2)"> · visit ${esc(c.visitId)} · ${(c.codes||[]).map(x=>x.code||x).join(", ")}</span></div>
-      <button class="primary" onclick="approveClaim('${c.id}')">Approve &amp; submit</button>
-    </div>`).join("") || `<div style="font-size:13px;color:var(--muted);padding:8px 0">Nothing waiting — all clear.</div>`;
+  if (node.type === "tool") {
+    const size = 5;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#0F2140";
+    roundRect(ctx, node.x - size, node.y - size, size * 2, size * 2, 2); ctx.fill();
+    ctx.strokeStyle = node.connected ? (node.color || "#7C8CB0") : "rgba(124,140,176,0.4)";
+    ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.restore();
+    if (globalScale > 1.6) drawLabel(ctx, node.x, node.y + 11, node.name, alpha * 0.85, 9);
+    return;
+  }
 
-  $("activity").innerHTML = d.activity.map(a=>`
-    <div class="row" style="padding:9px 0">
-      <span style="font-size:13px">${esc(a.message)}</span>
-      <span class="mono" style="font-size:11px;color:var(--muted)">${fmtTime(a.ts)}</span>
-    </div>`).join("") || `<div style="font-size:13px;color:var(--muted)">Activity from calls, leads, and agent runs will appear here.</div>`;
+  if (node.type === "event") { drawGlowDot(ctx, node, 2.4, node.color, alpha * 0.75); return; }
 
-  leadsData = d.leads || [];
-  $("leadsTable").innerHTML = leadsData.map(l => `
-    <tr>
-      <td style="padding:9px 10px 9px 0;border-bottom:1px solid var(--line);font-size:13px;font-weight:600">${esc(l.name)}</td>
-      <td style="padding:9px 10px;border-bottom:1px solid var(--line);font-size:12.5px" class="mono">${esc(l.phone||"—")}</td>
-      <td style="padding:9px 10px;border-bottom:1px solid var(--line)"><span class="pill">${esc(l.source)}</span></td>
-      <td style="padding:9px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink-2)">${esc(l.service||"—")}</td>
-      <td style="padding:9px 10px;border-bottom:1px solid var(--line);font-size:12px" class="mono"><span style="color:${LEAD_STATUS_COLOR[l.status]||"var(--muted)"};font-weight:600">${esc(l.status)}</span></td>
-      <td style="padding:9px 0 9px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)" class="mono">${fmtTime(l.createdAt)}</td>
-    </tr>`).join("") || `<tr><td colspan="6" style="padding:16px 0;color:var(--muted);font-size:13px">No leads yet — connect Meta or Google Ads to start capturing inquiries.</td></tr>`;
-
-  feedCalls = d.calls;
-  renderFeed();
+  if (node.type === "patient") {
+    ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = "#C9C9C6";
+    ctx.beginPath(); ctx.arc(node.x, node.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
+    if (globalScale > 1.4) drawLabel(ctx, node.x, node.y + 10, node.name, alpha * 0.85, 9);
+    return;
+  }
 }
 
-function renderFeed(){
-  if(!feedCalls.length){ $("liveFeed").innerHTML = `<div style="font-size:13px;color:var(--muted)">Waiting for the first call…</div>`; return; }
-  const c = feedCalls[feedIdx % feedCalls.length];
-  $("liveFeed").innerHTML = `<div style="animation:rise .4s ease">
-    <div class="mono" style="font-size:11px;color:var(--muted)">☎ ${fmtTime(c.ts)} · ${c.dir==="inbound"?"Inbound":"Outbound"} · ${esc(c.who)}</div>
-    <div style="font-size:14px;font-weight:500;margin-top:4px">${esc(c.summary)}</div></div>`;
+function onHover(node) {
+  hoveredNode = node;
+  neighbors = new Set();
+  if (node) {
+    graphData.links.forEach((l) => {
+      const s = typeof l.source === "object" ? l.source.id : l.source;
+      const t = typeof l.target === "object" ? l.target.id : l.target;
+      if (s === node.id) neighbors.add(t);
+      if (t === node.id) neighbors.add(s);
+    });
+    tooltip.textContent = node.name || node.type;
+    tooltip.style.opacity = 1;
+    document.body.style.cursor = "pointer";
+  } else {
+    tooltip.style.opacity = 0;
+    document.body.style.cursor = "default";
+  }
 }
 
-async function toggleAgent(id){ await api(`/api/agents/${id}/toggle`,{method:"POST"}); refresh(); }
-async function runNow(id,btn){ btn.textContent="Running…"; const r=await api(`/api/agents/${id}/run`,{method:"POST"}); btn.textContent="Run now"; refresh(); }
-async function approveClaim(id){ await api(`/api/claims/${id}/approve`,{method:"POST"}); refresh(); }
+function onClick(node) {
+  if (node.type === "agent") {
+    selectedAgent = node.id;
+    Graph.centerAt(node.x, node.y, 600);
+    Graph.zoom(2.1, 600);
+    openInspector(node.id);
+  }
+}
 
-function startTimers(){
-  setInterval(refresh, 10000);
-  setInterval(()=>{ feedIdx++; renderFeed(); }, 4200);
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawGlowDot(ctx, node, r, color, alpha) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.shadowColor = color; ctx.shadowBlur = 8;
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(node.x, node.y, r, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
+}
+function drawLabel(ctx, x, y, text, alpha, size, bold) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = "#B9C6E6";
+  ctx.font = `${bold ? 600 : 400} ${size}px Archivo, sans-serif`;
+  ctx.textAlign = "center"; ctx.fillText(text, x, y); ctx.restore();
+}
+function shade(hex, percent) {
+  const num = parseInt(hex.slice(1), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) + amt));
+  const B = Math.max(0, Math.min(255, (num & 0x0000ff) + amt));
+  return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+}
+
+async function refreshGraph() {
+  const d = await api("/api/brain/graph");
+  $("clinicName").textContent = $("clinicName").dataset.name || $("clinicName").textContent;
+  $("statsline").textContent = `Agents: ${d.stats.agents} · Actions this week: ${d.stats.actionsThisWeek} · Connections: ${d.stats.connections}`;
+  graphData = d;
+  Graph.graphData(d);
+  if (selectedAgent && $("inspector").classList.contains("open")) refreshInspector(selectedAgent);
+}
+
+async function openInspector(agentId) {
+  $("inspector").classList.add("open");
+  await refreshInspector(agentId);
+}
+function closeInspector() {
+  selectedAgent = null;
+  $("inspector").classList.remove("open");
+}
+
+async function refreshInspector(agentId) {
+  const a = await api("/api/brain/agents/" + agentId);
+  $("insAvatar").style.background = a.color;
+  $("insAvatar").textContent = a.glyph;
+  $("insName").textContent = a.name;
+  $("insStatusDot").style.background = STATUS_COLOR[a.status] || "var(--muted)";
+  $("insStatusLabel").textContent = STATUS_TEXT[a.status] || a.status;
+  $("insStatusLabel").style.color = STATUS_COLOR[a.status] || "var(--muted)";
+
+  $("insStats").innerHTML = a.todayStats.map((s) => `<div class="stat-row"><span>${esc(s.label)}</span><span class="v">${esc(String(s.value))}</span></div>`).join("");
+
+  $("insWorkflows").innerHTML = a.workflows.map((w) => `<div class="wf-row"><span class="wf-dot"></span>${esc(w)}</div>`).join("");
+
+  $("insTools").innerHTML = a.tools.map((t) => `<span class="chip ${t.connected ? "connected" : ""}">${t.connected ? "✓ " : ""}${esc(t.name)}</span>`).join("") || `<span class="empty">No tools configured</span>`;
+
+  $("insActivity").innerHTML = a.recentActivity.map((ev) => `
+    <div class="activity-row">
+      <div class="summary">${esc(ev.summary)}</div>
+      <div class="meta"><span class="ts">${fmtRelative(ev.ts)}</span><span class="status-pill">${esc(ev.status || "")}</span></div>
+      ${ev.status === "awaiting_approval" && ev.id ? `<button class="primary approve-btn" onclick="approveFromInspector('${ev.id}')">Approve &amp; submit</button>` : ""}
+    </div>`).join("") || `<div class="empty">Nothing yet.</div>`;
+}
+
+async function approveFromInspector(claimId) {
+  if (!claimId) return;
+  await api(`/api/claims/${claimId}/approve`, { method: "POST" });
+  refreshGraph();
+}
+
+async function boot() {
+  const me = await api("/api/dashboard");
+  $("clinicName").textContent = me.settings.clinicName;
+  $("clinicName").dataset.name = me.settings.clinicName;
+  initGraph();
+  Graph.width(window.innerWidth).height(window.innerHeight);
+  await refreshGraph();
+  setInterval(refreshGraph, 10000);
+  (function tick(){ window.__brainT = (window.__brainT || 0) + 1; requestAnimationFrame(tick); })();
 }
 
 if (token) {
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
-  refresh().then(startTimers).catch(()=>{});
+  boot().catch(() => {});
 }
 </script>
 </body>

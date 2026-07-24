@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Front Office AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme:dark;
+    --page:#0d0d0d;--surface:#1a1a19;--surface-2:#202020;
+    --ink:#ffffff;--ink-2:#c3c2b7;--muted:#898781;
+    --line:rgba(255,255,255,.10);--grid:#2c2c2a;
+    --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;
+    --good:#0ca30c;--warning:#fab219;--serious:#ec835a;--critical:#d03b3b;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--page);color:var(--ink);font-family:Archivo,sans-serif;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--c3);display:inline-block;position:relative}
+  .dot.pulse::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--c3);animation:ping 1.6s cubic-bezier(0,0,.2,1) infinite}
+  @keyframes ping{75%,100%{transform:scale(2.4);opacity:0}}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  button{font-family:'IBM Plex Mono',monospace;cursor:pointer;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:11px;font-weight:600;padding:6px 12px}
+  button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+  button.primary{background:var(--c3);border-color:var(--c3);color:#04140f}
+  header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:var(--surface);border-bottom:1px solid var(--line)}
+  main{max-width:1120px;margin:0 auto;padding:32px 20px}
+  .grid{display:grid;gap:20px}
+  @media(min-width:820px){.cols4{grid-template-columns:repeat(4,1fr)}.cols5{grid-template-columns:3fr 2fr}.cols2{grid-template-columns:1fr 1fr}.cols23{grid-template-columns:2fr 3fr}}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line);gap:12px;flex-wrap:wrap}
+  .row:first-of-type{border-top:none}
+  .pill{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+  .hidden{display:none}
+  /* login */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  #login .card{width:100%;max-width:380px;padding:32px}
+  input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:6px;background:var(--surface-2);color:var(--ink)}
+  label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .field{margin-bottom:16px}
+  /* stat tiles */
+  .stat{padding:20px}
+  .stat .v{font-weight:800;font-size:clamp(22px,3.4vw,32px);letter-spacing:-.01em}
+  .stat .l{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px}
+  /* pipeline */
+  .pipeline-track{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding:10px 4px 4px}
+  .pnode{display:flex;flex-direction:column;align-items:center;min-width:104px;position:relative}
+  .pnode .ring{width:64px;height:64px;border-radius:50%;border:2px solid var(--ringc);display:flex;align-items:center;justify-content:center;font-size:22px;background:radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--ringc) 18%, transparent), transparent 70%);box-shadow:0 0 18px color-mix(in srgb, var(--ringc) 35%, transparent)}
+  .pnode .name{font-weight:700;font-size:13px;margin-top:10px}
+  .pnode .desc{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;text-align:center}
+  .pnode .count{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--ringc);margin-top:6px}
+  .pconnect{flex:1;height:2px;background:linear-gradient(90deg,var(--line),var(--line));margin-top:32px;min-width:24px}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="card">
+    <div style="width:38px;height:38px;border-radius:10px;background:var(--c1);display:flex;align-items:center;justify-content:center;margin-bottom:18px">
+      <span style="color:#04140f;font-weight:800;font-size:16px">⌁</span>
+    </div>
+    <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.01em">Front Office AI</h1>
+    <p style="font-size:13px;color:var(--muted);margin:6px 0 22px">Owner sign-in</p>
+    <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="username" value=""></div>
+    <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password"></div>
+    <div id="loginErr" class="mono" style="color:var(--critical);font-size:12px;margin-bottom:12px"></div>
+    <button class="primary" style="width:100%;padding:11px;font-size:13px" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div style="display:flex;gap:12px;align-items:center">
+      <div style="width:34px;height:34px;border-radius:10px;background:var(--c1);display:flex;align-items:center;justify-content:center;color:#04140f;font-weight:800">⌁</div>
+      <div>
+        <div id="clinicName" style="font-weight:800;font-size:16px;letter-spacing:-0.01em"></div>
+        <div id="dateLine" class="mono" style="font-size:11px;color:var(--muted)"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div id="agentPill" style="display:flex;gap:8px;align-items:center;background:color-mix(in srgb, var(--c3) 16%, transparent);padding:6px 12px;border-radius:999px">
+        <span class="dot pulse"></span><span class="mono" id="agentCount" style="font-size:12px;color:var(--c3);font-weight:600"></span>
+      </div>
+      <button onclick="logout()">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <p id="narrative" class="mono" style="font-size:13px;color:var(--ink-2);max-width:760px;line-height:1.6;margin-bottom:20px"></p>
+
+    <div class="grid cols4" id="stats"></div>
+
+    <div class="grid cols5" style="margin-top:20px">
+      <div class="card" style="padding:28px">
+        <div class="eyebrow">AI receptionist · line open</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span class="dot pulse"></span>
+          <span id="lineNumber" class="mono" style="font-weight:600;font-size:clamp(26px,5vw,42px);letter-spacing:.02em;color:var(--c1)"></span>
+        </div>
+        <p style="font-size:14px;color:var(--ink-2);max-width:420px;margin-top:8px">Answers every call, books open slots, routes billing questions with a note. After-hours calls are captured, never missed.</p>
+        <div id="liveFeed" class="card" style="background:var(--surface-2);border-radius:12px;padding:16px;margin-top:22px" aria-live="polite"></div>
+        <div style="display:flex;gap:28px;margin-top:20px" id="lineStats"></div>
+      </div>
+
+      <div class="card" style="padding:24px">
+        <div class="eyebrow">Est. booked revenue</div>
+        <div id="revenue" style="font-weight:800;font-size:40px;color:var(--c3)"></div>
+        <div class="mono" style="font-size:11px;color:var(--muted);margin-top:4px">month to date, demo estimate</div>
+        <div style="border-top:1px dashed var(--line);margin-top:20px;padding-top:16px">
+          <div class="eyebrow" style="margin-bottom:10px">Agents live</div>
+          <div id="agentMini" class="mono" style="font-size:12px;color:var(--ink-2)"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:24px 20px;margin-top:36px">
+      <div class="eyebrow">The care pathway — inquiry to follow-up</div>
+      <div class="pipeline-track" id="pipeline"></div>
+    </div>
+
+    <div class="card" style="padding:20px;margin-top:36px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0">
+        <div class="eyebrow" style="margin-bottom:0">Leads — your growing customer base</div>
+        <button onclick="exportLeadsCSV()">Export CSV</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;margin-top:8px;min-width:640px">
+          <thead><tr class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">
+            <th style="text-align:left;padding:8px 10px 8px 0;border-bottom:1px solid var(--line)">Name</th>
+            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)">Phone</th>
+            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)">Source</th>
+            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)">Service</th>
+            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)">Status</th>
+            <th style="text-align:left;padding:8px 0 8px 10px;border-bottom:1px solid var(--line)">Received</th>
+          </tr></thead>
+          <tbody id="leadsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="margin-top:36px">
+      <div class="eyebrow">Agents &amp; schedules</div>
+      <div class="grid cols2" id="agents"></div>
+    </div>
+
+    <div class="card" style="padding:24px;margin-top:36px">
+      <div class="eyebrow">What the AI receptionist knows</div>
+      <div class="grid cols2" id="kb"></div>
+    </div>
+
+    <div class="grid cols23" style="margin-top:36px">
+      <div class="card" style="padding:20px">
+        <div class="eyebrow">Connections</div>
+        <div id="integrations"></div>
+      </div>
+      <div class="card" style="padding:20px">
+        <div class="eyebrow">Booked by AI · today</div>
+        <div id="appts"></div>
+        <div class="eyebrow" style="margin-top:24px">Claims awaiting your approval</div>
+        <div id="claims"></div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:20px;margin-top:36px">
+      <div class="eyebrow">Activity</div>
+      <div id="activity"></div>
+    </div>
+
+    <footer class="mono" style="text-align:center;font-size:11px;color:var(--muted);padding:32px 0 20px">
+      Front Office AI · agents run on schedule · data refreshes every 10s
+    </footer>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let token = sessionStorage.getItem("token");
+let feedIdx = 0, feedCalls = [];
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { "content-type": "application/json", Authorization: "Bearer " + token, ...(opts.headers || {}) } });
+  if (res.status === 401) { logout(); throw new Error("auth"); }
+  return res.json();
+}
+
+async function doLogin() {
+  $("loginErr").textContent = "";
+  const res = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: $("em").value.trim(), password: $("pw").value }) });
+  const data = await res.json();
+  if (!res.ok) { $("loginErr").textContent = data.error || "Sign-in failed"; return; }
+  token = data.token; sessionStorage.setItem("token", token);
+  $("login").classList.add("hidden"); $("app").classList.remove("hidden");
+  refresh(); startTimers();
+}
+function logout(){ sessionStorage.removeItem("token"); location.reload(); }
+$("pw").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+function fmtTime(ts){ return new Date(ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}); }
+function esc(s){ const d=document.createElement("div"); d.textContent=s??""; return d.innerHTML; }
+
+const PIPELINE_STAGES = [
+  { key: "leads",  name: "Capture", desc: "Intake",  icon: "◎", color: "var(--c1)" },
+  { key: "calls",  name: "Call",    desc: "AI setter", icon: "☎", color: "var(--c2)" },
+  { key: "booked", name: "Confirm", desc: "Calendar", icon: "✓", color: "var(--c3)" },
+  { key: "seen",   name: "Chart",   desc: "Visit audit", icon: "▤", color: "var(--c4)" },
+  { key: "claims", name: "Bill",    desc: "Insurance", icon: "$", color: "var(--c5)" },
+];
+
+let leadsData = [];
+const LEAD_STATUS_COLOR = {
+  new: "var(--muted)", qualified: "var(--c4)", call_scheduled: "var(--c2)",
+  booked: "var(--good)", seen: "var(--c3)", audited: "var(--c3)", billed: "var(--good)",
+  closed_lost: "var(--critical)",
+};
+function exportLeadsCSV(){
+  const cols = ["name","phone","source","service","status","createdAt"];
+  const rows = [cols.join(",")].concat(leadsData.map(l => cols.map(c => `"${String(l[c]??"").replace(/"/g,'""')}"`).join(",")));
+  const blob = new Blob([rows.join("\n")], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "leads.csv"; a.click();
+}
+
+async function refresh() {
+  const d = await api("/api/dashboard");
+  $("clinicName").textContent = d.settings.clinicName + " — Front Office AI";
+  $("dateLine").textContent = new Date().toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"});
+  $("lineNumber").textContent = d.settings.receptionistNumber;
+  const agentsOn = d.agents.filter(a=>a.on).length;
+  $("agentCount").textContent = agentsOn + "/" + d.agents.length + " agents running";
+  $("lineStats").innerHTML = [[d.line.callsToday,"calls today"],[d.line.missed,"missed"],[d.line.bookedByLine,"booked by line"]]
+    .map(([n,l])=>`<div><div style="font-weight:800;font-size:26px">${n}</div><div class="mono" style="font-size:11px;color:var(--muted)">${l}</div></div>`).join("");
+  $("revenue").textContent = "$" + (d.revenueEst||0).toLocaleString();
+  $("agentMini").innerHTML = d.agents.map(a=>`<div class="row" style="padding:6px 0"><span>${esc(a.name)}</span><span style="color:${a.on?"var(--c3)":"var(--muted)"}">${a.on?"● running":"○ paused"}</span></div>`).join("");
+
+  const f = d.funnel;
+  $("narrative").textContent = `Your ${agentsOn} active agent(s) have captured ${f.leads} new patient inquiries, placed ${f.calls} AI calls, and booked ${f.booked} appointment(s) today — ${f.claims} claim(s) drafted and waiting on your approval.`;
+
+  $("stats").innerHTML = [
+    ["$" + (d.revenueEst||0).toLocaleString(), "revenue booked"],
+    [f.calls, "AI calls today"],
+    [f.booked, "booked by AI"],
+    [f.claims, "claims awaiting approval"],
+  ].map(([v,l])=>`<div class="card stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+
+  $("pipeline").innerHTML = PIPELINE_STAGES.map((s,i)=>{
+    const node = `<div class="pnode" style="--ringc:${s.color}">
+      <div class="ring">${s.icon}</div>
+      <div class="name">${s.name}</div>
+      <div class="desc">${s.desc}</div>
+      <div class="count">${f[s.key] ?? 0}</div>
+    </div>`;
+    return i < PIPELINE_STAGES.length - 1 ? node + `<div class="pconnect"></div>` : node;
+  }).join("");
+
+  $("agents").innerHTML = d.agents.map(a=>`
+    <div class="card" style="padding:20px;opacity:${a.on?1:.6}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div><div style="font-weight:700;font-size:15px">${esc(a.name)}</div>
+        <div style="font-size:12.5px;color:var(--ink-2)">${esc(a.desc)}</div></div>
+        <button class="${a.on?"primary":""}" onclick="toggleAgent('${a.id}')">${a.on?"Running":"Paused"}</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;border-top:1px dashed var(--line);margin-top:12px;padding-top:10px">
+        <div><div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Schedule</div>
+        <div style="font-size:13px;font-weight:600">${esc(a.scheduleLabel)}</div></div>
+        <div><div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Last run</div>
+        <div style="font-size:13px;font-weight:600;color:${a.on?"var(--c3)":"var(--muted)"}">${a.lastRun?fmtTime(a.lastRun):"—"}</div></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12.5px">
+        <span style="color:var(--ink-2)">${esc(a.lastResult||"")}</span>
+        <button onclick="runNow('${a.id}',this)">Run now</button>
+      </div>
+    </div>`).join("");
+
+  const kb = d.settings.receptionist;
+  if (kb) {
+    const hoursLine = kb.hours.map(h => h.open ? `${esc(h.days)} ${esc(h.open)}–${esc(h.close)}` : `${esc(h.days)} closed`).join(" · ");
+    $("kb").innerHTML = `
+      <div>
+        <div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Services &amp; pricing</div>
+        ${kb.services.map(s=>`<div class="row" style="padding:7px 0"><span style="font-size:13px">${esc(s.name)}</span><span class="mono" style="font-size:12px;color:var(--c3);font-weight:600">${esc(s.price)}</span></div>`).join("")}
+      </div>
+      <div>
+        <div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Hours</div>
+        <div style="font-size:13px;margin-bottom:16px">${hoursLine}</div>
+        <div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Insurance accepted</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">${kb.insuranceAccepted.map(x=>`<span class="pill">${esc(x)}</span>`).join("")}</div>
+        <div class="mono" style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Policies</div>
+        <ul style="font-size:12.5px;color:var(--ink-2);padding-left:18px;margin:0">${kb.policies.map(p=>`<li style="margin-bottom:4px">${esc(p)}</li>`).join("")}</ul>
+      </div>`;
+  }
+
+  $("integrations").innerHTML = d.integrations.map(i=>`
+    <div class="row">
+      <div><div style="font-size:13.5px;font-weight:600">${esc(i.name)}</div>
+      <div style="font-size:11.5px;color:var(--ink-2)">${esc(i.role)}</div></div>
+      ${i.connected
+        ? `<span class="mono" style="font-size:11px;color:var(--good);font-weight:600">✓ Connected</span>`
+        : `<span class="pill" style="background:color-mix(in srgb, var(--warning) 16%, transparent);color:var(--warning);border-color:transparent">Add key in .env</span>`}
+    </div>`).join("");
+
+  $("appts").innerHTML = d.appointments.map(p=>`
+    <div class="row">
+      <div style="display:flex;gap:14px;align-items:center">
+        <span class="mono" style="font-size:12.5px;font-weight:600;color:var(--c1);min-width:62px">${fmtTime(p.time)}</span>
+        <div><div style="font-size:13.5px;font-weight:600">${esc(p.name)}</div>
+        <div style="font-size:12px;color:var(--ink-2)">${esc(p.service)}</div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="pill">${esc(p.source)}</span>
+        <span class="mono" style="font-size:11.5px;font-weight:600;color:${p.status==="confirmed"?"var(--good)":"var(--warning)"}">${esc(p.status)}</span>
+      </div>
+    </div>`).join("") || `<div style="font-size:13px;color:var(--muted);padding:8px 0">No AI-booked appointments yet today.</div>`;
+
+  $("claims").innerHTML = d.claims.map(c=>`
+    <div class="row">
+      <div><span class="mono" style="font-size:12.5px;font-weight:600">${esc(c.id)}</span>
+      <span style="font-size:12.5px;color:var(--ink-2)"> · visit ${esc(c.visitId)} · ${(c.codes||[]).map(x=>x.code||x).join(", ")}</span></div>
+      <button class="primary" onclick="approveClaim('${c.id}')">Approve &amp; submit</button>
+    </div>`).join("") || `<div style="font-size:13px;color:var(--muted);padding:8px 0">Nothing waiting — all clear.</div>`;
+
+  $("activity").innerHTML = d.activity.map(a=>`
+    <div class="row" style="padding:9px 0">
+      <span style="font-size:13px">${esc(a.message)}</span>
+      <span class="mono" style="font-size:11px;color:var(--muted)">${fmtTime(a.ts)}</span>
+    </div>`).join("") || `<div style="font-size:13px;color:var(--muted)">Activity from calls, leads, and agent runs will appear here.</div>`;
+
+  leadsData = d.leads || [];
+  $("leadsTable").innerHTML = leadsData.map(l => `
+    <tr>
+      <td style="padding:9px 10px 9px 0;border-bottom:1px solid var(--line);font-size:13px;font-weight:600">${esc(l.name)}</td>
+      <td style="padding:9px 10px;border-bottom:1px solid var(--line);font-size:12.5px" class="mono">${esc(l.phone||"—")}</td>
+      <td style="padding:9px 10px;border-bottom:1px solid var(--line)"><span class="pill">${esc(l.source)}</span></td>
+      <td style="padding:9px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink-2)">${esc(l.service||"—")}</td>
+      <td style="padding:9px 10px;border-bottom:1px solid var(--line);font-size:12px" class="mono"><span style="color:${LEAD_STATUS_COLOR[l.status]||"var(--muted)"};font-weight:600">${esc(l.status)}</span></td>
+      <td style="padding:9px 0 9px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)" class="mono">${fmtTime(l.createdAt)}</td>
+    </tr>`).join("") || `<tr><td colspan="6" style="padding:16px 0;color:var(--muted);font-size:13px">No leads yet — connect Meta or Google Ads to start capturing inquiries.</td></tr>`;
+
+  feedCalls = d.calls;
+  renderFeed();
+}
+
+function renderFeed(){
+  if(!feedCalls.length){ $("liveFeed").innerHTML = `<div style="font-size:13px;color:var(--muted)">Waiting for the first call…</div>`; return; }
+  const c = feedCalls[feedIdx % feedCalls.length];
+  $("liveFeed").innerHTML = `<div style="animation:rise .4s ease">
+    <div class="mono" style="font-size:11px;color:var(--muted)">☎ ${fmtTime(c.ts)} · ${c.dir==="inbound"?"Inbound":"Outbound"} · ${esc(c.who)}</div>
+    <div style="font-size:14px;font-weight:500;margin-top:4px">${esc(c.summary)}</div></div>`;
+}
+
+async function toggleAgent(id){ await api(`/api/agents/${id}/toggle`,{method:"POST"}); refresh(); }
+async function runNow(id,btn){ btn.textContent="Running…"; const r=await api(`/api/agents/${id}/run`,{method:"POST"}); btn.textContent="Run now"; refresh(); }
+async function approveClaim(id){ await api(`/api/claims/${id}/approve`,{method:"POST"}); refresh(); }
+
+function startTimers(){
+  setInterval(refresh, 10000);
+  setInterval(()=>{ feedIdx++; renderFeed(); }, 4200);
+}
+
+if (token) {
+  $("login").classList.add("hidden"); $("app").classList.remove("hidden");
+  refresh().then(startTimers).catch(()=>{});
+}
+</script>
+</body>
+</html>
