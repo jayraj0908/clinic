@@ -102,6 +102,7 @@ app.post("/api/claims/:id/approve", auth, (req, res) => {
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------
 
 function formatAvailability(out, dateISO) {
+  if (out.invalidDate) return "I didn't catch that date clearly — could you repeat it?";
   if (!out.configured) return "I'm not able to check the live calendar right now — let me have a team member confirm a time and call you back.";
   if (out.closed) return `We're closed on ${dateISO}. Would another day work?`;
   if (!out.slots.length) return `I don't see any open slots on ${dateISO} for that. Would another day work?`;
@@ -129,8 +130,21 @@ app.post("/webhooks/vapi", async (req, res) => {
           results.push({ toolCallId: tc.id, result: formatAvailability(out, date) });
         } else if (tc.name === "book_appointment") {
           const { date, time, name, phone, service } = tc.arguments || {};
-          const [hh, mm] = (time || "").split(":").map(Number);
-          const startISO = calendarApi.zonedTimeToISO(date, hh || 0, mm || 0, calendarApi.tz());
+          if (!calendarApi.isValidDateISO(date)) {
+            results.push({ toolCallId: tc.id, result: "I didn't catch that date clearly — could you repeat it?" });
+            continue;
+          }
+          const parsedTime = calendarApi.parseTimeArg(time);
+          if (!parsedTime) {
+            results.push({ toolCallId: tc.id, result: "I didn't catch that time clearly — could you repeat it, like '2:30 PM'?" });
+            continue;
+          }
+          const existing = db.appointments.find((a) => a.vapiCallId === m.call?.id && a.googleEventId);
+          if (existing) {
+            results.push({ toolCallId: tc.id, result: `You're already booked — confirmed for ${existing.time}.` });
+            continue;
+          }
+          const startISO = calendarApi.zonedTimeToISO(date, parsedTime.hh, parsedTime.mm, calendarApi.tz());
           const out = await calendarApi.bookAppointment({ name, phone, service, startISO, durationMinutes: calendarApi.serviceDurationMinutes(service) });
           if (out.eventId) {
             db.appointments.unshift({
@@ -149,7 +163,8 @@ app.post("/webhooks/vapi", async (req, res) => {
           results.push({ toolCallId: tc.id, result: "Unknown tool." });
         }
       } catch (e) {
-        results.push({ toolCallId: tc.id, result: `Error checking the calendar: ${e.message}` });
+        const label = tc.name === "book_appointment" ? "Error booking the appointment" : "Error checking the calendar";
+        results.push({ toolCallId: tc.id, result: `${label}: ${e.message}` });
       }
     }
     return res.json({ results });

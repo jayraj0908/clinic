@@ -64,6 +64,25 @@ function parseClockTime(str) {
   return { hh, mm: +m[2] };
 }
 
+// Vapi's book_appointment tool is instructed to send 24-hour "HH:MM", but an
+// LLM won't always follow that under real conversational pressure — accept
+// "14:30" as the primary path, tolerate "2:30 PM" as a fallback, and return
+// null (never a guessed value) on anything genuinely unparseable so the
+// caller can ask the caller to repeat it instead of silently booking wrong.
+function parseTimeArg(str) {
+  const s = (str || "").trim();
+  const m24 = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(s);
+  if (m24) return { hh: +m24[1], mm: +m24[2] };
+  return parseClockTime(s);
+}
+
+function isValidDateISO(str) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str || "")) return false;
+  const [y, mo, d] = str.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
 function expandDays(daysStr) {
   const parts = daysStr.split(/[–-]/).map((s) => s.trim());
   if (parts.length === 1) return [DAY_ABBR.indexOf(parts[0])];
@@ -119,6 +138,7 @@ function serviceDurationMinutes(serviceName) {
 }
 
 async function getAvailability(dateISO, durationMinutes) {
+  if (!isValidDateISO(dateISO)) return { configured: true, invalidDate: true, slots: [] };
   const cal = await client();
   if (!cal) return { configured: false, slots: [] };
   const window = clinicWindowFor(dateISO);
@@ -148,4 +168,4 @@ async function bookAppointment({ name, phone, service, startISO, durationMinutes
   return { configured: true, eventId: data.id, htmlLink: data.htmlLink, startISO, endISO };
 }
 
-module.exports = { configured, getAvailability, bookAppointment, serviceDurationMinutes, clinicWindowFor, zonedTimeToISO, tz };
+module.exports = { configured, getAvailability, bookAppointment, serviceDurationMinutes, clinicWindowFor, zonedTimeToISO, tz, parseTimeArg, isValidDateISO };
