@@ -121,6 +121,21 @@ function formatAvailability(out, dateISO) {
   return `On ${dateISO} I have ${times} open.`;
 }
 
+// Vapi's tool-call payload nests the function name/arguments under
+// `function: {name, arguments}` (arguments as a JSON string) rather than
+// flat fields, and the array key has been observed as both `toolCallList`
+// and `toolCalls` depending on call path — normalize defensively instead
+// of assuming one exact shape, since guessing wrong here silently breaks
+// every live call ("Unknown tool." with no visible error).
+function normalizeToolCall(raw) {
+  const fn = raw.function || {};
+  let args = raw.arguments ?? fn.arguments ?? {};
+  if (typeof args === "string") {
+    try { args = JSON.parse(args); } catch { args = {}; }
+  }
+  return { id: raw.id, name: raw.name || fn.name, arguments: args || {} };
+}
+
 // Vapi: live tool calls during an active call, and the end-of-call report
 app.post("/webhooks/vapi", async (req, res) => {
   if (process.env.VAPI_SERVER_SECRET && req.headers["x-vapi-secret"] !== process.env.VAPI_SERVER_SECRET) {
@@ -131,7 +146,8 @@ app.post("/webhooks/vapi", async (req, res) => {
   if (m.type === "tool-calls") {
     const db = load();
     const results = [];
-    for (const tc of m.toolCallList || []) {
+    for (const rawTc of m.toolCallList || m.toolCalls || []) {
+      const tc = normalizeToolCall(rawTc);
       try {
         if (tc.name === "check_availability") {
           const { date, service } = tc.arguments || {};
@@ -177,6 +193,15 @@ app.post("/webhooks/vapi", async (req, res) => {
       }
     }
     return res.json({ results });
+  }
+
+  // Vapi sends many other message types during a live call (status-update,
+  // transcript, speech-update, etc.) to the same Server URL — only an
+  // actual end-of-call-report should create a call record. Anything else,
+  // just acknowledge and ignore, otherwise every one of those turns into a
+  // bogus "Call completed" row.
+  if (m.type !== "end-of-call-report") {
+    return res.json({ ok: true });
   }
 
   // end-of-call report → call record + booking
