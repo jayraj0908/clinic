@@ -136,6 +136,21 @@ function normalizeToolCall(raw) {
   return { id: raw.id, name: raw.name || fn.name, arguments: args || {} };
 }
 
+// Find-or-create by phone, so every caller who gives their name/number
+// becomes a lead — whether or not they end up booking — not just the ones
+// who happened to already exist from an ad webhook.
+function upsertLead(db, { name, phone, service, source }) {
+  let lead = db.leads.find((l) => l.phone === phone);
+  if (lead) {
+    if (name) lead.name = name;
+    if (service && !lead.service) lead.service = service;
+  } else {
+    lead = { id: "L" + Date.now(), name: name || "Unknown caller", phone, source: source || "ai_line", service: service || "", status: "new", createdAt: new Date().toISOString() };
+    db.leads.unshift(lead);
+  }
+  return lead;
+}
+
 // Vapi: live tool calls during an active call, and the end-of-call report
 app.post("/webhooks/vapi", async (req, res) => {
   if (process.env.VAPI_SERVER_SECRET && req.headers["x-vapi-secret"] !== process.env.VAPI_SERVER_SECRET) {
@@ -153,6 +168,16 @@ app.post("/webhooks/vapi", async (req, res) => {
           const { date, service } = tc.arguments || {};
           const out = await calendarApi.getAvailability(date, calendarApi.serviceDurationMinutes(service));
           results.push({ toolCallId: tc.id, result: formatAvailability(out, date) });
+        } else if (tc.name === "save_contact") {
+          const { name, phone, service } = tc.arguments || {};
+          if (!phone) {
+            results.push({ toolCallId: tc.id, result: "I need a callback number to save that — could you repeat it?" });
+            continue;
+          }
+          const lead = upsertLead(db, { name, phone, service, source: "ai_line" });
+          save();
+          log("lead", `${lead.name} (${lead.phone}) called in${service ? " about " + service : ""} — saved to leads`);
+          results.push({ toolCallId: tc.id, result: "Got it, saved." });
         } else if (tc.name === "book_appointment") {
           const { date, time, name, phone, service } = tc.arguments || {};
           if (!calendarApi.isValidDateISO(date)) {
@@ -169,15 +194,16 @@ app.post("/webhooks/vapi", async (req, res) => {
             results.push({ toolCallId: tc.id, result: `You're already booked — confirmed for ${existing.time}.` });
             continue;
           }
+          const direction = m.call?.type === "outboundPhoneCall" ? "outbound" : "inbound";
           const startISO = calendarApi.zonedTimeToISO(date, parsedTime.hh, parsedTime.mm, calendarApi.tz());
-          const out = await calendarApi.bookAppointment({ name, phone, service, startISO, durationMinutes: calendarApi.serviceDurationMinutes(service) });
+          const out = await calendarApi.bookAppointment({ name, phone, service, startISO, durationMinutes: calendarApi.serviceDurationMinutes(service), direction });
           if (out.eventId) {
             db.appointments.unshift({
               id: "A" + Date.now(), time: startISO, name, service, source: "AI line", status: "confirmed",
               googleEventId: out.eventId, vapiCallId: m.call?.id,
             });
-            const lead = db.leads.find((l) => l.phone === phone);
-            if (lead) lead.status = "booked";
+            const lead = upsertLead(db, { name, phone, service, source: "ai_line" });
+            lead.status = "booked";
             save();
             log("call", `Booked ${service || "appointment"} for ${name} at ${startISO} via AI line`);
             results.push({ toolCallId: tc.id, result: `Booked — confirmed for ${startISO}.` });

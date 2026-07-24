@@ -150,16 +150,33 @@ async function getAvailability(dateISO, durationMinutes) {
   return { configured: true, slots: computeOpenSlots(window, busy, durationMinutes || 30) };
 }
 
-async function bookAppointment({ name, phone, service, startISO, durationMinutes }) {
+function formatHumanDateTime(iso, timeZone) {
+  return new Date(iso).toLocaleString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+    hour: "numeric", minute: "2-digit", timeZone,
+  });
+}
+
+async function bookAppointment({ name, phone, service, startISO, durationMinutes, direction }) {
   const cal = await client();
   if (!cal) return { configured: false };
   const dur = durationMinutes || serviceDurationMinutes(service);
   const endISO = new Date(new Date(startISO).getTime() + dur * 60000).toISOString();
+  const description = [
+    "Booked automatically by the AI receptionist.",
+    "",
+    `Patient: ${name || "Not provided"}`,
+    `Phone: ${phone || "Not provided"}`,
+    `Service: ${service || "Not specified"}`,
+    `Date & time: ${formatHumanDateTime(startISO, tz())}`,
+    `Duration: ${dur} minutes`,
+    `Source: ${direction === "outbound" ? "Outbound follow-up call" : "Inbound call"}`,
+  ].join("\n");
   const { data } = await cal.events.insert({
     calendarId: calendarId(),
     requestBody: {
-      summary: `${service || "Appointment"} — ${name}`,
-      description: `Booked via AI receptionist.\nPatient: ${name}\nPhone: ${phone}\nService: ${service}`,
+      summary: `${service || "Appointment"} — ${name || "Patient"}`,
+      description,
       start: { dateTime: startISO, timeZone: tz() },
       end: { dateTime: endISO, timeZone: tz() },
     },
