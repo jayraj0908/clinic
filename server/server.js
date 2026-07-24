@@ -1,12 +1,21 @@
 require("dotenv").config();
+const fs = require("fs");
 const express = require("express");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const cron = require("node-cron");
-const { load, save, log } = require("./store");
+const { load, save, log, DB_PATH } = require("./store");
 const { runAgent } = require("./agents");
 const calendarApi = require("./calendar");
+
+// First boot (e.g. a fresh Railway deploy with no persistent volume yet):
+// seed so the owner login exists. Skipped whenever a database already
+// exists, so a restart/redeploy never wipes real accumulated data.
+if (!fs.existsSync(DB_PATH)) {
+  console.log("No database found — running first-time seed...");
+  require("./seed");
+}
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
