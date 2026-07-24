@@ -3,46 +3,48 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Front Office AI — Brain</title>
+<title>Sailz — Shine Dental Clinic</title>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/force-graph@1/dist/force-graph.min.js"></script>
 <style>
   :root{
-    --bg:#0B1B33; --surface:#0F2140; --surface-2:#152A4F; --border:rgba(150,180,255,.14);
-    --ink:#ffffff; --ink-2:#B9C6E6; --muted:#7C8CB0;
-    --good:#22C55E; --warning:#F5B301; --critical:#E5484D;
+    --bg:#FAFAF8; --surface:#FFFFFF; --surface-2:#F4F4F2; --border:#E7E6E3;
+    --ink:#17171A; --ink-2:#52514E; --muted:#8A8A86;
+    --black:#111111; --good:#17A34A; --warning:#D9A441; --critical:#E5484D;
   }
   *{box-sizing:border-box;margin:0}
   html,body{height:100%}
   body{background:var(--bg);color:var(--ink);font-family:Archivo,sans-serif;overflow:hidden}
   .mono{font-family:'IBM Plex Mono',monospace}
   .hidden{display:none!important}
-  button{font-family:'IBM Plex Mono',monospace;cursor:pointer;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--ink);font-size:11px;font-weight:600;padding:7px 14px}
-  button:hover{background:var(--surface)}
-  button.primary{background:var(--good);border-color:var(--good);color:#04140f}
-  button:focus-visible{outline:2px solid var(--good);outline-offset:2px}
+  button{font-family:'IBM Plex Mono',monospace;cursor:pointer;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--ink);font-size:11px;font-weight:600;padding:7px 14px}
+  button:hover{background:var(--surface-2)}
+  button.primary{background:var(--black);border-color:var(--black);color:#fff}
+  button:focus-visible{outline:2px solid var(--black);outline-offset:2px}
 
   /* login */
   #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-  #login .card{width:100%;max-width:380px;padding:32px;background:var(--surface);border:1px solid var(--border);border-radius:16px}
+  #login .card{width:100%;max-width:380px;padding:32px;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
   input{width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:6px;background:var(--surface-2);color:var(--ink)}
   label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
   .field{margin-bottom:16px}
 
   /* app shell */
-  #topbar{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:16px 22px;pointer-events:none}
+  #topbar{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:18px 24px;pointer-events:none}
   #topbar > *{pointer-events:auto}
   #topbar .brand{font-weight:800;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
-  #topbar .brand .mark{width:26px;height:26px;border-radius:8px;background:#111;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px}
+  #topbar .brand .mark{width:28px;height:28px;border-radius:50%;background:linear-gradient(160deg,#1E3A8A,#0EA5E9);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
+  #topbar .brand .powered{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);font-weight:500;letter-spacing:.04em}
   #topbar .right{display:flex;gap:10px;align-items:center}
   #topbar a.ghost-link{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);text-decoration:none}
-  #topbar a.ghost-link:hover{color:var(--ink-2)}
+  #topbar a.ghost-link:hover{color:var(--ink)}
+  #topbar .stats{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted)}
 
   #graph{position:absolute;inset:0}
-  #tooltip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transition:opacity .15s ease;z-index:20;white-space:nowrap}
+  #tooltip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.12);opacity:0;transition:opacity .15s ease;z-index:20;white-space:nowrap}
 
   /* inspector panel */
-  #inspector{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--surface);border-left:1px solid var(--border);box-shadow:-20px 0 60px rgba(0,0,0,.35);transform:translateX(100%);transition:transform .2s cubic-bezier(.25,.8,.25,1);z-index:15;overflow-y:auto}
+  #inspector{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--surface);border-left:1px solid var(--border);box-shadow:-20px 0 60px rgba(0,0,0,.08);transform:translateX(100%);transition:transform .2s cubic-bezier(.25,.8,.25,1);z-index:15;overflow-y:auto}
   #inspector.open{transform:translateX(0)}
   #inspector .head{padding:24px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:flex-start}
   #inspector .avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;flex-shrink:0}
@@ -76,10 +78,8 @@
 
 <div id="login">
   <div class="card">
-    <div style="width:38px;height:38px;border-radius:10px;background:#2F6BFF;display:flex;align-items:center;justify-content:center;margin-bottom:18px">
-      <span style="color:#04140f;font-weight:800;font-size:16px">⌁</span>
-    </div>
-    <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.01em">Front Office AI</h1>
+    <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(160deg,#1E3A8A,#0EA5E9);display:flex;align-items:center;justify-content:center;margin-bottom:18px;font-size:17px">⛵</div>
+    <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.01em">Sailz</h1>
     <p style="font-size:13px;color:var(--muted);margin:6px 0 22px">Owner sign-in</p>
     <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="username" value=""></div>
     <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password"></div>
@@ -90,9 +90,9 @@
 
 <div id="app" class="hidden">
   <div id="topbar">
-    <div class="brand"><span class="mark">⌁</span><span id="clinicName">Clinic</span></div>
+    <div class="brand"><span class="mark">⛵</span><span id="clinicName">Clinic</span><span class="powered">· powered by Sailz</span></div>
     <div class="right">
-      <span class="mono" id="statsline" style="font-size:11.5px;color:var(--muted)"></span>
+      <span class="stats" id="statsline"></span>
       <a class="ghost-link" href="/dashboard-classic.html">Classic view</a>
       <button onclick="logout()">Sign out</button>
     </div>
@@ -163,36 +163,51 @@ function esc(s){ const d=document.createElement("div"); d.textContent=s??""; ret
 
 const STATUS_COLOR = { active: "var(--good)", idle: "var(--muted)", needs_review: "var(--critical)", offline: "var(--muted)" };
 const STATUS_TEXT = { active: "ACTIVE", idle: "IDLE", needs_review: "NEEDS REVIEW", offline: "NOT CONNECTED" };
+const AGENT_ORDER = ["leads", "receptionist", "calling", "audit", "billing"];
+const HUB_RADIUS = 260;
 
 let Graph, tooltip, hoveredNode = null, neighbors = new Set(), selectedAgent = null;
 let graphData = { nodes: [], links: [] };
 
+function pinRadialBackbone(nodes) {
+  nodes.forEach((n) => {
+    if (n.type === "clinic") { n.fx = 0; n.fy = 0; }
+    if (n.type === "agent") {
+      const idx = AGENT_ORDER.indexOf(n.id);
+      if (idx === -1) return;
+      const angle = (idx / AGENT_ORDER.length) * 2 * Math.PI - Math.PI / 2;
+      n.fx = HUB_RADIUS * Math.cos(angle);
+      n.fy = HUB_RADIUS * Math.sin(angle);
+    }
+  });
+}
+
 function initGraph() {
   tooltip = $("tooltip");
   Graph = ForceGraph()($("graph"))
-    .backgroundColor("#0B1B33")
+    .backgroundColor("#FAFAF8")
     .nodeId("id")
     .linkSource("source")
     .linkTarget("target")
-    .d3AlphaDecay(0.02)
-    .d3VelocityDecay(0.35)
-    .warmupTicks(80)
-    .cooldownTime(4000)
-    .linkColor((l) => (l.kind === "handoff" ? "rgba(255,255,255,0.35)" : "rgba(150,180,255,0.16)"))
+    .d3AlphaDecay(0.03)
+    .d3VelocityDecay(0.4)
+    .warmupTicks(100)
+    .cooldownTime(3000)
+    .linkColor((l) => (l.kind === "handoff" ? "rgba(17,17,17,0.28)" : "rgba(100,116,139,0.20)"))
     .linkWidth((l) => (l.kind === "handoff" ? 1.6 : 0.6))
-    .linkDirectionalParticles((l) => (l.kind === "handoff" ? 2 : 0))
-    .linkDirectionalParticleWidth(2.4)
-    .linkDirectionalParticleColor(() => "rgba(255,255,255,0.9)")
+    .linkDirectionalParticles((l) => (l.kind === "handoff" || l.kind === "spoke" ? 2 : 0))
+    .linkDirectionalParticleWidth((l) => (l.kind === "spoke" ? 2 : 2.4))
+    .linkDirectionalParticleColor((l) => (l.kind === "spoke" ? "rgba(30,58,138,0.55)" : "rgba(17,17,17,0.5)"))
     .linkDirectionalParticleSpeed(0.006)
     .nodeCanvasObject(paintNode)
     .onNodeHover(onHover)
     .onNodeClick(onClick)
-    .onBackgroundClick(() => { closeInspector(); Graph.zoom(Graph.zoom(), 400); });
+    .onBackgroundClick(() => { closeInspector(); });
 
-  Graph.d3Force("charge").strength(-160);
-  Graph.d3Force("link").distance((l) => (l.kind === "handoff" ? 140 : l.kind === "spoke" ? 110 : 30));
-  Graph.onEngineStop(() => Graph.zoomToFit(400, 80));
-  [300, 1000, 2500, 4500].forEach((ms) => setTimeout(() => Graph.zoomToFit(300, 80), ms));
+  Graph.d3Force("charge").strength((n) => (n.type === "clinic" || n.type === "agent" ? -40 : -90));
+  Graph.d3Force("link").distance((l) => (l.kind === "handoff" ? HUB_RADIUS : l.kind === "spoke" ? HUB_RADIUS : 30));
+  Graph.onEngineStop(() => Graph.zoomToFit(400, 90));
+  [300, 1000, 2500].forEach((ms) => setTimeout(() => Graph.zoomToFit(300, 90), ms));
 
   window.addEventListener("resize", () => Graph.width(window.innerWidth).height(window.innerHeight));
   window.addEventListener("mousemove", (e) => {
@@ -207,61 +222,66 @@ function paintNode(node, ctx, globalScale) {
   const alpha = dimmed ? 0.12 : 1;
 
   if (node.type === "clinic") {
-    const size = 16;
+    const size = 22;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.shadowColor = "rgba(255,255,255,0.5)"; ctx.shadowBlur = 12;
-    ctx.fillStyle = "#111";
-    roundRect(ctx, node.x - size, node.y - size, size * 2, size * 2, 6); ctx.fill();
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.shadowColor = "rgba(14,165,233,0.45)"; ctx.shadowBlur = 22;
+    const grad = ctx.createRadialGradient(node.x, node.y, 1, node.x, node.y, size);
+    grad.addColorStop(0, "#1E3A8A"); grad.addColorStop(1, "#0EA5E9");
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(node.x, node.y, size, 0, 2 * Math.PI); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.font = "20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("⛵", node.x, node.y + 1);
     ctx.restore();
-    if (globalScale > 0.5) drawLabel(ctx, node.x, node.y + size + 12, node.name, alpha, 12);
+    if (globalScale > 0.35) drawLabel(ctx, node.x, node.y + size + 16, node.name, alpha, 14, true, "#111");
     return;
   }
 
   if (node.type === "agent") {
-    const size = 17;
+    const size = 19;
     const active = node.status === "active";
     const t = window.__brainT || 0;
     const pulse = active ? 1 + 0.1 * Math.sin(t / 18) : 1;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.shadowColor = node.color; ctx.shadowBlur = active ? 26 : 14;
+    ctx.shadowColor = node.color; ctx.shadowBlur = active ? 28 : 16;
     const grad = ctx.createRadialGradient(node.x, node.y, 1, node.x, node.y, size * pulse);
-    grad.addColorStop(0, node.color); grad.addColorStop(1, shade(node.color, -20));
+    grad.addColorStop(0, node.color); grad.addColorStop(1, shade(node.color, -18));
     ctx.fillStyle = grad;
     ctx.beginPath(); ctx.arc(node.x, node.y, size * pulse, 0, 2 * Math.PI); ctx.fill();
-    ctx.strokeStyle = node.id === selectedAgent ? "#22C55E" : "rgba(255,255,255,0.85)";
-    ctx.lineWidth = node.id === selectedAgent ? 3 : 2; ctx.stroke();
+    ctx.strokeStyle = node.id === selectedAgent ? "#111" : "#fff";
+    ctx.lineWidth = node.id === selectedAgent ? 3 : 2.5; ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "#fff"; ctx.font = "14px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff"; ctx.font = "15px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(node.glyph, node.x, node.y + 1);
     ctx.restore();
-    if (globalScale > 0.4) drawLabel(ctx, node.x, node.y + size * pulse + 15, node.name, alpha, 13, true);
+    if (globalScale > 0.35) drawLabel(ctx, node.x, node.y + size * pulse + 16, node.name, alpha, 13, true, "#111");
     return;
   }
 
-  if (node.type === "workflow") { drawGlowDot(ctx, node, 4, "#F5B301", alpha); return; }
+  if (node.type === "workflow") { drawGlowDot(ctx, node, 4, "#D9A441", alpha); return; }
 
   if (node.type === "tool") {
     const size = 5;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = "#0F2140";
+    ctx.fillStyle = "#F4F4F2";
     roundRect(ctx, node.x - size, node.y - size, size * 2, size * 2, 2); ctx.fill();
-    ctx.strokeStyle = node.connected ? (node.color || "#7C8CB0") : "rgba(124,140,176,0.4)";
+    ctx.strokeStyle = node.connected ? (node.color || "#8A8A86") : "rgba(138,138,134,0.5)";
     ctx.lineWidth = 1.2; ctx.stroke();
     ctx.restore();
-    if (globalScale > 1.6) drawLabel(ctx, node.x, node.y + 11, node.name, alpha * 0.85, 9);
+    if (globalScale > 1.6) drawLabel(ctx, node.x, node.y + 11, node.name, alpha * 0.85, 9, false, "#52514E");
     return;
   }
 
-  if (node.type === "event") { drawGlowDot(ctx, node, 2.4, node.color, alpha * 0.75); return; }
+  if (node.type === "event") { drawGlowDot(ctx, node, 2.4, node.color, alpha * 0.7); return; }
 
   if (node.type === "patient") {
     ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = "#C9C9C6";
     ctx.beginPath(); ctx.arc(node.x, node.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
-    if (globalScale > 1.4) drawLabel(ctx, node.x, node.y + 10, node.name, alpha * 0.85, 9);
+    if (globalScale > 1.4) drawLabel(ctx, node.x, node.y + 10, node.name, alpha * 0.85, 9, false, "#52514E");
     return;
   }
 }
@@ -291,6 +311,9 @@ function onClick(node) {
     Graph.centerAt(node.x, node.y, 600);
     Graph.zoom(2.1, 600);
     openInspector(node.id);
+  } else if (node.type === "clinic") {
+    closeInspector();
+    Graph.zoomToFit(500, 90);
   }
 }
 
@@ -304,12 +327,12 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 function drawGlowDot(ctx, node, r, color, alpha) {
-  ctx.save(); ctx.globalAlpha = alpha; ctx.shadowColor = color; ctx.shadowBlur = 8;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.shadowColor = color; ctx.shadowBlur = 7;
   ctx.fillStyle = color; ctx.beginPath(); ctx.arc(node.x, node.y, r, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
 }
-function drawLabel(ctx, x, y, text, alpha, size, bold) {
-  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = "#B9C6E6";
-  ctx.font = `${bold ? 600 : 400} ${size}px Archivo, sans-serif`;
+function drawLabel(ctx, x, y, text, alpha, size, bold, color) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = color || "#52514E";
+  ctx.font = `${bold ? 700 : 400} ${size}px Archivo, sans-serif`;
   ctx.textAlign = "center"; ctx.fillText(text, x, y); ctx.restore();
 }
 function shade(hex, percent) {
@@ -323,8 +346,11 @@ function shade(hex, percent) {
 
 async function refreshGraph() {
   const d = await api("/api/brain/graph");
-  $("clinicName").textContent = $("clinicName").dataset.name || $("clinicName").textContent;
   $("statsline").textContent = `Agents: ${d.stats.agents} · Actions this week: ${d.stats.actionsThisWeek} · Connections: ${d.stats.connections}`;
+  pinRadialBackbone(d.nodes);
+  // spoke edges are agent -> clinic, so directional particles read as
+  // "the agents feed the center" rather than the center broadcasting out
+  d.links.forEach((l) => { if (l.kind === "spoke") { const t = l.target; l.target = l.source; l.source = t; } });
   graphData = d;
   Graph.graphData(d);
   if (selectedAgent && $("inspector").classList.contains("open")) refreshInspector(selectedAgent);
@@ -371,7 +397,6 @@ async function approveFromInspector(claimId) {
 async function boot() {
   const me = await api("/api/dashboard");
   $("clinicName").textContent = me.settings.clinicName;
-  $("clinicName").dataset.name = me.settings.clinicName;
   initGraph();
   Graph.width(window.innerWidth).height(window.innerHeight);
   await refreshGraph();
