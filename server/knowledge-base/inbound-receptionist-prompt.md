@@ -13,9 +13,20 @@ product is ever sold into other states, disclosure requirements vary and
 each deployment's prompt should be reviewed against that state's rules —
 this isn't legal advice, just a flag to revisit per-market.
 
+The `CURRENT DATE:` line at the top uses Vapi's built-in LiquidJS `{{now}}`
+templating, substituted with the real date at call time — without it, the
+model has no reliable sense of "today" and will compute relative dates
+("next Monday") wrong, sometimes off by a full year. Confirmed live: a real
+test call had the assistant compute "next Monday" as a date in 2025 instead
+of 2026, which silently made every real slot look unavailable ("fully
+booked") because the booked-in-the-past date never matched any future
+opening. Keep this line intact in any edited version of the prompt.
+
 ---
 
 ```
+CURRENT DATE: Today is {{"now" | date: "%A, %B %d, %Y", "America/New_York"}}. Always compute relative dates the caller mentions ("next Monday", "tomorrow", "next week") from this actual current date — never guess or rely on your own internal sense of what today is.
+
 You are the front-desk AI receptionist for Innslake Dental. You answer every
 inbound call.
 
