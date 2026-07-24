@@ -11,9 +11,6 @@ const clinicProfile = JSON.parse(fs.readFileSync(path.join(__dirname, "knowledge
 if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
 const db = load();
 
-const now = Date.now();
-const hrs = (h) => new Date(now - h * 3600e3).toISOString();
-
 db.users.push({
   id: "u1",
   email: process.env.OWNER_EMAIL || "owner@clinic.com",
@@ -36,15 +33,15 @@ db.settings = {
   },
 };
 
-// setter defaults off: the seeded demo leads below have fake phone numbers,
-// and once real VAPI_* credentials are set this agent places real outbound
-// calls on its cron schedule — leaving it on would dial fake numbers for
-// real, on a live account, until someone notices. Owner opts in explicitly.
+// setter and billing default off: both take real-world-consequence actions
+// (placing real outbound calls, submitting claims) once their credentials
+// are live, so a fresh deploy/reseed never silently starts either without
+// the owner explicitly opting in via the dashboard toggle.
 db.agents = [
-  { id: "intake", name: "Lead Intake", desc: "Pulls & qualifies leads from Google and Meta ads", schedule: "*/15 * * * *", scheduleLabel: "Every 15 min", on: true, lastRun: hrs(0.3), lastResult: "6 new leads", stat: "" },
-  { id: "setter", name: "Appointment Setter", desc: "Calls qualified leads and books open slots", schedule: "*/10 9-18 * * 1-6", scheduleLabel: "9 AM–7 PM · Mon–Sat", on: false, lastRun: hrs(0.1), lastResult: "booked Maria G.", stat: "" },
-  { id: "audit", name: "Visit Audit", desc: "Structures provider notes into billing-ready SOAP", schedule: "*/30 8-19 * * *", scheduleLabel: "After each visit", on: true, lastRun: hrs(1), lastResult: "visit #2291 audited", stat: "" },
-  { id: "billing", name: "Insurance Billing", desc: "Codes visits, builds claims, submits after approval", schedule: "0 17 * * *", scheduleLabel: "Daily · 5:00 PM batch", on: false, lastRun: hrs(20), lastResult: "11 claims sent", stat: "" },
+  { id: "intake", name: "Lead Intake", desc: "Pulls & qualifies leads from Google and Meta ads", schedule: "*/15 * * * *", scheduleLabel: "Every 15 min", on: true, lastRun: null, lastResult: "", stat: "" },
+  { id: "setter", name: "Appointment Setter", desc: "Calls qualified leads and books open slots", schedule: "*/10 9-18 * * 1-6", scheduleLabel: "9 AM–7 PM · Mon–Sat", on: false, lastRun: null, lastResult: "", stat: "" },
+  { id: "audit", name: "Visit Audit", desc: "Structures provider notes into billing-ready SOAP", schedule: "*/30 8-19 * * *", scheduleLabel: "After each visit", on: true, lastRun: null, lastResult: "", stat: "" },
+  { id: "billing", name: "Insurance Billing", desc: "Codes visits, builds claims, submits after approval", schedule: "0 17 * * *", scheduleLabel: "Daily · 5:00 PM batch", on: false, lastRun: null, lastResult: "", stat: "" },
 ];
 
 db.integrations = [
@@ -60,49 +57,18 @@ db.integrations = [
 // mark connected if env key present
 for (const i of db.integrations) if (process.env[i.envKey]) i.status = "connected";
 
-// ---- demo pipeline data (delete freely once live) ----
-const leads = [
-  ["Maria G.", "+18045550171", "meta", "Cleaning", "booked"],
-  ["Devon P.", "+18045550152", "google", "Whitening", "call_scheduled"],
-  ["J. Whitfield", "+18045550183", "meta", "New patient exam", "booked"],
-  ["T. Nguyen", "+18045550194", "ai_line", "Whitening consult", "booked"],
-  ["R. Okafor", "+18045550115", "recall", "Crown seat", "seen"],
-  ["M. Alvarez", "+18045550126", "google", "Cleaning", "booked"],
-  ["K. Ellis", "+18045550137", "meta", "Invisalign consult", "qualified"],
-  ["S. Brooks", "+18045550148", "google", "Cleaning", "new"],
-];
-db.leads = leads.map((l, i) => ({ id: "L" + (100 + i), name: l[0], phone: l[1], source: l[2], service: l[3], status: l[4], createdAt: hrs(8 - i) }));
-
-db.calls = [
-  { id: "C1", dir: "inbound", who: "(804) 555-0138", summary: "Asked about whitening pricing — booked consult Thu 10:30 AM", outcome: "booked", ts: hrs(0.2) },
-  { id: "C2", dir: "outbound", who: "Maria G.", summary: "Meta lead day-2 follow-up — confirmed Friday 9:00 AM cleaning", outcome: "booked", ts: hrs(0.3) },
-  { id: "C3", dir: "inbound", who: "(804) 555-0192", summary: "Rescheduled Tuesday appt to Monday 1:15 PM", outcome: "rescheduled", ts: hrs(0.5) },
-  { id: "C4", dir: "outbound", who: "Devon P.", summary: "Google lead — no answer, retry 6:30 PM", outcome: "no_answer", ts: hrs(0.8) },
-  { id: "C5", dir: "inbound", who: "(804) 555-0114", summary: "Insurance question routed to billing queue with note", outcome: "routed", ts: hrs(1.1) },
-];
-
-db.appointments = [
-  { id: "A1", time: hrs(-1), name: "J. Whitfield", service: "New patient exam", source: "Meta", status: "confirmed" },
-  { id: "A2", time: hrs(-1.8), name: "R. Okafor", service: "Crown seat", source: "Recall", status: "confirmed" },
-  { id: "A3", time: hrs(-2.5), name: "T. Nguyen", service: "Whitening consult", source: "AI line", status: "unconfirmed" },
-  { id: "A4", time: hrs(-3.3), name: "M. Alvarez", service: "Cleaning", source: "Google", status: "confirmed" },
-];
-
-db.visits = [{ id: "V2291", patient: "R. Okafor", auditComplete: true, billingReady: true, ts: hrs(1) }];
-db.claims = [{ id: "CL1", visitId: "V2291", codes: ["D2740"], status: "awaiting_approval", amount: 1180, ts: hrs(0.9) }];
-
-db.activity = [
-  { id: "a1", ts: hrs(0.1), type: "agent", message: "Appointment Setter: placed 1 call(s)" },
-  { id: "a2", ts: hrs(0.2), type: "call", message: "Inbound · (804) 555-0138: Asked about whitening pricing — booked consult Thu 10:30 AM" },
-  { id: "a3", ts: hrs(0.3), type: "call", message: "Outbound · Maria G.: Meta lead day-2 follow-up — confirmed Friday 9:00 AM cleaning" },
-  { id: "a4", ts: hrs(0.3), type: "agent", message: "Lead Intake: qualified 1 lead(s)" },
-  { id: "a5", ts: hrs(0.5), type: "call", message: "Inbound · (804) 555-0192: Rescheduled Tuesday appt to Monday 1:15 PM" },
-  { id: "a6", ts: hrs(0.9), type: "billing", message: "Insurance Billing: 1 claim(s) drafted → awaiting human approval" },
-  { id: "a7", ts: hrs(1), type: "agent", message: "Visit Audit: processed 1 visit(s)" },
-  { id: "a8", ts: hrs(1.1), type: "call", message: "Inbound · (804) 555-0114: Insurance question routed to billing queue with note" },
-  { id: "a9", ts: hrs(8), type: "lead", message: "New Meta lead received — K. Ellis, Invisalign consult" },
-  { id: "a10", ts: hrs(8), type: "lead", message: "New Google lead received — S. Brooks, Cleaning" },
-];
+// Live now — no seeded demo leads/calls/appointments/claims/activity.
+// Everything from here on is real: leads arrive via /webhooks/meta,
+// /webhooks/google, or the AI receptionist's save_contact tool; calls and
+// bookings arrive via /webhooks/vapi. The graph/dashboard render correctly
+// empty (agents still show, workflows/tools still render) until real data
+// lands.
+db.leads = [];
+db.calls = [];
+db.appointments = [];
+db.visits = [];
+db.claims = [];
+db.activity = [];
 
 save();
 console.log("Seeded", DB_PATH);
