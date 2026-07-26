@@ -6,19 +6,19 @@
 const { load } = require("./store");
 
 const HUBS = [
-  { id: "leads", name: "Leads Agent", color: "#2F6BFF", glyph: "◈",
+  { id: "leads", name: "Leads Agent", color: "#d4af37", glyph: "◈", tagline: "capture · qualify · route",
     workflows: ["Capture Meta Ads leads", "Capture Google Ads leads", "Qualify & route to Receptionist"],
     tools: ["meta", "gads"] },
-  { id: "receptionist", name: "AI Receptionist", color: "#14B8A6", glyph: "☎",
+  { id: "receptionist", name: "AI Receptionist", color: "#3a8c8c", glyph: "☎", tagline: "answer · book · confirm",
     workflows: ["Answer inbound calls", "Check calendar availability", "Book appointment", "Save contact to leads"],
     tools: ["vapi", "gcal", "anthropic"] },
-  { id: "calling", name: "Calling Agent", color: "#F97316", glyph: "↪",
+  { id: "calling", name: "Calling Agent", color: "#a05a2c", glyph: "↪", tagline: "call · follow up · book",
     workflows: ["Call qualified leads", "Check calendar availability", "Book appointment"],
     tools: ["vapi", "gcal", "anthropic"], agentId: "setter" },
-  { id: "audit", name: "Audit Notes Agent", color: "#8B5CF6", glyph: "☷",
+  { id: "audit", name: "Audit Notes Agent", color: "#6a5acd", glyph: "☷", tagline: "structure · SOAP · billing-ready",
     workflows: ["Structure visit notes into SOAP"],
     tools: ["anthropic"], agentId: "audit" },
-  { id: "billing", name: "Billing Agent", color: "#17A34A", glyph: "⧉",
+  { id: "billing", name: "Billing Agent", color: "#b23333", glyph: "⧉", tagline: "code · claim · collect",
     workflows: ["Draft CPT/ICD claim codes", "Hold for owner approval"],
     tools: ["anthropic", "claimmd"], agentId: "billing" },
 ];
@@ -112,7 +112,7 @@ function buildGraph(db) {
 
   HUBS.forEach((hub) => {
     const status = agentStatus(db, hub);
-    nodes.push({ id: hub.id, type: "agent", name: hub.name, color: hub.color, glyph: hub.glyph, status });
+    nodes.push({ id: hub.id, type: "agent", name: hub.name, color: hub.color, glyph: hub.glyph, tagline: hub.tagline, status });
     links.push({ source: "clinic", target: hub.id, kind: "spoke" });
 
     hub.workflows.forEach((w, i) => {
@@ -169,6 +169,7 @@ function buildAgentDetail(db, hubId) {
   const a = hub.agentId ? db.agents.find((x) => x.id === hub.agentId) : null;
   return {
     id: hub.id, name: hub.name, color: hub.color, glyph: hub.glyph,
+    agentId: hub.agentId || null,
     status: agentStatus(db, hub),
     lastRun: a ? a.lastRun : null,
     lastResult: a ? a.lastResult : null,
