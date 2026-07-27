@@ -1,0 +1,21 @@
+{
+  "_note": "Every field here feeds both the dashboard UI and the receptionist/setter agent prompts. Replace every value with the real client's details before going live. Field names are dental-flavored (this engine's first vertical) but the shape is generic enough to reuse for any appointment-based business — rename 'services' items and adjust prose in the prompt .md files for a different vertical.",
+  "name": "Client Business Name",
+  "timezone": "America/New_York",
+  "hours": [
+    { "days": "Mon–Fri", "open": "9:00 AM", "close": "5:00 PM" },
+    { "days": "Sat", "open": null, "close": null },
+    { "days": "Sun", "open": null, "close": null }
+  ],
+  "services": [
+    { "name": "Example service — replace me", "price": "$0–$0", "duration": "0 min" }
+  ],
+  "insuranceAccepted": [],
+  "selfPay": "Describe accepted payment methods here.",
+  "policies": [
+    "Cancellation/rescheduling policy goes here.",
+    "New-client intake requirements go here.",
+    "Emergency/urgent-situation triage instructions go here — what should the AI receptionist tell a caller to do instead of booking a routine slot?"
+  ],
+  "aiDisclosure": "This call may be handled by an AI assistant. State this at the start of every call where required by law — verify per-state/per-country requirements before launch."
+}

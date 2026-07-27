@@ -4,6 +4,7 @@
 // a new agent file is all it takes for a new node to appear on the map.
 const { load } = require("./store");
 const { AGENTS } = require("./brain");
+const { instance } = require("./instance");
 
 function buildHubs() {
   return Object.values(AGENTS)
@@ -107,7 +108,7 @@ function buildGraph(db) {
   const nodes = [];
   const links = [];
 
-  nodes.push({ id: "clinic", type: "clinic", name: db.settings.clinicName || "Clinic" });
+  nodes.push({ id: "clinic", type: "clinic", name: db.settings.clinicName || instance.name });
 
   HUBS.forEach((hub) => {
     const status = agentStatus(db, hub);

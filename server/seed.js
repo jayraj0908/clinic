@@ -13,7 +13,7 @@ db.users.push({
   id: "u1",
   email: process.env.OWNER_EMAIL || "owner@clinic.com",
   passHash: bcrypt.hashSync(process.env.OWNER_PASSWORD || "changeme123", 10),
-  name: "Clinic Owner",
+  name: `${instance.name} Owner`,
   role: "owner",
 });
 

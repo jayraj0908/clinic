@@ -1,0 +1,8 @@
+{
+  "_note": "Copy this whole instances/_template/ folder to instances/<your-client-id>/ and fill in every field below. <your-client-id> is what you set as the INSTANCE env var for that deployment.",
+  "id": "your-client-id",
+  "name": "Client Business Name",
+  "vertical": "dental",
+  "brandColor": "#c9a066",
+  "timezone": "America/New_York"
+}
