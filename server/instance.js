@@ -30,6 +30,14 @@ const DEFAULT_PROFILE = {
   selfPay: "",
   policies: [],
 };
+// Outbound message templates — never hardcode clinic wording in code.
+// Placeholders: {clinic} {service} {date} {time} {number} {patient}
+const DEFAULT_MESSAGES = {
+  bookingConfirmationSMS: "You're booked at {clinic} — {service}, {date} {time}. Reply here or call {number} to reschedule.",
+  bookingConfirmationEmailSubject: "Your appointment at {clinic} is confirmed",
+  bookingConfirmationEmailHTML: "<p>Hi {patient},</p><p>You're booked at <strong>{clinic}</strong> — {service}, {date} {time}.</p><p>Reply to this email or call {number} to reschedule.</p>",
+  reminderSMS: "Reminder: you have an appointment at {clinic} tomorrow — {service}, {date} {time}. Call {number} if you need to reschedule.",
+};
 
 function readJSONSafe(p, fallback) {
   try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return fallback; }
@@ -54,6 +62,9 @@ const profile = profilePath ? readJSONSafe(profilePath, DEFAULT_PROFILE) : DEFAU
 const inboundPromptPath = resolveFile("inbound-receptionist-prompt.md");
 const outboundPromptPath = resolveFile("outbound-setter-prompt.md");
 
+const messagesPath = resolveFile("messages.json");
+const messages = messagesPath ? { ...DEFAULT_MESSAGES, ...readJSONSafe(messagesPath, {}) } : DEFAULT_MESSAGES;
+
 // Instances may also override/extend agent definitions (Stage 2) —
 // exposing the resolved directory lets brain.js check
 // instances/<id>/agents/*.md without duplicating resolution logic here.
@@ -65,6 +76,7 @@ module.exports = {
   instanceAgentsDir,
   instance,
   profile,
+  messages,
   prompts: {
     inboundPath: inboundPromptPath,
     outboundPath: outboundPromptPath,

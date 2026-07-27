@@ -10,6 +10,7 @@ const { load, save, log, DB_PATH } = require("./store");
 const { runAgent } = require("./agents");
 const calendarApi = require("./calendar");
 const brainGraph = require("./brainGraph");
+const notify = require("./notify");
 
 // First boot (e.g. a fresh Railway deploy with no persistent volume yet):
 // seed so the owner login exists. Skipped whenever a database already
@@ -249,13 +250,17 @@ app.post("/webhooks/vapi", async (req, res) => {
           const out = await calendarApi.bookAppointment({ name, phone, service, startISO, durationMinutes: calendarApi.serviceDurationMinutes(service), direction });
           if (out.eventId) {
             db.appointments.unshift({
-              id: "A" + Date.now(), time: startISO, name, service, source: "AI line", status: "confirmed",
+              id: "A" + Date.now(), time: startISO, name, phone, service, source: "AI line", status: "confirmed",
               googleEventId: out.eventId, vapiCallId: m.call?.id,
             });
             const lead = upsertLead(db, { name, phone, service, source: "ai_line" });
             lead.status = "booked";
             save();
             log("call", `Booked ${service || "appointment"} for ${name} at ${startISO} via AI line`);
+            // Fire-and-forget: never make the caller wait on SMS/email delivery.
+            // notify.js already catches its own errors, this is just a safety net.
+            notify.notifyBookingConfirmed({ name, phone, email: lead.email, service, startISO })
+              .catch((e) => log("notify", `Booking confirmation error: ${e.message}`));
             results.push({ toolCallId: tc.id, result: `Booked — confirmed for ${startISO}.` });
           } else {
             results.push({ toolCallId: tc.id, result: "Sorry, I couldn't book that — the calendar isn't connected right now. A team member will confirm by phone." });
@@ -363,8 +368,26 @@ function bootSchedules() {
   console.log(`Scheduler: ${jobs.length} agent schedule(s) armed`);
 }
 
+// Daily appointment-reminder sweep — engine-level, not a brain/ agent (it
+// has no on/off toggle or Claude call, just a plain notify.js send), so it
+// runs on its own cron outside bootSchedules()'s per-agent loop. Runs at
+// 9am in the clinic's own timezone regardless of where the server is hosted.
+function bootReminderCron() {
+  cron.schedule(
+    "0 9 * * *",
+    async () => {
+      try {
+        const count = await notify.runDailyReminders();
+        if (count) log("notify", `Reminder sweep: sent ${count} appointment reminder(s)`);
+      } catch (e) { log("error", `Reminder cron failed: ${e.message}`); }
+    },
+    { timezone: calendarApi.tz() }
+  );
+}
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Clinic suite running → http://localhost:${PORT}`);
   bootSchedules();
+  bootReminderCron();
 });

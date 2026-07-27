@@ -1,0 +1,7 @@
+{
+  "_note": "Outbound SMS/email wording for this client. Placeholders: {clinic} {service} {date} {time} {number} {patient}. Delete this _note field or leave it — it's ignored at runtime.",
+  "bookingConfirmationSMS": "You're booked at {clinic} — {service}, {date} {time}. Reply here or call {number} to reschedule.",
+  "bookingConfirmationEmailSubject": "Your appointment at {clinic} is confirmed",
+  "bookingConfirmationEmailHTML": "<p>Hi {patient},</p><p>You're booked at <strong>{clinic}</strong> — {service}, {date} {time}.</p><p>Reply to this email or call {number} to reschedule.</p>",
+  "reminderSMS": "Reminder: you have an appointment at {clinic} tomorrow — {service}, {date} {time}. Call {number} if you need to reschedule."
+}
