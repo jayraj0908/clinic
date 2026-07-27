@@ -4,6 +4,7 @@ const express = require("express");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const { nanoid } = require("nanoid");
 const cron = require("node-cron");
 const { load, save, log, DB_PATH } = require("./store");
 const { runAgent } = require("./agents");
@@ -39,6 +40,43 @@ function auth(req, res, next) {
     next();
   } catch { res.status(401).json({ error: "Sign in required" }); }
 }
+
+function requireOwner(req, res, next) {
+  if (req.user?.role !== "owner") return res.status(403).json({ error: "Owner access required" });
+  next();
+}
+
+// ---------- user management (owner-only, except change-password) ----------
+app.post("/api/users/invite", auth, requireOwner, (req, res) => {
+  const { email, tempPassword, role } = req.body || {};
+  if (!email || !tempPassword) return res.status(400).json({ error: "email and tempPassword are required" });
+  const roleValue = role === "owner" ? "owner" : "staff";
+  const db = load();
+  if (db.users.find((u) => u.email === email)) return res.status(409).json({ error: "A user with that email already exists" });
+  const user = { id: "u" + nanoid(10), email, passHash: bcrypt.hashSync(tempPassword, 10), name: email.split("@")[0], role: roleValue };
+  db.users.push(user);
+  save();
+  log("system", `${req.user.id} invited ${email} as ${roleValue}`);
+  const { passHash, ...safeUser } = user;
+  res.json(safeUser);
+});
+
+app.get("/api/users", auth, requireOwner, (req, res) => {
+  res.json(load().users.map(({ passHash, ...u }) => u));
+});
+
+app.post("/api/auth/change-password", auth, (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: "New password must be at least 8 characters" });
+  const db = load();
+  const u = db.users.find((x) => x.id === req.user.id);
+  if (!u) return res.status(404).json({ error: "User not found" });
+  if (!bcrypt.compareSync(currentPassword || "", u.passHash)) return res.status(401).json({ error: "Current password is incorrect" });
+  u.passHash = bcrypt.hashSync(newPassword, 10);
+  save();
+  log("system", `${u.email} changed their password`);
+  res.json({ ok: true });
+});
 
 // ---------- dashboard aggregate ----------
 app.get("/api/dashboard", auth, (req, res) => {
@@ -111,7 +149,7 @@ app.post("/api/agents/:id/schedule", auth, (req, res) => {
 });
 
 // ---------- claims approval (human gate) ----------
-app.post("/api/claims/:id/approve", auth, (req, res) => {
+app.post("/api/claims/:id/approve", auth, requireOwner, (req, res) => {
   const db = load();
   const c = db.claims.find((x) => x.id === req.params.id);
   if (!c) return res.status(404).json({ error: "Claim not found" });
