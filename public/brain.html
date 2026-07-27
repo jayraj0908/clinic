@@ -153,6 +153,40 @@
   .bell-item .ba:hover{background:rgba(240,234,216,.14)}
   .bell-item .ba:disabled{opacity:.5;cursor:default}
   .bell-empty{padding:24px 16px;text-align:center;font:400 11px 'Inter';color:var(--dim)}
+
+  /* ---------- chat with the brain (right slide-in, same pattern as .sidebar) ---------- */
+  .chat-btn{position:fixed;top:22px;right:70px;z-index:41;width:34px;height:34px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.07);background:rgba(14,14,15,.85);color:var(--dim);cursor:pointer;
+    font-size:14px;display:flex;align-items:center;justify-content:center;transition:color .2s}
+  .chat-btn:hover{color:var(--ink)}
+  #chatDrawer{position:fixed;top:0;right:0;bottom:0;width:min(432px,94vw);z-index:61;
+    background:rgba(10,10,12,.94);border-left:1px solid var(--line);backdrop-filter:blur(22px);
+    transform:translateX(103%);transition:transform .6s cubic-bezier(.22,1,.36,1);
+    display:flex;flex-direction:column;overflow:hidden}
+  #chatDrawer.show{transform:translateX(0)}
+  .chat-head{display:flex;align-items:center;gap:14px;padding:26px 26px 18px;border-bottom:1px solid var(--line)}
+  .chat-title{font-family:'Cormorant Garamond',serif;font-size:23px;letter-spacing:.06em;color:var(--ink)}
+  .chat-close{margin-left:auto;color:#6f6f74;cursor:pointer;font-size:15px;padding:8px;transition:color .2s}
+  .chat-close:hover{color:var(--ink)}
+  .chat-body{flex:1;overflow-y:auto;padding:20px 26px;display:flex;flex-direction:column;gap:14px}
+  .chat-msg{max-width:88%;font:400 12.5px 'Inter';line-height:1.6;padding:10px 14px;border-radius:12px;white-space:pre-wrap}
+  .chat-msg.user{align-self:flex-end;background:rgba(240,234,216,.1);color:var(--ink)}
+  .chat-msg.assistant{align-self:flex-start;background:rgba(255,255,255,.03);border:1px solid var(--line);color:#d8d3c6}
+  .chat-shimmer{align-self:flex-start;display:flex;gap:4px;padding:12px 14px}
+  .chat-shimmer span{width:6px;height:6px;border-radius:50%;background:var(--dim);animation:chatpulse 1.2s infinite ease-in-out}
+  .chat-shimmer span:nth-child(2){animation-delay:.15s}
+  .chat-shimmer span:nth-child(3){animation-delay:.3s}
+  @keyframes chatpulse{0%,80%,100%{opacity:.25}40%{opacity:1}}
+  .chat-inputwrap{border-top:1px solid var(--line);padding:16px 20px;display:flex;gap:10px}
+  .chat-input{flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(240,234,216,.12);border-radius:10px;
+    color:var(--ink);font:400 12.5px 'Inter';padding:10px 12px;resize:none;max-height:100px}
+  .chat-input:focus{outline:none;border-color:rgba(240,234,216,.3)}
+  .chat-send{appearance:none;border:1px solid rgba(240,234,216,.2);background:rgba(240,234,216,.06);
+    color:var(--ink);border-radius:9px;padding:0 16px;font:600 9.5px 'Inter';letter-spacing:.14em;
+    text-transform:uppercase;cursor:pointer;transition:background .2s}
+  .chat-send:hover{background:rgba(240,234,216,.14)}
+  .chat-send:disabled{opacity:.5;cursor:default}
+  .chat-empty{padding:24px 0;text-align:center;font:400 11px 'Inter';color:var(--dim)}
 </style>
 </head>
 <body>
@@ -162,6 +196,7 @@
   <button data-v="dash">Dashboards</button>
   <button data-v="work">Workforce</button>
 </div>
+<button class="chat-btn" id="chatBtn" title="Chat with the brain">💬</button>
 <div class="bell-wrap" id="bellWrap">
   <button class="bell-btn" id="bellBtn" title="Needs attention">🔔<span class="bell-badge" id="bellBadge" style="display:none">0</span></button>
   <div class="bell-drop" id="bellDrop">
@@ -169,6 +204,19 @@
     <div id="bellList"></div>
   </div>
 </div>
+<aside id="chatDrawer">
+  <div class="chat-head">
+    <div class="chat-title">Ask the brain</div>
+    <div class="chat-close" id="chatClose">✕</div>
+  </div>
+  <div class="chat-body" id="chatBody">
+    <div class="chat-empty">Ask about leads, calls, appointments, or claims.</div>
+  </div>
+  <div class="chat-inputwrap">
+    <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask a question…"></textarea>
+    <button class="chat-send" id="chatSend">Send</button>
+  </div>
+</aside>
 <div class="switcher" id="switcher">
   <span class="arrow" id="prevD">&#8249;</span>
   <span class="arrow" id="nextD">&#8250;</span>
@@ -787,6 +835,50 @@ document.getElementById('bellBtn').onclick=()=>{document.getElementById('bellDro
 document.addEventListener('click',(e)=>{if(!document.getElementById('bellWrap').contains(e.target))document.getElementById('bellDrop').classList.remove('show')});
 refreshAttention();
 setInterval(refreshAttention,30000);
+
+/* ------------------------------ chat with the brain ------------------------------ */
+let chatHistory=[];
+function renderChat(){
+  const body=document.getElementById('chatBody');
+  if(!chatHistory.length){body.innerHTML='<div class="chat-empty">Ask about leads, calls, appointments, or claims.</div>';return}
+  body.innerHTML=chatHistory.map(m=>`<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join('');
+  body.scrollTop=body.scrollHeight;
+}
+function showChatShimmer(){
+  const body=document.getElementById('chatBody');
+  body.insertAdjacentHTML('beforeend','<div class="chat-shimmer" id="chatShimmer"><span></span><span></span><span></span></div>');
+  body.scrollTop=body.scrollHeight;
+}
+function hideChatShimmer(){const el=document.getElementById('chatShimmer');if(el)el.remove()}
+async function sendChat(){
+  const input=document.getElementById('chatInput');
+  const text=input.value.trim();
+  if(!text)return;
+  input.value='';input.style.height='auto';
+  chatHistory.push({role:'user',content:text});
+  renderChat();
+  document.getElementById('chatSend').disabled=true;
+  showChatShimmer();
+  try{
+    const data=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:chatHistory})});
+    hideChatShimmer();
+    chatHistory.push({role:'assistant',content:data.reply||data.error||'…'});
+    renderChat();
+  }catch(e){
+    hideChatShimmer();
+    chatHistory.push({role:'assistant',content:'Something went wrong reaching the brain — try again in a moment.'});
+    renderChat();
+  }finally{
+    document.getElementById('chatSend').disabled=false;
+  }
+}
+document.getElementById('chatBtn').onclick=()=>{document.getElementById('chatDrawer').classList.add('show');document.getElementById('chatInput').focus()};
+document.getElementById('chatClose').onclick=()=>{document.getElementById('chatDrawer').classList.remove('show')};
+document.getElementById('chatSend').onclick=sendChat;
+document.getElementById('chatInput').addEventListener('keydown',(e)=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}
+});
+document.getElementById('chatInput').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'});
 
 (function buildDash(){
   const f=DASH.funnel||{},ln=DASH.line||{};

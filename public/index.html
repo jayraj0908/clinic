@@ -189,6 +189,36 @@
   .bell-item .ba:hover{background:rgba(240,234,216,.14)}
   .bell-item .ba:disabled{opacity:.5;cursor:default}
   .bell-empty{padding:24px 16px;text-align:center;font:400 11px 'Inter';color:#77777c}
+
+  /* ---------- chat drawer (right slide-in, same pattern as brain.html's sidebar) ---------- */
+  #chatDrawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,94vw);z-index:60;
+    background:rgba(10,10,12,.94);border-left:1px solid rgba(240,234,216,.09);backdrop-filter:blur(22px);
+    transform:translateX(103%);transition:transform .6s cubic-bezier(.22,1,.36,1);
+    display:flex;flex-direction:column;overflow:hidden}
+  #chatDrawer.show{transform:translateX(0)}
+  .chat-head{display:flex;align-items:center;gap:12px;padding:22px 24px 16px;border-bottom:1px solid rgba(240,234,216,.09)}
+  .chat-title{font-family:'Cormorant Garamond',serif;font-size:20px;color:#f0ead8;letter-spacing:.04em}
+  .chat-close{margin-left:auto;color:#77777c;cursor:pointer;font-size:15px;padding:6px;transition:color .2s}
+  .chat-close:hover{color:#f0ead8}
+  .chat-body{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px}
+  .chat-msg{max-width:88%;font:400 12.5px 'Inter';line-height:1.6;padding:10px 14px;border-radius:12px;white-space:pre-wrap}
+  .chat-msg.user{align-self:flex-end;background:rgba(240,234,216,.1);color:#f0ead8}
+  .chat-msg.assistant{align-self:flex-start;background:rgba(255,255,255,.03);border:1px solid rgba(240,234,216,.09);color:#d8d3c6}
+  .chat-shimmer{align-self:flex-start;display:flex;gap:4px;padding:12px 14px}
+  .chat-shimmer span{width:6px;height:6px;border-radius:50%;background:#77777c;animation:chatpulse 1.2s infinite ease-in-out}
+  .chat-shimmer span:nth-child(2){animation-delay:.15s}
+  .chat-shimmer span:nth-child(3){animation-delay:.3s}
+  @keyframes chatpulse{0%,80%,100%{opacity:.25}40%{opacity:1}}
+  .chat-inputwrap{border-top:1px solid rgba(240,234,216,.09);padding:16px 20px;display:flex;gap:10px}
+  .chat-input{flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(240,234,216,.12);border-radius:10px;
+    color:#f0ead8;font:400 12.5px 'Inter';padding:10px 12px;resize:none;max-height:100px}
+  .chat-input:focus{outline:none;border-color:rgba(240,234,216,.3)}
+  .chat-send{appearance:none;border:1px solid rgba(240,234,216,.2);background:rgba(240,234,216,.06);
+    color:#f0ead8;border-radius:9px;padding:0 16px;font:600 9.5px 'Inter';letter-spacing:.14em;
+    text-transform:uppercase;cursor:pointer;transition:background .2s}
+  .chat-send:hover{background:rgba(240,234,216,.14)}
+  .chat-send:disabled{opacity:.5;cursor:default}
+  .chat-empty{padding:24px 0;text-align:center;font:400 11px 'Inter';color:#77777c}
 </style>
 </head>
 <body>
@@ -216,6 +246,7 @@
     <button data-v="work">Chart</button>
   </div>
   <div class="tb-right">
+    <button class="bell-btn" id="chatBtn" title="Chat with the brain">💬</button>
     <div class="bell-wrap" id="bellWrap">
       <button class="bell-btn" id="bellBtn" title="Needs attention">🔔<span class="bell-badge" id="bellBadge" style="display:none">0</span></button>
       <div class="bell-drop" id="bellDrop">
@@ -259,6 +290,20 @@
 <aside id="sidebar">
   <div class="sb-close" id="sbClose">✕</div>
   <div class="sb-body" id="sbBody"></div>
+</aside>
+
+<aside id="chatDrawer">
+  <div class="chat-head">
+    <div class="chat-title">Ask the brain</div>
+    <div class="chat-close" id="chatClose">✕</div>
+  </div>
+  <div class="chat-body" id="chatBody">
+    <div class="chat-empty">Ask about leads, calls, appointments, or claims.</div>
+  </div>
+  <div class="chat-inputwrap">
+    <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask a question…"></textarea>
+    <button class="chat-send" id="chatSend">Send</button>
+  </div>
 </aside>
 
 <div class="fader" id="fader"></div>
@@ -1094,6 +1139,50 @@ async function boot(){
   document.addEventListener('click',(e)=>{if(!$("bellWrap").contains(e.target))$("bellDrop").classList.remove('show')});
   refreshAttention();
   setInterval(refreshAttention,30000);
+
+  /* ------------------------------ chat with the brain ------------------------------ */
+  let chatHistory=[];
+  function renderChat(){
+    const body=$("chatBody");
+    if(!chatHistory.length){body.innerHTML='<div class="chat-empty">Ask about leads, calls, appointments, or claims.</div>';return}
+    body.innerHTML=chatHistory.map(m=>`<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join('');
+    body.scrollTop=body.scrollHeight;
+  }
+  function showChatShimmer(){
+    const body=$("chatBody");
+    body.insertAdjacentHTML('beforeend','<div class="chat-shimmer" id="chatShimmer"><span></span><span></span><span></span></div>');
+    body.scrollTop=body.scrollHeight;
+  }
+  function hideChatShimmer(){const el=$("chatShimmer");if(el)el.remove()}
+  async function sendChat(){
+    const input=$("chatInput");
+    const text=input.value.trim();
+    if(!text)return;
+    input.value='';input.style.height='auto';
+    chatHistory.push({role:'user',content:text});
+    renderChat();
+    $("chatSend").disabled=true;
+    showChatShimmer();
+    try{
+      const data=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:chatHistory})});
+      hideChatShimmer();
+      chatHistory.push({role:'assistant',content:data.reply||data.error||'…'});
+      renderChat();
+    }catch(e){
+      hideChatShimmer();
+      chatHistory.push({role:'assistant',content:'Something went wrong reaching the brain — try again in a moment.'});
+      renderChat();
+    }finally{
+      $("chatSend").disabled=false;
+    }
+  }
+  $("chatBtn").onclick=()=>{$("chatDrawer").classList.add('show');$("chatInput").focus()};
+  $("chatClose").onclick=()=>{$("chatDrawer").classList.remove('show')};
+  $("chatSend").onclick=sendChat;
+  $("chatInput").addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}
+  });
+  $("chatInput").addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'});
 
   /* ------------------------------ ticker ------------------------------------ */
   let t=0,lastSkillA=-1;

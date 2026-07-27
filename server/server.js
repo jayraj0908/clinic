@@ -11,6 +11,7 @@ const { runAgent } = require("./agents");
 const calendarApi = require("./calendar");
 const brainGraph = require("./brainGraph");
 const notify = require("./notify");
+const chat = require("./chat");
 
 // First boot (e.g. a fresh Railway deploy with no persistent volume yet):
 // seed so the owner login exists. Skipped whenever a database already
@@ -241,6 +242,32 @@ app.post("/api/appointments/:id/confirm", auth, (req, res) => {
   save();
   log("system", `Appointment ${appt.id} confirmed by ${req.user.id}`);
   res.json(appt);
+});
+
+// ---------- chat with the brain (read-only) ----------
+// Simple in-memory sliding-window limiter — 20 requests/min per user.
+// Fine for a single-process deployment; would need a shared store behind
+// a load balancer, which this app isn't run behind.
+const chatRateLog = new Map();
+function chatRateLimited(userId) {
+  const now = Date.now();
+  const windowStart = now - 60 * 1000;
+  const hits = (chatRateLog.get(userId) || []).filter((t) => t > windowStart);
+  hits.push(now);
+  chatRateLog.set(userId, hits);
+  return hits.length > 20;
+}
+
+app.post("/api/chat", auth, async (req, res) => {
+  if (chatRateLimited(req.user.id)) return res.status(429).json({ error: "Too many chat requests — wait a moment and try again." });
+  const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+  if (!messages.length) return res.status(400).json({ error: "messages is required" });
+  try {
+    const reply = await chat.runChat(messages);
+    res.json({ reply });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------
