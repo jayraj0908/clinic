@@ -159,6 +159,90 @@ app.post("/api/claims/:id/approve", auth, requireOwner, (req, res) => {
   res.json(c);
 });
 
+// ---------- attention inbox ----------
+// Computed entirely from data already in the store — no new infra. Each
+// item's action either maps to a real one-click route (method POST) or is
+// a navigate-only hint for the frontend (method GET — "go look at this",
+// not an API call).
+function hasFollowUpCall(db, missedCall) {
+  return db.calls.some((c) => c.who === missedCall.who && new Date(c.ts) > new Date(missedCall.ts));
+}
+
+app.get("/api/attention", auth, (req, res) => {
+  const db = load();
+  const items = [];
+  const TWO_HOURS = 2 * 60 * 60 * 1000;
+
+  db.leads
+    .filter((l) => l.status === "new" && Date.now() - new Date(l.createdAt).getTime() > TWO_HOURS)
+    .forEach((l) => {
+      items.push({
+        type: "new_lead", severity: "high",
+        title: `${l.name} hasn't been called back`,
+        detail: `New lead from ${l.source || "unknown source"}${l.service ? " — " + l.service : ""}, waiting since ${l.createdAt}.`,
+        action: { label: "Call back", method: "POST", path: `/api/leads/${l.id}/queue-call` },
+      });
+    });
+
+  db.appointments
+    .filter((a) => a.status === "unconfirmed")
+    .forEach((a) => {
+      items.push({
+        type: "unconfirmed_appointment", severity: "medium",
+        title: `${a.name || "Appointment"} needs confirming`,
+        detail: `${a.service || "Visit"} at ${a.time}, booked via ${a.source || "unknown"} — not yet confirmed.`,
+        action: { label: "Confirm", method: "POST", path: `/api/appointments/${a.id}/confirm` },
+      });
+    });
+
+  db.claims
+    .filter((c) => c.status === "awaiting_approval")
+    .forEach((c) => {
+      const amount = c.amount != null ? `$${c.amount}` : "amount pending";
+      items.push({
+        type: "claim_awaiting_approval", severity: "high",
+        title: `Claim ${c.id} awaiting approval`,
+        detail: `${(c.codes || []).map((x) => x.code || x).join(", ") || "Codes pending"} — ${amount}.`,
+        action: { label: "Review", method: "GET", path: "dash" },
+      });
+    });
+
+  db.calls
+    .filter((c) => c.outcome === "missed" && !hasFollowUpCall(db, c))
+    .forEach((c) => {
+      const lead = db.leads.find((l) => l.name === c.who || l.phone === c.who);
+      items.push({
+        type: "missed_call", severity: "medium",
+        title: `Missed call from ${c.who}`,
+        detail: `${c.summary || "No summary"} — no follow-up call since.`,
+        action: lead ? { label: "Have agent call back", method: "POST", path: `/api/leads/${lead.id}/queue-call` } : null,
+      });
+    });
+
+  res.json({ items, count: items.length });
+});
+
+app.post("/api/leads/:id/queue-call", auth, (req, res) => {
+  const db = load();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  if (lead.status === "new") lead.status = "qualified";
+  lead.priorityCall = true;
+  save();
+  log("system", `${lead.name} queued for a priority callback by ${req.user.id}`);
+  res.json(lead);
+});
+
+app.post("/api/appointments/:id/confirm", auth, (req, res) => {
+  const db = load();
+  const appt = db.appointments.find((a) => a.id === req.params.id);
+  if (!appt) return res.status(404).json({ error: "Appointment not found" });
+  appt.status = "confirmed";
+  save();
+  log("system", `Appointment ${appt.id} confirmed by ${req.user.id}`);
+  res.json(appt);
+});
+
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------
 
 function formatAvailability(out, dateISO) {

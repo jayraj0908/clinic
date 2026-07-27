@@ -81,7 +81,11 @@ const agents = {
   // 2 ─ Appointment setter: launches outbound calls through Vapi.
   async setter() {
     const db = load();
-    const queue = db.leads.filter((l) => l.status === "qualified");
+    // priorityCall (set by POST /api/leads/:id/queue-call, the attention
+    // inbox's "call back" action) jumps a lead to the front of the queue.
+    const queue = db.leads
+      .filter((l) => l.status === "qualified")
+      .sort((a, b) => (b.priorityCall ? 1 : 0) - (a.priorityCall ? 1 : 0));
     if (!queue.length) { log("agent", "Appointment Setter: queue empty"); return "queue empty"; }
 
     if (!hasKey("VAPI_API_KEY")) {
@@ -100,7 +104,7 @@ const agents = {
           metadata: { leadId: lead.id, service: lead.service },
         }),
       });
-      if (res.ok) { lead.status = "call_scheduled"; placed++; }
+      if (res.ok) { lead.status = "call_scheduled"; lead.priorityCall = false; placed++; }
     }
     save();
     log("agent", `Appointment Setter: placed ${placed} call(s)`);

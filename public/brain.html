@@ -127,6 +127,32 @@
   @keyframes lfade{from{color:#f5efd8}to{color:#8a856f}}
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:rgba(240,234,216,.14);border-radius:2px}
   ::-webkit-scrollbar-track{background:transparent}
+
+  /* ---------- notification bell ---------- */
+  .bell-wrap{position:fixed;top:22px;right:28px;z-index:41}
+  .bell-btn{position:relative;width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,255,255,.07);
+    background:rgba(14,14,15,.85);color:#77777c;cursor:pointer;font-size:14px;display:flex;
+    align-items:center;justify-content:center;transition:color .2s}
+  .bell-btn:hover{color:var(--ink)}
+  .bell-badge{position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;
+    background:#e0673f;color:#0b0c0a;font:700 9px 'Inter';display:flex;align-items:center;justify-content:center;line-height:1}
+  .bell-drop{position:absolute;top:44px;right:0;width:340px;max-height:420px;overflow-y:auto;
+    background:var(--glass);border:1px solid var(--line);border-radius:14px;
+    opacity:0;pointer-events:none;transform:translateY(-8px);
+    transition:opacity .22s cubic-bezier(.22,1,.36,1), transform .22s cubic-bezier(.22,1,.36,1);z-index:50}
+  .bell-drop.show{opacity:1;pointer-events:auto;transform:translateY(0)}
+  .bell-drop-head{font:600 9px 'Inter';letter-spacing:.2em;text-transform:uppercase;color:var(--dim);
+    padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+  .bell-item{padding:12px 16px;border-bottom:1px solid rgba(240,234,216,.05);display:flex;flex-direction:column;gap:6px}
+  .bell-item:last-child{border-bottom:0}
+  .bell-item .bt{font-family:'Cormorant Garamond',serif;font-size:15px;color:var(--ink);letter-spacing:.02em}
+  .bell-item .bd{font:400 11px 'Inter';color:#9c9691;line-height:1.4}
+  .bell-item .ba{align-self:flex-start;margin-top:2px;appearance:none;border:1px solid rgba(240,234,216,.2);
+    background:rgba(240,234,216,.06);color:var(--ink);border-radius:8px;padding:6px 12px;
+    font:600 9px 'Inter';letter-spacing:.14em;text-transform:uppercase;cursor:pointer;transition:background .2s}
+  .bell-item .ba:hover{background:rgba(240,234,216,.14)}
+  .bell-item .ba:disabled{opacity:.5;cursor:default}
+  .bell-empty{padding:24px 16px;text-align:center;font:400 11px 'Inter';color:var(--dim)}
 </style>
 </head>
 <body>
@@ -135,6 +161,13 @@
   <button class="active" data-v="map">Map</button>
   <button data-v="dash">Dashboards</button>
   <button data-v="work">Workforce</button>
+</div>
+<div class="bell-wrap" id="bellWrap">
+  <button class="bell-btn" id="bellBtn" title="Needs attention">🔔<span class="bell-badge" id="bellBadge" style="display:none">0</span></button>
+  <div class="bell-drop" id="bellDrop">
+    <div class="bell-drop-head">Needs attention</div>
+    <div id="bellList"></div>
+  </div>
 </div>
 <div class="switcher" id="switcher">
   <span class="arrow" id="prevD">&#8249;</span>
@@ -716,6 +749,45 @@ document.querySelectorAll('.nav button').forEach(b=>{b.onclick=()=>{
   if(b.dataset.v==='map'&&view==='map'){exitFocus();return}
   setView(b.dataset.v);
 }});
+
+/* ------------------------------ attention bell ------------------------------ */
+function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML}
+let attentionItems=[];
+function renderBellList(){
+  const list=document.getElementById('bellList');
+  if(!attentionItems.length){list.innerHTML='<div class="bell-empty">All clear — nothing needs attention.</div>';return}
+  list.innerHTML=attentionItems.map((item,i)=>`
+    <div class="bell-item">
+      <div class="bt">${esc(item.title)}</div>
+      <div class="bd">${esc(item.detail)}</div>
+      ${item.action?`<button class="ba" data-i="${i}">${esc(item.action.label)}</button>`:''}
+    </div>`).join('');
+  list.querySelectorAll('.ba').forEach(btn=>{
+    btn.onclick=async()=>{
+      const item=attentionItems[+btn.dataset.i];
+      if(!item.action)return;
+      if(item.action.method==='GET'){document.getElementById('bellDrop').classList.remove('show');setView(item.action.path);return}
+      btn.disabled=true;btn.textContent='…';
+      try{await api(item.action.path,{method:item.action.method});await refreshAttention()}
+      catch(e){btn.disabled=false;btn.textContent=item.action.label}
+    };
+  });
+}
+async function refreshAttention(){
+  try{
+    const data=await api('/api/attention');
+    attentionItems=data.items||[];
+    const badge=document.getElementById('bellBadge');
+    if(data.count>0){badge.style.display='flex';badge.textContent=data.count>9?'9+':String(data.count)}
+    else badge.style.display='none';
+    renderBellList();
+  }catch(e){}
+}
+document.getElementById('bellBtn').onclick=()=>{document.getElementById('bellDrop').classList.toggle('show')};
+document.addEventListener('click',(e)=>{if(!document.getElementById('bellWrap').contains(e.target))document.getElementById('bellDrop').classList.remove('show')});
+refreshAttention();
+setInterval(refreshAttention,30000);
+
 (function buildDash(){
   const f=DASH.funnel||{},ln=DASH.line||{};
   const kpis=[
