@@ -2,8 +2,41 @@
 // "Run now") invokes. With real API keys in .env these hit live services;
 // without them, they no-op safely and log what they *would* do.
 const { load, save, log } = require("./store");
+const { AGENTS } = require("./brain");
+const { profile } = require("./instance");
 
 const hasKey = (k) => !!process.env[k];
+
+// Renders the instance's clinic-profile facts as plain-text knowledge to
+// append after an agent's brain-file body — the same profile that seeds
+// db.settings.receptionist, so agents and the dashboard never disagree.
+function instanceKnowledgeBlock() {
+  const lines = [];
+  if (profile.hours?.length) {
+    lines.push("Hours: " + profile.hours.map((h) => `${h.days} ${h.open ? `${h.open}–${h.close}` : "closed"}`).join(", "));
+  }
+  if (profile.services?.length) {
+    lines.push("Services: " + profile.services.map((s) => `${s.name} (${s.price}, ${s.duration})`).join("; "));
+  }
+  if (profile.insuranceAccepted?.length) lines.push("Insurance accepted: " + profile.insuranceAccepted.join(", "));
+  if (profile.selfPay) lines.push("Self-pay: " + profile.selfPay);
+  if (profile.policies?.length) lines.push("Policies: " + profile.policies.join(" "));
+  return lines.join("\n");
+}
+
+// An agent's Claude system prompt = its brain/agents/<id>.md body (or the
+// instance override of the same name) + the instance's clinic knowledge.
+// Falls back to a minimal generic prompt if the brain file is missing, so
+// a misconfigured instance degrades instead of crashing.
+function systemPromptFor(agentId, extra) {
+  const a = AGENTS[agentId];
+  const base = a ? a.body : `You are the ${agentId} agent for this clinic.`;
+  const knowledge = instanceKnowledgeBlock();
+  return [base, knowledge ? `## Clinic knowledge\n${knowledge}` : "", extra || ""]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
 
 // Claude API helper (used by audit + billing agents)
 async function claude(prompt, system) {
@@ -82,7 +115,7 @@ const agents = {
     for (const v of pending) {
       const out = await claude(
         `Structure these provider notes into SOAP JSON. Reorganize only — never add clinical content not present in the source.\n\n${v.rawNotes || ""}`,
-        "You are a clinical documentation assistant. Output strict JSON: {subjective, objective, assessment, plan, procedures_documented[], diagnoses_documented[], missing[]}."
+        systemPromptFor("audit", "Output strict JSON: {subjective, objective, assessment, plan, procedures_documented[], diagnoses_documented[], missing[]}.")
       );
       if (out) { v.soap = out; v.auditComplete = true; }
     }
@@ -97,7 +130,8 @@ const agents = {
     const ready = db.visits.filter((v) => v.billingReady && !db.claims.find((c) => c.visitId === v.id));
     for (const v of ready) {
       const out = await claude(
-        `From this audited visit note, suggest CPT/CDT + ICD-10 codes with one-line justification each, citing the supporting line. JSON: {codes:[{code, justification}]}. Code only what documentation supports.\n\n${JSON.stringify(v.soap || {})}`
+        `From this audited visit note, suggest CPT/CDT + ICD-10 codes with one-line justification each, citing the supporting line. JSON: {codes:[{code, justification}]}. Code only what documentation supports.\n\n${JSON.stringify(v.soap || {})}`,
+        systemPromptFor("billing")
       );
       db.claims.push({ id: "CL" + Date.now(), visitId: v.id, codes: out ? JSON.parse(out.replace(/```json|```/g, "")).codes : [], status: "awaiting_approval", amount: null, ts: new Date().toISOString() });
     }
@@ -118,4 +152,4 @@ async function runAgent(id) {
   return result;
 }
 
-module.exports = { runAgent };
+module.exports = { runAgent, systemPromptFor };

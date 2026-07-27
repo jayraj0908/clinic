@@ -1,28 +1,27 @@
 // Builds the "agent brain" graph (nodes/edges) and per-agent inspector detail
-// from real data — no fake/padded entities. Five hubs map onto the real
-// pipeline: Leads (intake agent), Receptionist (inbound Vapi line, not a
-// cron agent — always-on), Calling (setter agent), Audit Notes (audit
-// agent), Billing (billing agent).
+// from real data — no fake/padded entities. Hubs come from brain/agents/*.md
+// (Stage 2 of the engine/instance refactor) instead of a hardcoded array, so
+// a new agent file is all it takes for a new node to appear on the map.
 const { load } = require("./store");
+const { AGENTS } = require("./brain");
 
-const HUBS = [
-  { id: "leads", name: "Leads Agent", color: "#d4af37", glyph: "◈", tagline: "capture · qualify · route",
-    workflows: ["Capture Meta Ads leads", "Capture Google Ads leads", "Qualify & route to Receptionist"],
-    tools: ["meta", "gads"] },
-  { id: "receptionist", name: "AI Receptionist", color: "#3a8c8c", glyph: "☎", tagline: "answer · book · confirm",
-    workflows: ["Answer inbound calls", "Check calendar availability", "Book appointment", "Save contact to leads"],
-    tools: ["vapi", "gcal", "anthropic"] },
-  { id: "calling", name: "Calling Agent", color: "#a05a2c", glyph: "↪", tagline: "call · follow up · book",
-    workflows: ["Call qualified leads", "Check calendar availability", "Book appointment"],
-    tools: ["vapi", "gcal", "anthropic"], agentId: "setter" },
-  { id: "audit", name: "Audit Notes Agent", color: "#6a5acd", glyph: "☷", tagline: "structure · SOAP · billing-ready",
-    workflows: ["Structure visit notes into SOAP"],
-    tools: ["anthropic"], agentId: "audit" },
-  { id: "billing", name: "Billing Agent", color: "#b23333", glyph: "⧉", tagline: "code · claim · collect",
-    workflows: ["Draft CPT/ICD claim codes", "Hold for owner approval"],
-    tools: ["anthropic", "claimmd"], agentId: "billing" },
-];
-HUBS[0].agentId = "intake";
+function buildHubs() {
+  return Object.values(AGENTS)
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .map((a) => ({
+      id: a.id,
+      name: a.displayName,
+      color: a.color,
+      glyph: a.glyph,
+      tagline: a.tagline,
+      workflows: a.workflows,
+      tools: a.tools,
+      agentId: a.runner, // db.agents id this hub's status/stats are read from (null = event-driven, no cron entry)
+      handoff: a.handoff, // explicit frontmatter handoff targets, if any
+    }));
+}
+
+const HUBS = buildHubs();
 
 function isToday(ts) {
   return new Date(ts).toDateString() === new Date().toDateString();
@@ -148,9 +147,20 @@ function buildGraph(db) {
     links.push({ source: owner, target: pid, kind: "orbit" });
   });
 
-  // hand-off chain
-  for (let i = 0; i < HUBS.length - 1; i++) {
-    links.push({ source: HUBS[i].id, target: HUBS[i + 1].id, kind: "handoff" });
+  // hand-off chain: explicit handoff: frontmatter wins per-hub; if no hub
+  // declares one at all, fall back to the original implicit linear chain
+  // (in declared order) so existing deployments render unchanged.
+  const anyExplicitHandoff = HUBS.some((h) => h.handoff && h.handoff.length);
+  if (anyExplicitHandoff) {
+    HUBS.forEach((hub) => {
+      (hub.handoff || []).forEach((targetId) => {
+        if (HUBS.find((h) => h.id === targetId)) links.push({ source: hub.id, target: targetId, kind: "handoff" });
+      });
+    });
+  } else {
+    for (let i = 0; i < HUBS.length - 1; i++) {
+      links.push({ source: HUBS[i].id, target: HUBS[i + 1].id, kind: "handoff" });
+    }
   }
 
   return {

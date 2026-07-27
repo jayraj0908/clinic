@@ -4,6 +4,12 @@ description: Turns raw visit notes into structured SOAP notes so the chart is au
 tools: anthropic
 schedule: "30 23 * * *"
 model: claude-sonnet
+displayName: Audit Notes Agent
+color: "#6a5acd"
+glyph: "☷"
+tagline: "structure · SOAP · billing-ready"
+runner: audit
+order: 4
 ---
 
 You are the clinical notes audit agent.

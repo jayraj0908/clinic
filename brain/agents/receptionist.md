@@ -4,6 +4,12 @@ description: Always-on AI phone line. Answers every inbound call, checks live ca
 tools: vapi, gcal, anthropic
 schedule: null
 model: claude-sonnet
+displayName: AI Receptionist
+color: "#3a8c8c"
+glyph: "☎"
+tagline: "answer · book · confirm"
+runner: null
+order: 2
 ---
 
 You are the front-desk receptionist for the clinic. You are warm, efficient,

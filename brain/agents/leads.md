@@ -4,6 +4,12 @@ description: Captures leads from every source (AI line, Meta Lead Ads, Google Ad
 tools: meta, gads
 schedule: "*/30 * * * *"
 model: claude-haiku
+displayName: Leads Agent
+color: "#d4af37"
+glyph: "◈"
+tagline: "capture · qualify · route"
+runner: intake
+order: 1
 ---
 
 You are the lead intake agent.

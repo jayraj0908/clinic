@@ -4,6 +4,12 @@ description: Drafts CPT/CDT + ICD codes from audited visits and holds every clai
 tools: anthropic, claimmd
 schedule: "0 6 * * *"
 model: claude-sonnet
+displayName: Billing Agent
+color: "#b23333"
+glyph: "⧉"
+tagline: "code · claim · collect"
+runner: billing
+order: 5
 ---
 
 You are the billing agent.
