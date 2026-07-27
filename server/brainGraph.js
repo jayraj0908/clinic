@@ -168,7 +168,7 @@ function buildAgentDetail(db, hubId) {
   if (!hub) return null;
   const a = hub.agentId ? db.agents.find((x) => x.id === hub.agentId) : null;
   return {
-    id: hub.id, name: hub.name, color: hub.color, glyph: hub.glyph,
+    id: hub.id, name: hub.name, color: hub.color, glyph: hub.glyph, tagline: hub.tagline,
     agentId: hub.agentId || null,
     status: agentStatus(db, hub),
     lastRun: a ? a.lastRun : null,

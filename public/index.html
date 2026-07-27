@@ -1,413 +1,1127 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Sailz — Shine Dental Clinic</title>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/force-graph@1/dist/force-graph.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#FAFAF8; --surface:#FFFFFF; --surface-2:#F4F4F2; --border:#E7E6E3;
-    --ink:#17171A; --ink-2:#52514E; --muted:#8A8A86;
-    --black:#111111; --good:#17A34A; --warning:#D9A441; --critical:#E5484D;
-  }
-  *{box-sizing:border-box;margin:0}
-  html,body{height:100%}
-  body{background:var(--bg);color:var(--ink);font-family:Archivo,sans-serif;overflow:hidden}
-  .mono{font-family:'IBM Plex Mono',monospace}
+  :root{--bg:#0a0a0d;--ink:#e8e6e0;--dim:#6b6b72;--accent:#c9a066;--panel:#111114;--line:rgba(232,230,224,.08);--glass:rgba(13,13,15,.9)}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);font-family:'Inter',sans-serif;
+    -webkit-user-select:none;user-select:none}
+  canvas{display:block;position:absolute;inset:0}
   .hidden{display:none!important}
-  button{font-family:'IBM Plex Mono',monospace;cursor:pointer;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--ink);font-size:11px;font-weight:600;padding:7px 14px}
-  button:hover{background:var(--surface-2)}
-  button.primary{background:var(--black);border-color:var(--black);color:#fff}
-  button:focus-visible{outline:2px solid var(--black);outline-offset:2px}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:2;
+    background:radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0,0,0,.5) 100%)}
+  button{font-family:inherit}
 
-  /* login */
-  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-  #login .card{width:100%;max-width:380px;padding:32px;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-  input{width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:6px;background:var(--surface-2);color:var(--ink)}
-  label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
-  .field{margin-bottom:16px}
+  /* ---------- top chrome ---------- */
+  #topbar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;pointer-events:none}
+  #topbar>*{pointer-events:auto}
+  #crumbBack{display:none;position:absolute;left:20px;top:16px;z-index:41;align-items:center;gap:6px;padding:8px 14px;
+    border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);
+    font:600 10px 'Inter';letter-spacing:.16em;text-transform:uppercase;cursor:pointer}
+  #crumbBack.show{display:flex}
+  .tabs{position:absolute;left:50%;top:16px;transform:translateX(-50%);display:flex;gap:4px}
+  .tabs button{appearance:none;border:0;background:transparent;color:var(--dim);cursor:pointer;
+    font:600 10px 'Inter';letter-spacing:.2em;text-transform:uppercase;padding:8px 16px;border-radius:999px;
+    transition:color .15s,background .15s}
+  .tabs button.active{background:var(--ink);color:#111}
+  .tabs button:not(.active):hover{color:var(--ink)}
+  .tb-right{display:flex;align-items:center;gap:10px}
+  #navInfo{display:none;text-align:right;font:500 9px 'Inter';letter-spacing:.18em;color:var(--dim);text-transform:uppercase;
+    line-height:1.6}
+  #navInfo.show{display:block}
+  #navInfo .big{color:var(--ink);font-weight:700}
 
-  /* app shell */
-  #topbar{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:18px 24px;pointer-events:none}
-  #topbar > *{pointer-events:auto}
-  #topbar .brand{font-weight:800;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
-  #topbar .brand .mark{width:28px;height:28px;border-radius:50%;background:linear-gradient(160deg,#1E3A8A,#0EA5E9);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
-  #topbar .brand .powered{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);font-weight:500;letter-spacing:.04em}
-  #topbar .right{display:flex;gap:10px;align-items:center}
-  #topbar a.ghost-link{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);text-decoration:none}
-  #topbar a.ghost-link:hover{color:var(--ink)}
-  #topbar .stats{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted)}
+  /* ---------- bottom chrome ---------- */
+  #bottombar{position:fixed;bottom:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:center;
+    padding:18px 20px;pointer-events:none}
+  #bottombar>*{pointer-events:auto}
+  .carets{display:flex;align-items:center;gap:22px}
+  .caret{color:var(--dim);cursor:pointer;font-size:22px;line-height:1;padding:6px 10px;transition:color .15s,transform .15s}
+  .caret:hover{color:var(--ink);transform:scale(1.15)}
 
-  #graph{position:absolute;inset:0}
-  #tooltip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.12);opacity:0;transition:opacity .15s ease;z-index:20;white-space:nowrap}
+  /* ---------- side dept labels (focused state) ---------- */
+  .side-label{position:fixed;top:50%;z-index:15;transform:translateY(-50%);writing-mode:vertical-rl;
+    font:600 10px 'Inter';letter-spacing:.28em;color:var(--dim);text-transform:uppercase;cursor:pointer;
+    opacity:0;pointer-events:none;transition:opacity .2s,color .15s}
+  .side-label.show{opacity:1;pointer-events:auto}
+  .side-label:hover{color:var(--ink)}
+  #sideLeft{left:16px}
+  #sideRight{right:16px}
 
-  /* inspector panel */
-  #inspector{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--surface);border-left:1px solid var(--border);box-shadow:-20px 0 60px rgba(0,0,0,.08);transform:translateX(100%);transition:transform .2s cubic-bezier(.25,.8,.25,1);z-index:15;overflow-y:auto}
-  #inspector.open{transform:translateX(0)}
-  #inspector .head{padding:24px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:flex-start}
-  #inspector .avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;flex-shrink:0}
-  #inspector h2{font-size:18px;font-weight:800}
-  #inspector .status-row{display:flex;align-items:center;gap:6px;margin-top:4px}
-  #inspector .status-dot{width:7px;height:7px;border-radius:50%}
-  #inspector .status-label{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-  #inspector .close{margin-left:auto;background:none;border:none;color:var(--muted);font-size:20px;padding:2px 6px;line-height:1}
-  #inspector .section{padding:20px 24px;border-bottom:1px solid var(--border)}
-  #inspector .section:last-child{border-bottom:none}
-  #inspector .micro{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
-  #inspector .stat-row{display:flex;justify-content:space-between;font-size:13px;padding:6px 0}
-  #inspector .stat-row .v{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--good)}
-  #inspector .chip-row{display:flex;flex-wrap:wrap;gap:6px}
-  #inspector .chip{font-family:'IBM Plex Mono',monospace;font-size:10.5px;padding:4px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--ink-2)}
-  #inspector .chip.connected{color:var(--good);border-color:color-mix(in srgb, var(--good) 40%, transparent)}
-  #inspector .wf-list{display:flex;flex-direction:column;gap:8px}
-  #inspector .wf-row{font-size:13px;display:flex;align-items:center;gap:8px}
-  #inspector .wf-dot{width:7px;height:7px;border-radius:50%;background:var(--warning);flex-shrink:0}
-  #inspector .activity-row{padding:10px 0;border-top:1px solid var(--border)}
-  #inspector .activity-row:first-child{border-top:none}
-  #inspector .activity-row .summary{font-size:13px;line-height:1.4}
-  #inspector .activity-row .meta{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
-  #inspector .activity-row .ts{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--muted)}
-  #inspector .activity-row .status-pill{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
-  #inspector .approve-btn{margin-top:6px}
-  #inspector .empty{font-size:12.5px;color:var(--muted)}
+  .brand{position:fixed;left:20px;bottom:56px;z-index:10;pointer-events:none;transition:opacity .2s}
+  .brand .t{font-family:'Cormorant Garamond',serif;font-size:16px;letter-spacing:.24em;color:#cfc7ad;text-transform:uppercase}
+  .brand .s{font:500 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-top:4px}
+  .tip{position:fixed;z-index:45;pointer-events:none;background:var(--glass);
+    border:1px solid rgba(232,230,224,.14);border-radius:8px;padding:7px 11px;opacity:0;
+    transition:opacity .12s;transform:translate(-50%,-140%)}
+  .tip .n{font:600 11px 'Inter';letter-spacing:.06em;color:var(--ink)}
+  .tip .d{font:500 8.5px 'Inter';letter-spacing:.18em;color:var(--dim);text-transform:uppercase;margin-top:2px}
+  .fader{position:fixed;inset:0;background:var(--bg);z-index:60;pointer-events:none;transition:opacity 1s ease}
+
+  /* ---------- overlay views ---------- */
+  .view{position:fixed;inset:0;z-index:30;background:rgba(6,6,8,.78);backdrop-filter:blur(16px);
+    overflow-y:auto;opacity:0;pointer-events:none;transform:translateY(14px);
+    transition:opacity .3s cubic-bezier(.22,1,.36,1), transform .3s cubic-bezier(.22,1,.36,1)}
+  .view.show{opacity:1;pointer-events:auto;transform:translateY(0)}
+  .view-inner{max-width:1060px;margin:0 auto;padding:100px 40px 80px}
+  .view h1{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:32px;letter-spacing:.28em;
+    color:var(--ink);text-transform:uppercase;margin:0 0 6px;text-align:center}
+  .view .vsub{font:500 9px 'Inter';letter-spacing:.28em;color:var(--dim);text-transform:uppercase;
+    text-align:center;margin-bottom:40px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .card{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:22px 22px 18px}
+  .card .k{font:500 9px 'Inter';letter-spacing:.22em;color:var(--dim);text-transform:uppercase}
+  .card .v{font-family:'Cormorant Garamond',serif;font-size:38px;color:var(--ink);margin-top:8px;line-height:1}
+  .card .dlt{font:500 10px 'Inter';margin-top:8px;letter-spacing:.06em}
+  .sec-t{font:600 10px 'Inter';letter-spacing:.26em;color:var(--dim);text-transform:uppercase;margin:40px 0 16px}
+  .rows{background:var(--glass);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .row{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .row .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .row .rn{font:600 11px 'Inter';letter-spacing:.12em;color:#d9d3c0;text-transform:uppercase;width:150px;flex:none}
+  .row .bar{flex:1;height:3px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden}
+  .row .bar i{display:block;height:100%;border-radius:2px}
+  .row .rv{font:500 10px 'Inter';color:var(--dim);width:170px;text-align:right;flex:none}
+  .wgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+  .wcard{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:24px;cursor:pointer;
+    transition:border-color .2s,transform .2s}
+  .wcard:hover{border-color:rgba(232,230,224,.22);transform:translateY(-2px)}
+  .wtop{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+  .wglyph{width:38px;height:38px;border-radius:50%;border:1px solid;display:flex;align-items:center;
+    justify-content:center;font-size:15px;flex:none}
+  .wname{font-family:'Cormorant Garamond',serif;font-size:18px;letter-spacing:.16em;color:var(--ink);text-transform:uppercase}
+  .wsub{font:500 8px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-top:3px}
+  .wstats{display:flex;gap:18px;margin:12px 0 14px}
+  .wstat .n{font-family:'Cormorant Garamond',serif;font-size:21px;color:var(--ink)}
+  .wstat .l{font:500 8px 'Inter';letter-spacing:.16em;color:var(--dim);text-transform:uppercase;margin-top:2px}
+  .wlast{font:400 10.5px 'Inter';color:#8f8f95;line-height:1.5;border-top:1px solid var(--line);padding-top:12px}
+  .wstatus{margin-left:auto;display:flex;align-items:center;gap:6px;font:600 8.5px 'Inter';letter-spacing:.18em;text-transform:uppercase}
+  .wstatus .dot{width:6px;height:6px;border-radius:50%}
+
+  /* ---------- sidebar (slides in from LEFT) ---------- */
+  #sidebar{position:fixed;top:0;left:0;bottom:0;width:clamp(340px,30vw,460px);z-index:35;
+    background:var(--panel);border-right:1px solid var(--line);
+    transform:translateX(-104%);transition:transform .09s cubic-bezier(.2,.75,.25,1);
+    display:flex;flex-direction:column;overflow:hidden}
+  #sidebar.show{transform:translateX(0)}
+  .sb-close{position:absolute;top:20px;right:20px;color:var(--dim);cursor:pointer;font-size:15px;padding:6px;z-index:2}
+  .sb-close:hover{color:var(--ink)}
+  .sb-body{flex:1;overflow-y:auto;padding:30px 26px 40px;opacity:1;transition:opacity .12s}
+  .sb-body.swap{opacity:0}
+  .eyebrow{font:600 9px 'Inter';letter-spacing:.24em;color:var(--dim);text-transform:uppercase;margin-bottom:8px}
+  .eyebrow.accent{color:var(--accent)}
+  #sbName{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;letter-spacing:.04em;color:var(--ink);margin-bottom:4px}
+  #sbSub{font:500 10px 'Inter';letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:16px}
+  .sb-desc{font:400 12.5px 'Inter';color:#b9b3a5;line-height:1.7;margin-bottom:22px}
+  .sb-section{margin-bottom:22px}
+  .pill-row{display:flex;flex-wrap:wrap;gap:6px}
+  .pill{font:500 10px 'Inter';padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.04);
+    border:1px solid var(--line);color:#c9c4b6}
+  .pill.on{color:#7fd6b0;border-color:rgba(127,214,176,.35)}
+  .func-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid rgba(232,230,224,.05);font:400 12px 'Inter';color:#c9c4b6}
+  .func-row:last-child{border-bottom:0}
+  .func-row .fdot{width:6px;height:6px;border-radius:50%;background:var(--line);flex:none}
+  .func-row .fdot.on{background:#7fd6b0;box-shadow:0 0 6px rgba(127,214,176,.6)}
+  .sb-stats{display:flex;gap:10px;margin-bottom:6px}
+  .sb-stat{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center}
+  .sb-stat .n{font-family:'Cormorant Garamond',serif;font-size:23px;color:var(--ink);line-height:1}
+  .sb-stat .l{font:500 7.5px 'Inter';letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin-top:5px}
+  .sb-item{padding:9px 0;border-bottom:1px solid rgba(232,230,224,.05);font:400 12px 'Inter';color:#b9b3a5;line-height:1.5}
+  .sb-item:last-child{border-bottom:0}
+  .sb-item .ts{font:500 9px 'JetBrains Mono',monospace;color:#5d5d63;margin-right:8px}
+  .approve-btn{margin-top:6px;padding:5px 12px;border-radius:999px;border:1px solid var(--ink);
+    background:transparent;color:var(--ink);font:600 8.5px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+  .approve-btn:hover{background:var(--ink);color:#111}
+  .sb-log{font:400 9.5px 'JetBrains Mono',monospace;color:#8a856f;background:rgba(0,0,0,.35);
+    border:1px solid var(--line);border-radius:10px;padding:12px;line-height:1.75;max-height:140px;
+    overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin:0}
+  .help-btn{margin-top:24px;width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
+    background:transparent;color:var(--dim);font:600 10px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+  ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:rgba(232,230,224,.14);border-radius:2px}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ---------- login ---------- */
+  #login{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+  #login .card{width:100%;max-width:380px;padding:36px;background:var(--glass);border:1px solid var(--line);border-radius:16px}
+  #login .boat{width:40px;height:40px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#fff8e8,#d9c78f 60%,#8f7658);margin-bottom:18px}
+  #login h1{font-family:'Cormorant Garamond',serif;font-size:26px;letter-spacing:.12em;color:var(--ink);
+    text-transform:uppercase;margin-bottom:4px}
+  #login p.sub{font:500 10px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:26px}
+  #login .field{margin-bottom:18px}
+  #login label{display:block;font:600 9px 'Inter';letter-spacing:.18em;color:var(--dim);
+    text-transform:uppercase;margin-bottom:6px}
+  #login input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;
+    background:rgba(255,255,255,.03);color:var(--ink);font:400 13px 'Inter'}
+  #login .err{color:#e08a7a;font:500 11px 'Inter';margin-bottom:10px;min-height:14px}
+  #login button{width:100%;padding:12px;border-radius:999px;border:1px solid var(--ink);
+    background:var(--ink);color:#111;font:700 11px 'Inter';letter-spacing:.14em;
+    text-transform:uppercase;cursor:pointer}
 </style>
 </head>
 <body>
 
 <div id="login">
   <div class="card">
-    <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(160deg,#1E3A8A,#0EA5E9);display:flex;align-items:center;justify-content:center;margin-bottom:18px;font-size:17px">⛵</div>
-    <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.01em">Sailz</h1>
-    <p style="font-size:13px;color:var(--muted);margin:6px 0 22px">Owner sign-in</p>
-    <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="username" value=""></div>
+    <div class="boat"></div>
+    <h1>Sailz</h1>
+    <p class="sub">Owner sign-in</p>
+    <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="username"></div>
     <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password"></div>
-    <div id="loginErr" class="mono" style="color:var(--critical);font-size:12px;margin-bottom:12px"></div>
-    <button class="primary" style="width:100%;padding:11px;font-size:13px" onclick="doLogin()">Sign in</button>
+    <div class="err" id="loginErr"></div>
+    <button onclick="doLogin()">Sign in</button>
   </div>
 </div>
 
 <div id="app" class="hidden">
-  <div id="topbar">
-    <div class="brand"><span class="mark">⛵</span><span id="clinicName">Clinic</span><span class="powered">· powered by Sailz</span></div>
-    <div class="right">
-      <span class="stats" id="statsline"></span>
-      <a class="ghost-link" href="/brain.html">Brain map</a>
-      <a class="ghost-link" href="/dashboard-classic.html">Classic view</a>
-      <button onclick="logout()">Sign out</button>
-    </div>
-  </div>
-  <div id="graph"></div>
-  <div id="tooltip"></div>
+<div class="vignette"></div>
 
-  <div id="inspector">
-    <div class="head">
-      <div class="avatar" id="insAvatar"></div>
-      <div>
-        <h2 id="insName"></h2>
-        <div class="status-row"><span class="status-dot" id="insStatusDot"></span><span class="status-label mono" id="insStatusLabel"></span></div>
-      </div>
-      <button class="close" onclick="closeInspector()">&times;</button>
-    </div>
-    <div class="section">
-      <div class="micro">Today</div>
-      <div id="insStats"></div>
-    </div>
-    <div class="section">
-      <div class="micro">Workflows</div>
-      <div class="wf-list" id="insWorkflows"></div>
-    </div>
-    <div class="section">
-      <div class="micro">Uses</div>
-      <div class="chip-row" id="insTools"></div>
-    </div>
-    <div class="section">
-      <div class="micro">Recent activity</div>
-      <div id="insActivity"></div>
+<div id="topbar">
+  <div id="crumbBack">‹ All departments</div>
+  <div class="tabs" id="tabs">
+    <button class="active" data-v="map">Map</button>
+    <button data-v="dash">Dashboards</button>
+    <button data-v="work">Chart</button>
+  </div>
+  <div class="tb-right">
+    <div id="navInfo">
+      <div>NAVIGATION</div>
+      <div class="big" id="navProgress">0 of 0 live</div>
+      <div>YOUR TREE</div>
     </div>
   </div>
 </div>
 
-<script>
-const $ = (id) => document.getElementById(id);
-let token = sessionStorage.getItem("token");
+<div class="side-label" id="sideLeft"></div>
+<div class="side-label" id="sideRight"></div>
 
-async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { "content-type": "application/json", Authorization: "Bearer " + token, ...(opts.headers || {}) } });
-  if (res.status === 401) { logout(); throw new Error("auth"); }
+<div class="brand"><div class="t">Sailz</div><div class="s" id="brandSub">loading…</div><div class="s" id="clinicSub" style="margin-top:4px"></div></div>
+<div class="tip" id="tip"><div class="n" id="tipN"></div><div class="d" id="tipD"></div></div>
+
+<div id="bottombar">
+  <div class="carets">
+    <span class="caret" id="prevD">‹</span>
+    <span class="caret" id="nextD">›</span>
+  </div>
+</div>
+
+<div class="view" id="viewDash"><div class="view-inner">
+  <h1>Dashboards</h1><div class="vsub">live across the whole brain · today</div>
+  <div class="cards" id="kpiCards"></div>
+  <div class="sec-t">Agent activity — today</div>
+  <div class="rows" id="actRows"></div>
+</div></div>
+
+<div class="view" id="viewWork"><div class="view-inner">
+  <h1>Workforce</h1><div class="vsub" id="workSub">AI agents · click one to open it on the map</div>
+  <div class="wgrid" id="wGrid"></div>
+</div></div>
+
+<aside id="sidebar">
+  <div class="sb-close" id="sbClose">✕</div>
+  <div class="sb-body" id="sbBody"></div>
+</aside>
+
+<div class="fader" id="fader"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+<script>
+/* =========================================================================
+   SAILZ — Enterprise Brain map.
+   Rebuilt for clean, deterministic, non-overlapping physics and fast
+   (sub-150ms) interaction timing, matching the user's own reference
+   recording: even 7-department ring, upward-fanning tree on department
+   focus with a single ~900ms dive-through-core transition (overshoot zoom
+   + brief bloom), instant hover spotlight, and a sidebar that snaps in
+   from the LEFT in ~90ms while the camera compensates.
+   Department/agent content (workflows, tools, status, stats, activity) is
+   real, fetched from this app's API — nothing fabricated.
+   ========================================================================= */
+
+const clamp01=v=>Math.max(0,Math.min(1,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+function lerpAngle(a,b,t){let d=b-a;d=Math.atan2(Math.sin(d),Math.cos(d));return a+d*t}
+function easeInOut(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
+function easeOutBack(t){const s=1.70158;t=t-1;return t*t*((s+1)*t+s)+1}
+function easeOutCubic(t){return 1-Math.pow(1-t,3)}
+
+const ICONS=['✉','☎','▤','✎','⌗','⚙','☰','✦','◍','⌘','♲','◔','✚','⚖','☷','⚑'];
+const CORE={x:0,y:0};
+const RING_R=230;
+function hex(c){return '#'+c.toString(16).padStart(6,'0')}
+
+/* ------------------------------ auth / api -------------------------------- */
+const $=(id)=>document.getElementById(id);
+let token=sessionStorage.getItem("token");
+
+async function api(path, opts={}){
+  const res=await fetch(path,{...opts,headers:{"content-type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}});
+  if(res.status===401){logout();throw new Error("auth")}
   return res.json();
 }
-
-async function doLogin() {
-  $("loginErr").textContent = "";
-  const res = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: $("em").value.trim(), password: $("pw").value }) });
-  const data = await res.json();
-  if (!res.ok) { $("loginErr").textContent = data.error || "Sign-in failed"; return; }
-  token = data.token; sessionStorage.setItem("token", token);
-  $("login").classList.add("hidden"); $("app").classList.remove("hidden");
-  boot();
+async function doLogin(){
+  $("loginErr").textContent="";
+  const res=await fetch("/api/auth/login",{method:"POST",headers:{"content-type":"application/json"},
+    body:JSON.stringify({email:$("em").value.trim(),password:$("pw").value})});
+  const data=await res.json();
+  if(!res.ok){$("loginErr").textContent=data.error||"Sign-in failed";return}
+  token=data.token;sessionStorage.setItem("token",token);
+  $("login").classList.add("hidden");$("app").classList.remove("hidden");
+  boot().catch(err=>console.error(err));
 }
-function logout(){ sessionStorage.removeItem("token"); location.reload(); }
-$("pw").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+function logout(){sessionStorage.removeItem("token");location.reload()}
+$("pw").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
 
-function fmtRelative(ts) {
-  const diffMs = Date.now() - new Date(ts).getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return mins + "m ago";
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return hrs + "h ago";
-  return Math.round(hrs / 24) + "d ago";
+function esc(s){const d=document.createElement("div");d.textContent=s??"";return d.innerHTML}
+function fmtRelative(ts){
+  const diffMs=Date.now()-new Date(ts).getTime();
+  const mins=Math.round(diffMs/60000);
+  if(mins<1)return "just now";
+  if(mins<60)return mins+"m ago";
+  const hrs=Math.round(mins/60);
+  if(hrs<24)return hrs+"h ago";
+  return Math.round(hrs/24)+"d ago";
 }
-function esc(s){ const d=document.createElement("div"); d.textContent=s??""; return d.innerHTML; }
 
-const STATUS_COLOR = { active: "var(--good)", idle: "var(--muted)", needs_review: "var(--critical)", offline: "var(--muted)" };
-const STATUS_TEXT = { active: "ACTIVE", idle: "IDLE", needs_review: "NEEDS REVIEW", offline: "NOT CONNECTED" };
-const AGENT_ORDER = ["leads", "receptionist", "calling", "audit", "billing"];
-const HUB_RADIUS = 260;
+/* Department definitions — names/branches are the user's own reference
+   design, kept as-is; colors updated to match the new reference video's
+   palette. Ring position is now always a clean, perfectly even 7-way
+   circle (no hand-placed coordinates), read clockwise from the top. */
+// Each branch is a small Y: one root off the hub, then up to two forks
+// off that root — a real forking tree shape, not a straight chain.
+const DEPT_DEFS_BASE=[
+ {name:'INTELLIGENCE',sub:'signals · memory · research',color:0x4a7fd6,glyph:'⚛',
+  branches:[{root:'Market Scans',forks:['Competitor Watch','Trend Lines']},
+            {root:'Research Memos',forks:['Knowledge Base']}]},
+ {name:'CUSTOMER',sub:'care · retention · voice',color:0xd668a0,glyph:'☉',
+  branches:[{root:'Reviews',forks:['Escalations']}]},
+ {name:'BACK OFFICE',sub:'invoices · docs · payroll',color:0xd9b35c,glyph:'⧉',
+  branches:[{root:'Invoicing',forks:['Payroll','Document Filing']}]},
+ {name:'SALES',sub:'inbound · outreach · closing',color:0xe0673f,glyph:'◈',
+  branches:[]},
+ {name:'DEALS',sub:'terms · diligence · renewals',color:0xa8384a,glyph:'◆',
+  branches:[{root:'Deal Rooms',forks:['Negotiation Prep','Renewals']},
+            {root:'Due Diligence',forks:['Partner Deals']}]},
+ {name:'MARKETING',sub:'content · brand · demand',color:0x8f6fd6,glyph:'▷',
+  branches:[{root:'Content Calendar',forks:['Paid Ads','Email Nurture']},
+            {root:'Brand Deals',forks:['Insights']}]},
+ {name:'OPERATIONS',sub:'onboarding · systems · qa',color:0x3fb894,glyph:'⬡',
+  branches:[{root:'Onboarding',forks:['Scheduling','QA Audits']},
+            {root:'Automation Jobs',forks:['Compliance']}]},
+];
 
-let Graph, tooltip, hoveredNode = null, neighbors = new Set(), selectedAgent = null;
-let graphData = { nodes: [], links: [] };
+// Where each of our real 5 agents actually lives, by department name above.
+const AGENT_DEPT={leads:'SALES',calling:'SALES',receptionist:'CUSTOMER',audit:'BACK OFFICE',billing:'BACK OFFICE'};
 
-function pinRadialBackbone(nodes) {
-  nodes.forEach((n) => {
-    if (n.type === "clinic") { n.fx = 0; n.fy = 0; }
-    if (n.type === "agent") {
-      const idx = AGENT_ORDER.indexOf(n.id);
-      if (idx === -1) return;
-      const angle = (idx / AGENT_ORDER.length) * 2 * Math.PI - Math.PI / 2;
-      n.fx = HUB_RADIUS * Math.cos(angle);
-      n.fy = HUB_RADIUS * Math.sin(angle);
+function blendGray(colorInt,factor){
+  const r=(colorInt>>16)&255,g=(colorInt>>8)&255,b=colorInt&255;
+  const gray=(r+g+b)/3;
+  const nr=Math.round(r+(gray-r)*factor),ng=Math.round(g+(gray-g)*factor),nb=Math.round(b+(gray-b)*factor);
+  return (nr<<16)|(ng<<8)|nb;
+}
+
+/* agentData: hubId -> live detail object, mutated in place on refresh so
+   every reference to it (dept.realDetails, dashboard, workforce, sidebar)
+   stays in sync without rebuilding the map. */
+// Splits a flat list into Y-shaped branches (root + up to 2 forks each),
+// so real agent workflows render with the same forking-tree look as the
+// hand-authored department branches.
+function chunkToYBranches(items){
+  const out=[];
+  for(let i=0;i<items.length;i+=3){
+    const chunk=items.slice(i,i+3);
+    out.push({root:chunk[0],forks:chunk.slice(1)});
+  }
+  return out;
+}
+
+function buildDeptDefs(agentData){
+  const byDept={};
+  Object.values(agentData).forEach(h=>{(byDept[AGENT_DEPT[h.id]] ||= []).push(h)});
+  return DEPT_DEFS_BASE.map(base=>{
+    const reals=byDept[base.name]||[];
+    const active=reals.some(h=>h.status==='active'||h.status==='needs_review');
+    const realSkillMap={},toolConnected={},realDetails={};
+    const extraBranches=[];
+    reals.forEach(h=>{
+      realDetails[h.id]=h;
+      const wf=h.workflows||[];
+      wf.forEach(w=>{realSkillMap[w]=h.id});
+      // tools are shown in the sidebar's "what it covers" info, not as
+      // separate canvas nodes — keeps node count per department tight.
+      (h.tools||[]).forEach(t=>{toolConnected[t.name]=t.connected});
+      extraBranches.push(...chunkToYBranches(wf));
+    });
+    return{
+      ...base,
+      branches:[...base.branches,...extraBranches],
+      active, realSkillMap, toolConnected, realDetails,
+    };
+  });
+}
+
+/* =========================================================================
+   Everything below runs only after login, once real agent data is fetched.
+   ========================================================================= */
+async function boot(){
+  const HUB_IDS=['leads','receptionist','calling','audit','billing'];
+  const [dash, ...hubDetails]=await Promise.all([
+    api('/api/dashboard'),
+    ...HUB_IDS.map(id=>api('/api/brain/agents/'+id)),
+  ]);
+  $("clinicSub").textContent=dash.settings?.clinicName||"";
+
+  const agentData={};
+  hubDetails.forEach(h=>{agentData[h.id]=h});
+  const DEPT_DEFS=buildDeptDefs(agentData);
+  const liveCount=hubDetails.filter(h=>h.status==='active'||h.status==='needs_review').length;
+  $("brandSub").textContent=DEPT_DEFS.length+" departments · "+liveCount+"/"+hubDetails.length+" agents live";
+  $("workSub").textContent=hubDetails.length+" AI agents · click one to open it on the map";
+  $("navProgress").textContent=liveCount+" of "+hubDetails.length+" live";
+
+  /* ------------------------------ pixi ------------------------------------ */
+  const app=new PIXI.Application({resizeTo:window,antialias:true,background:'#0a0a0d',
+    resolution:Math.min(window.devicePixelRatio||1,2),autoDensity:true});
+  $("app").appendChild(app.view);
+  app.stage.eventMode='static';
+  const world=new PIXI.Container();
+  world.eventMode='static';
+  app.stage.addChild(world);
+  const layerStars=new PIXI.Container();
+  const layerPie=new PIXI.Graphics();
+  const layerGhost=new PIXI.Container();
+  const layerCore=new PIXI.Container();
+  const layerFlash=new PIXI.Sprite();
+  const layerEdges=new PIXI.Graphics();
+  const layerNodes=new PIXI.Container();
+  layerNodes.eventMode='static';
+  const layerLabels=new PIXI.Container();
+  const layerDeptTx=new PIXI.Container();
+  world.addChild(layerStars,layerPie,layerGhost,layerCore,layerEdges,layerNodes,layerLabels,layerDeptTx,layerFlash);
+  // decorative-only layers must never participate in hit-testing — a
+  // non-'none' eventMode still blocks clicks aimed at things underneath,
+  // even at alpha 0 (this was the actual "nothing is clickable" bug).
+  layerStars.eventMode='none';layerPie.eventMode='none';layerGhost.eventMode='none';layerCore.eventMode='none';
+  layerEdges.eventMode='none';layerLabels.eventMode='none';layerDeptTx.eventMode='none';
+  layerFlash.eventMode='none';
+
+  function makeGlow(size){
+    const c=document.createElement('canvas');c.width=c.height=size;
+    const g=c.getContext('2d');
+    const gr=g.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+    gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.25,'rgba(255,255,255,.55)');
+    gr.addColorStop(.6,'rgba(255,255,255,.12)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.fillRect(0,0,size,size);
+    return PIXI.Texture.from(c);
+  }
+  const GLOW=makeGlow(128);
+  function makeDot(size){
+    const c=document.createElement('canvas');c.width=c.height=size;
+    const g=c.getContext('2d');
+    g.fillStyle='#fff';g.beginPath();g.arc(size/2,size/2,size/2-1,0,7);g.fill();
+    return PIXI.Texture.from(c);
+  }
+  const DOT=makeDot(32);
+  layerFlash.texture=GLOW;layerFlash.anchor.set(.5);layerFlash.tint=0xfff2cf;layerFlash.alpha=0;
+  layerFlash.scale.set(6);layerFlash.position.set(CORE.x,CORE.y);
+
+  /* ------------------------------ deterministic starfield ------------------ */
+  // seeded, so layout is stable across reloads — no per-frame animation.
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+    t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+  const srnd=mulberry32(42);
+  const SR=(a,b)=>a+srnd()*(b-a);
+  for(let i=0;i<130;i++){
+    const s=new PIXI.Sprite(DOT);s.anchor.set(.5);
+    s.x=SR(-1600,1600);s.y=SR(-1200,1200);
+    s.scale.set(SR(.02,.05));s.alpha=SR(.05,.25);s.tint=0xe8e6e0;
+    layerStars.addChild(s);
+  }
+
+  /* --------------------------- core particle cluster ------------------------ */
+  // a tight, mostly-static dust cluster with a soft maroon haze — not the
+  // 1000+ sprite "sailboat" from before, which was the main source of lag.
+  const coreHaze=new PIXI.Sprite(GLOW);coreHaze.anchor.set(.5);coreHaze.tint=0xa8384a;
+  coreHaze.scale.set(2.4);coreHaze.alpha=.28;coreHaze.position.set(CORE.x,CORE.y);
+  layerCore.addChild(coreHaze);
+  const coreDust=[];
+  const CORE_PALETTE=[0xf0e6c8,0xd9c78f,0xfff8e8,0xe8d9a8,0xe0904a];
+  for(let i=0;i<220;i++){
+    const a=SR(0,6.283),r=Math.pow(srnd(),.6)*30;
+    const p=new PIXI.Sprite(DOT);p.anchor.set(.5);
+    p.scale.set(SR(.015,.045));
+    p.tint=CORE_PALETTE[Math.floor(SR(0,CORE_PALETTE.length))];
+    p.alpha=SR(.3,.9);
+    p.x=CORE.x+Math.cos(a)*r;p.y=CORE.y+Math.sin(a)*r*.85;
+    p._base={x:p.x,y:p.y,alpha:p.alpha};
+    coreDust.push(p);layerCore.addChild(p);
+  }
+
+  /* ----------------------------- build depts (clean ring) ------------------- */
+  const N_DEPT=DEPT_DEFS.length;
+  const STRIP_GAP=620;
+  const TREE_Y=0;
+  const depts=[];
+  let iconIdx=0,edgesDirty=true;
+
+  DEPT_DEFS.forEach((def,di)=>{
+    const ringAngle=-Math.PI/2+di*(2*Math.PI/N_DEPT);
+    const ringX=Math.cos(ringAngle)*RING_R,ringY=Math.sin(ringAngle)*RING_R;
+    const stripX=(di-(N_DEPT-1)/2)*STRIP_GAP;
+    const D={def,di,ringAngle,ringX,ringY,stripX,nodes:[],edges:[]};
+
+    D.ghost=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontSize:74,fontWeight:'500',
+      fill:0xe8e6e0,letterSpacing:16});
+    D.ghost.anchor.set(.5);D.ghostBase=def.active?.02:.008;D.ghost.alpha=D.ghostBase;
+    layerGhost.addChild(D.ghost);
+
+    const hubColor=def.active?def.color:blendGray(def.color,0.65);
+    const hub=new PIXI.Container();
+    const hGlow=new PIXI.Sprite(GLOW);hGlow.anchor.set(.5);hGlow.tint=hubColor;
+    hGlow.scale.set(1.1);hGlow.alpha=.5;
+    const hFill=new PIXI.Graphics();hFill.beginFill(0x0c0c0e,.94).drawCircle(0,0,15).endFill();
+    const hRing=new PIXI.Graphics();
+    hRing.lineStyle(1.4,hubColor,def.active?.9:.4).drawCircle(0,0,16);
+    hRing.lineStyle(1,hubColor,def.active?.25:.1).drawCircle(0,0,22);
+    const hGlyph=new PIXI.Text(def.glyph,{fontFamily:'Inter',fontSize:13,fill:hubColor});
+    hGlyph.anchor.set(.5,.52);
+    hub.addChild(hGlow,hFill,hRing,hGlyph);
+    hub.eventMode='static';hub.cursor='pointer';hub.hitArea=new PIXI.Circle(0,0,30);
+    hub.on('pointertap',()=>{if(dragDist<6){if(focused===di)openDeptSidebar(di);else focusDept(di)}});
+    hub.on('pointerover',()=>{setHoverTarget(di);showTip(def.name,def.sub,hub)});
+    hub.on('pointerout',()=>{setHoverTarget(-1);hideTip()});
+    layerNodes.addChild(hub);
+    D.hub=hub;D.hubGlow=hGlow;D.hubPh=di*1.7;
+
+    D.nm=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontWeight:'600',fontSize:26,
+      fill:def.active?0xe9e2cd:0x6f6f74,letterSpacing:9});
+    D.nm.anchor.set(.5,0);
+    D.sb=new PIXI.Text(def.sub.toUpperCase(),{fontFamily:'Inter',fontWeight:'500',fontSize:8,
+      fill:0x6b6b72,letterSpacing:3.5});
+    D.sb.anchor.set(.5,0);
+    layerDeptTx.addChild(D.nm,D.sb);
+
+    // clean deterministic Y-branches: a root off the hub, then up to two
+    // forks off that root — a real forking tree, not a straight ray. No
+    // random jitter anywhere; spacing is fixed and systematic.
+    const nB=def.branches.length||1;
+
+    function makeSkillNode(skill,branchFrac,forkOffset,dist,parentNode){
+      const realHubId=def.realSkillMap&&def.realSkillMap[skill];
+      const isReal=!!realHubId;
+      const isDisconnected=isReal&&def.toolConnected&&Object.prototype.hasOwnProperty.call(def.toolConnected,skill)&&def.toolConnected[skill]===false;
+      const runningNow=isReal&&(agentData[realHubId].status==='active'||agentData[realHubId].status==='needs_review');
+      let nodeDim=isReal?(runningNow?1:.6):.32;
+      if(isDisconnected)nodeDim=Math.min(nodeDim,.38);
+      const shadowed=!isReal||!runningNow;
+      const nodeColor=shadowed?blendGray(def.color,.55):def.color;
+
+      const node=new PIXI.Container();
+      const g=new PIXI.Sprite(GLOW);g.anchor.set(.5);g.tint=nodeColor;
+      const rad=7;
+      g.scale.set(rad/16);g.alpha=(.75+.15*(isReal&&runningNow?1:0))*nodeDim;
+      const core=new PIXI.Sprite(DOT);core.anchor.set(.5);
+      core.scale.set(rad/22);core.tint=shadowed?0xa8a398:0xfdf9ee;
+      const iconC=new PIXI.Container();
+      const idisc=new PIXI.Graphics();
+      idisc.beginFill(0x0b0b0d,.94).drawCircle(0,0,10).endFill();
+      idisc.lineStyle(1,def.color,.6).drawCircle(0,0,10);
+      const iglyph=new PIXI.Text(ICONS[iconIdx++%ICONS.length],{fontFamily:'Inter',fontSize:9,fill:def.color});
+      iglyph.anchor.set(.5,.54);
+      iconC.addChild(idisc,iglyph);iconC.alpha=0;
+      const haloRing=new PIXI.Graphics();
+      haloRing.lineStyle(2,0xffffff,.9).drawCircle(0,0,rad+6);haloRing.alpha=0;
+      node.addChild(g,core,iconC,haloRing);
+      const lb=new PIXI.Text(skill.toUpperCase(),{fontFamily:'Inter',fontWeight:'500',fontSize:7.5,
+        fill:0xb9b3a0,letterSpacing:2});
+      lb.anchor.set(.5,0);lb.alpha=0; // names only reveal on hover — never clutter by default
+      layerLabels.addChild(lb);
+
+      const N={cont:node,glow:g,iconC,haloRing,label:lb,branchFrac,forkOffset,dist,dim:nodeDim,isReal,runningNow};
+
+      node.eventMode='static';node.cursor='pointer';node.hitArea=new PIXI.Circle(0,0,15);
+      node.on('pointertap',()=>{
+        if(dragDist>=6)return;
+        selectAgentNode(di,N,skill);
+      });
+      node.on('pointerover',()=>{setHoverTarget(di);showTip(skill,def.name,node);lb.alpha=1});
+      node.on('pointerout',()=>{setHoverTarget(-1);hideTip();lb.alpha=0});
+      layerNodes.addChild(node);
+
+      D.nodes.push(N);
+      D.edges.push({a:parentNode,b:node,alpha:.25,w:.9});
+      return node;
+    }
+
+    def.branches.forEach((branchDef,bi)=>{
+      const branchFrac=nB===1?.5:bi/(nB-1);
+      const rootNode=makeSkillNode(branchDef.root,branchFrac,0,110,hub);
+      const forkDelta=0.13;
+      branchDef.forks.forEach((forkSkill,fi)=>{
+        const sign=fi%2===0?1:-1;
+        makeSkillNode(forkSkill,branchFrac,sign*forkDelta,185,rootNode);
+      });
+    });
+    depts.push(D);
+  });
+
+  // 7 equal pie-slice divider lines from the core — one along each
+  // boundary between adjacent departments, so the ring visibly reads as
+  // "the brain divided into 7 equal triangular sectors."
+  // No visible divider lines — instead, the hovered/focused department's
+  // whole pie-slice sector gets a soft glow fill, so the "7 equal slices"
+  // structure is felt (branches always stay inside their own slice) but
+  // is only ever shown as a highlight, never as static clutter.
+  function updatePieGlow(){
+    const target=focused>=0?focused:hoverDept;
+    layerPie.clear();
+    if(target<0||morph>0.6)return;
+    const D=depts[target];
+    const half=Math.PI/N_DEPT;
+    const r=RING_R+90;
+    layerPie.beginFill(D.def.color,.07*(1-morph/0.6));
+    layerPie.moveTo(CORE.x,CORE.y);
+    layerPie.arc(CORE.x,CORE.y,r,D.ringAngle-half,D.ringAngle+half);
+    layerPie.lineTo(CORE.x,CORE.y);
+    layerPie.endFill();
+  }
+
+  /* --------------------------- deterministic layout -------------------------- */
+  // morph: 0 = ring overview, 1 = focused vertical tree. No randomness, no
+  // per-node jitter — positions are a pure function of (morph, focusedDept).
+  let morph=0,morphTween=null;
+  function startMorph(to,dur){morphTween={t:0,dur,from:morph,to}}
+
+  function updateLayout(){
+    const m=morph;
+    for(const D of depts){
+      // ring position <-> this department's fixed slot in the horizontal
+      // strip. morph is global (not per-department), so once focused every
+      // department's tree sits permanently in its own strip slot — only
+      // the CAMERA moves to select which one is on screen. That's what
+      // makes stepping between departments a plain lateral slide instead
+      // of a re-morph.
+      const hx=lerp(D.ringX,D.stripX,m),hy=lerp(D.ringY,TREE_Y,m);
+      D.hub.position.set(hx,hy);
+
+      const nmScale=1+m*.5;
+      D.nm.scale.set(nmScale);
+      D.nm.position.set(hx,hy+30);
+      D.sb.position.set(hx,hy+30+34*nmScale);
+      D.ghost.position.set(hx,hy-40);
+
+      for(const NN of D.nodes){
+        // ring fan: kept well inside this department's own pie-slice (each
+        // slice spans 2π/N_DEPT — this uses well under half of that, so
+        // no department's branches can ever reach a neighbor's). tree
+        // fan: clean upward arc (-143°..-37°). Both include the node's
+        // fork offset for the Y-branch shape.
+        const ringSpread=Math.PI*0.28;
+        const ringFan=D.ringAngle+(NN.branchFrac-.5)*ringSpread+NN.forkOffset;
+        const treeFan=lerp(-2.5,-0.64,NN.branchFrac)+NN.forkOffset;
+        const ang=lerpAngle(ringFan,treeFan,m);
+        const dist=lerp(NN.dist*.68,NN.dist,m);
+        const nx=hx+Math.cos(ang)*dist,ny=hy+Math.sin(ang)*dist;
+        NN.cont.position.set(nx,ny);
+        NN.label.position.set(nx,ny+12);
+      }
+    }
+  }
+  function redrawEdges(){
+    layerEdges.clear();
+    for(const D of depts){
+      const spot=D._spot===undefined?1:D._spot;
+      const highlightTarget=focused>=0?focused:hoverDept;
+      const isTarget=highlightTarget<0||D.di===highlightTarget;
+      for(const E of D.edges){
+        const col=D.def.active?D.def.color:blendGray(D.def.color,.5);
+        layerEdges.lineStyle(isTarget?E.w+.3:E.w,col,(isTarget?E.alpha+.15:E.alpha)*spot);
+        layerEdges.moveTo(E.a.x,E.a.y);layerEdges.lineTo(E.b.x,E.b.y);
+        // static amber accent dot at the midpoint
+        const mx=(E.a.x+E.b.x)/2,my=(E.a.y+E.b.y)/2;
+        layerEdges.beginFill(0xc9a066,E.alpha*.8*spot).drawCircle(mx,my,1).endFill();
+      }
+    }
+  }
+
+  /* --------------------------- hover spotlight (fast) ------------------------ */
+  // binary spotlight: hovered dept + its own subtree stay bright, every
+  // other dept dims hard, converging within ~120-150ms.
+  let hoverDept=-1;
+  function setHoverTarget(di){hoverDept=di;edgesDirty=true}
+
+  /* ------------------------------ camera -------------------------------- */
+  // The map is locked: no scroll-zoom, no drag-pan. The camera only ever
+  // moves in response to a click (department, agent, prev/next, back),
+  // always as a deliberate animated move to a precise, pre-computed
+  // framing — never a free-form user-driven pan.
+  let cam={s:1,x:0,y:0};
+  let tween=null;
+  let sbShift=0,sbShiftT=0;
+  function applyCam(){
+    const w=app.screen.width,h=app.screen.height;
+    world.scale.set(cam.s);
+    world.position.set(w/2-cam.x*cam.s+sbShift,h/2-cam.y*cam.s);
+  }
+  function tweenTo(s,x,y,dur,overshoot){
+    tween={t:0,dur:dur||700,from:{...cam},to:{s,x,y},overshoot:overshoot||0};
+  }
+  function fitAll(){
+    tweenTo(1,0,0,650,0); // idle ring view is always locked at exactly 100%
+  }
+  function deptFocusScale(){
+    const w=app.screen.width,h=app.screen.height;
+    return Math.max(1.0,Math.min(1.7,Math.min(w/1100,h/1000)*1.35));
+  }
+  function focusCamTarget(D){
+    const w=app.screen.width,h=app.screen.height;
+    const s=deptFocusScale();
+    // frame the trunk near the BOTTOM of the viewport (~78% down) so the
+    // upward-fanning branches have full room above it, matching the
+    // reference recording. world.y = h/2 - cam.y*s, so solve cam.y for a
+    // target screen position directly.
+    const hubScreenY=h*0.78;
+    tweenTo(s,D.stripX,(h/2-hubScreenY)/s,900,.35);
+  }
+  function finalTreePos(D,NN){
+    const treeFan=lerp(-2.5,-0.64,NN.branchFrac)+NN.forkOffset;
+    return {x:D.stripX+Math.cos(treeFan)*NN.dist,y:TREE_Y+Math.sin(treeFan)*NN.dist};
+  }
+
+  // dragDist still tracked (pointerdown/up) purely to tell a real click
+  // apart from an accidental tiny mouse jitter — it never moves the camera.
+  let dragging=false,lx=0,ly=0,dragDist=0;
+  app.view.addEventListener('pointerdown',e=>{dragging=true;dragDist=0;lx=e.clientX;ly=e.clientY});
+  window.addEventListener('pointermove',e=>{
+    if(!dragging)return;
+    dragDist+=Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly);
+    lx=e.clientX;ly=e.clientY;
+  });
+  window.addEventListener('pointerup',()=>{dragging=false});
+  app.view.addEventListener('dblclick',()=>backOut());
+  window.addEventListener('keydown',e=>{
+    if(e.key==='Escape')backOut();
+    if(focused>=0&&e.key==='ArrowRight')stepDept(1);
+    if(focused>=0&&e.key==='ArrowLeft')stepDept(-1);
+  });
+  function backOut(){
+    if(view!=='map'){setView('map');return}
+    if(sbOpen){closeSidebar();return}
+    exitFocus();
+  }
+
+  /* ---------------------------- focus flow ---------------------------------- */
+  let focused=-1;
+  function focusDept(di){
+    const wasFocused=focused>=0;
+    focused=di;
+    startMorph(1,900);
+    focusCamTarget(depts[di]);
+    triggerBloom();
+    setChromeFocused(di,wasFocused);
+  }
+  function stepDept(dir){
+    // pure lateral slide: morph is already 1 and every department already
+    // sits in its own fixed strip slot, so switching departments only
+    // moves the camera sideways — no re-morph, no dive, no bloom.
+    const next=((focused+dir)%depts.length+depts.length)%depts.length;
+    if(sbOpen)closeSidebar();
+    focused=next;
+    const D=depts[next];
+    const w=app.screen.width,h=app.screen.height;
+    const s=deptFocusScale();
+    const hubScreenY=h*0.78;
+    tweenTo(s,D.stripX,(h/2-hubScreenY)/s,550,0);
+    setChromeFocused(next,true);
+  }
+  function selectAgentNode(di,NN,skill){
+    const wasFocused=focused===di;
+    const D=depts[di];
+    if(!wasFocused){
+      focused=di;
+      startMorph(1,900);
+      triggerBloom();
+      setChromeFocused(di,false);
+    }
+    const w=app.screen.width,h=app.screen.height;
+    const p=finalTreePos(D,NN);
+    const s=Math.max(1.7,Math.min(2.6,Math.min(w/750,h/700)*1.7));
+    const nodeScreenY=h*0.55;
+    tweenTo(s,p.x,(h/2-nodeScreenY)/s,wasFocused?280:900,wasFocused?0:.3);
+    openSkillSidebar(di,skill);
+  }
+  function exitFocus(){
+    if(focused<0){fitAll();return}
+    focused=-1;
+    closeSidebar();
+    startMorph(0,700);fitAll();
+    triggerBloom();
+    setChromeFocused(-1,true);
+  }
+  $("prevD").onclick=()=>{if(focused>=0)stepDept(-1)};
+  $("nextD").onclick=()=>{if(focused>=0)stepDept(1)};
+  $("crumbBack").onclick=()=>exitFocus();
+
+  let bloomT=0;
+  function triggerBloom(){bloomT=1}
+
+  function setChromeFocused(di,animated){
+    const focused_=di>=0;
+    $("crumbBack").classList.toggle('show',focused_);
+    $("navInfo").classList.toggle('show',focused_);
+    if(focused_){
+      const prevD=depts[((di-1)%depts.length+depts.length)%depts.length];
+      const nextD=depts[(di+1)%depts.length];
+      $("sideLeft").textContent=prevD.def.name;
+      $("sideRight").textContent=nextD.def.name;
+      $("sideLeft").classList.add('show');
+      $("sideRight").classList.add('show');
+      $("sideLeft").onclick=()=>stepDept(-1);
+      $("sideRight").onclick=()=>stepDept(1);
+    }else{
+      $("sideLeft").classList.remove('show');
+      $("sideRight").classList.remove('show');
+    }
+  }
+
+  /* ------------------------------ tooltip ----------------------------------- */
+  const tip=document.getElementById('tip');
+  function showTip(n,d,obj){
+    document.getElementById('tipN').textContent=n;
+    document.getElementById('tipD').textContent=d;
+    const p=obj.getGlobalPosition();
+    tip.style.left=p.x+'px';tip.style.top=p.y+'px';tip.style.opacity=1;
+  }
+  function hideTip(){tip.style.opacity=0}
+
+  /* ============================ sidebar (real data) =========================== */
+  const sidebar=document.getElementById('sidebar');
+  const sbBody=document.getElementById('sbBody');
+  let sbOpen=false,sbOpenDi=-1,sbOpenHubId=null,sbOpenSkill=null,sbMode=null;
+  const STATUS_TEXT={active:'Fully autonomous',idle:'Paused',needs_review:'Needs review',offline:'Not connected'};
+  const STATUS_COLOR={active:'#7fd6b0',idle:'#6f6f74',needs_review:'#e0904a',offline:'#6f6f74'};
+
+  function setNodeHalo(di,skill){
+    for(const D of depts)for(const N of D.nodes)N.haloRing.alpha=0;
+    if(di==null||skill==null)return;
+    const D=depts[di];
+    const N=D.nodes.find(n=>n.label.text===skill.toUpperCase());
+    if(N)N.haloRing.alpha=1;
+  }
+
+  function swapSidebar(html){
+    if(sbOpen){sbBody.innerHTML=html}
+    else{sbBody.innerHTML=html}
+  }
+
+  function openDeptSidebar(di){
+    const D=depts[di],def=D.def,col=hex(def.color);
+    sbOpenDi=di;sbOpenHubId=null;sbOpenSkill=null;sbMode='dept';
+    setNodeHalo(null,null);
+    const reals=Object.values(def.realDetails);
+    const liveReals=reals.filter(h=>h.status==='active'||h.status==='needs_review');
+    const allSkills=def.branches.flat();
+    const desc=reals.length
+      ? `${esc(def.name)} runs ${reals.map(h=>esc(h.name)).join(' and ')} — ${liveReals.length?'live right now.':'currently paused.'}`
+      : `${esc(def.name)} has no agent built yet. It's mapped and ready — an empty seat waiting for its first Sailz agent.`;
+    const covers=def.branches.slice(0,6).map(b=>b[0]);
+    const startHere=reals.length?(reals[0].workflows||[])[0]:allSkills[0];
+    const totalToday=reals.reduce((s,h)=>s+Number((h.todayStats||[])[0]?.value||0),0);
+    swapSidebar(`
+      <div class="eyebrow">DEPARTMENT</div>
+      <div id="sbName" style="color:${col}">${esc(def.name)}</div>
+      <div id="sbSub">${esc(def.sub)}</div>
+      <div class="sb-desc">${desc}</div>
+      <div class="sb-section">
+        <div class="eyebrow">WHAT IT COVERS</div>
+        <div class="pill-row">${covers.map(c=>`<span class="pill">${esc(c)}</span>`).join('')}</div>
+      </div>
+      <div class="sb-section">
+        <div class="eyebrow">THE FUNCTIONS</div>
+        ${allSkills.map(s=>{const isReal=!!def.realSkillMap[s];return `<div class="func-row"><span class="fdot${isReal?' on':''}"></span>${esc(s)}</div>`}).join('')}
+      </div>
+      <div class="sb-section">
+        <div class="eyebrow accent">START HERE</div>
+        <div class="sb-desc" style="margin-bottom:0">${reals.length?`Begin with <b style="color:var(--ink)">${esc(startHere)}</b> — already live.`:`Begin with <b style="color:var(--ink)">${esc(startHere)}</b> once this department is built out.`}</div>
+      </div>
+      <div class="sb-section">
+        <div class="eyebrow">THE NUMBERS</div>
+        <div class="sb-desc" style="margin-bottom:0">${allSkills.length} functions mapped${reals.length?` · ${totalToday} actions today across ${reals.length} live agent${reals.length>1?'s':''}`:' · no agents live yet'}.</div>
+      </div>
+      <button class="help-btn">ⓘ Need help building this?</button>
+    `);
+    openPanel();
+  }
+
+  function openSkillSidebar(di,skill){
+    const D=depts[di],def=D.def;
+    const hubId=def.realSkillMap&&def.realSkillMap[skill];
+    setNodeHalo(di,skill);
+    if(hubId){openRealSkill(D,skill,hubId)}else{openPlaceholderSkill(D,skill)}
+  }
+
+  function realAgentInfo(h){
+    return{
+      stats:(h.todayStats||[]).map(s=>({n:s.value,l:s.label})),
+      acts:(h.recentActivity||[]).slice(0,6).map(ev=>({t:fmtRelative(ev.ts),x:ev.summary,status:ev.status,id:ev.id})),
+    };
+  }
+  function sbActsHTML(info){
+    return info.acts.length
+      ? info.acts.map(a=>`<div class="sb-item"><span class="ts">${esc(a.t)}</span>${esc(a.x)}${
+          a.status==='awaiting_approval'&&a.id?`<br><button class="approve-btn" data-claim="${esc(a.id)}">Approve &amp; submit</button>`:''
+        }</div>`).join('')
+      : `<div class="sb-item" style="color:var(--dim)">Nothing yet.</div>`;
+  }
+  function logLines(h){
+    const lines=(h.recentActivity||[]).map(ev=>{
+      const d=new Date(ev.ts),pad=n=>String(n).padStart(2,'0');
+      return `[${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}] ${ev.summary}${ev.status?' · '+ev.status:''}`;
+    });
+    return lines.length?lines.join('\n'):'No activity yet.';
+  }
+
+  function openRealSkill(D,skill,hubId){
+    const def=D.def,col=hex(def.color),h=agentData[hubId],info=realAgentInfo(h);
+    sbOpenDi=D.di;sbOpenHubId=hubId;sbOpenSkill=skill;sbMode='skill';
+    const tag=STATUS_TEXT[h.status]||h.status,tagCol=STATUS_COLOR[h.status]||'#6f6f74';
+    swapSidebar(`
+      <div class="eyebrow accent" style="color:${tagCol}">${esc(tag.toUpperCase())}</div>
+      <div id="sbName" style="color:${col}">${esc(skill)}</div>
+      <div id="sbSub">${esc(def.name)} · ${esc(h.name)}</div>
+      <div class="sb-section"><div class="sb-stats" id="sbStats">${info.stats.map(s=>
+        `<div class="sb-stat"><div class="n">${esc(String(s.n))}</div><div class="l">${esc(s.l)}</div></div>`).join('')}</div></div>
+      <div class="sb-section">
+        <div class="eyebrow">LATEST ACTIVITY</div>
+        <div id="sbList">${sbActsHTML(info)}</div>
+      </div>
+      <div class="sb-section">
+        <div class="eyebrow">RECENT LOG</div>
+        <pre class="sb-log" id="sbLog">${esc(logLines(h))}</pre>
+      </div>
+    `);
+    openPanel();
+  }
+  function openPlaceholderSkill(D,skill){
+    const def=D.def,col=hex(blendGray(def.color,.5));
+    sbOpenDi=D.di;sbOpenHubId=null;sbOpenSkill=null;sbMode='placeholder';
+    swapSidebar(`
+      <div class="eyebrow">NOT YET BUILT</div>
+      <div id="sbName" style="color:${col}">${esc(skill)}</div>
+      <div id="sbSub">${esc(def.name)}</div>
+      <div class="sb-desc">This role isn't built yet — available as a future Sailz agent for ${esc(def.name)}.</div>
+    `);
+    openPanel();
+  }
+  function openPanel(){
+    sidebar.classList.add('show');sbOpen=true;sbShiftT=1;
+    document.getElementById('sbList')?.addEventListener('click',onApproveClick);
+  }
+  async function onApproveClick(e){
+    const btn=e.target.closest('.approve-btn');if(!btn)return;
+    await api('/api/claims/'+btn.dataset.claim+'/approve');
+    await refreshRealData();
+  }
+  function closeSidebar(){
+    if(!sbOpen)return;
+    sidebar.classList.remove('show');sbOpen=false;sbShiftT=0;
+    sbOpenDi=-1;sbOpenHubId=null;sbOpenSkill=null;sbMode=null;
+    setNodeHalo(null,null);
+  }
+  $("sbClose").onclick=closeSidebar;
+
+  /* ============================ tabs / views (real data) ===================== */
+  let view='map';
+  const views={dash:document.getElementById('viewDash'),work:document.getElementById('viewWork')};
+  function setView(v){
+    view=v;
+    document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
+    views.dash.classList.toggle('show',v==='dash');
+    views.work.classList.toggle('show',v==='work');
+    if(v!=='map')closeSidebar();
+  }
+  document.querySelectorAll('#tabs button').forEach(b=>{b.onclick=()=>{
+    if(b.dataset.v==='map'&&view==='map'){exitFocus();return}
+    setView(b.dataset.v);
+  }});
+
+  const deptIndexByHubId={};
+  HUB_IDS.forEach(id=>{deptIndexByHubId[id]=depts.findIndex(D=>D.def.name===AGENT_DEPT[id])});
+  const deptColorByHubId={};
+  HUB_IDS.forEach(id=>{const di=deptIndexByHubId[id];deptColorByHubId[id]=di>=0?depts[di].def.color:0x8f8f8f});
+
+  function renderDash(){
+    const find=(id,label)=>{const h=agentData[id];const s=(h?.todayStats||[]).find(x=>x.label===label);return s?Number(s.value)||0:0};
+    const callsAnswered=find('receptionist','Calls answered today');
+    const callsPlaced=find('calling','Calls placed today');
+    const bookedIn=find('receptionist','Booked today');
+    const bookedOut=find('calling','Booked today');
+    const claimsAwaiting=find('billing','Awaiting approval');
+    const liveCount=HUB_IDS.filter(id=>agentData[id].status==='active'||agentData[id].status==='needs_review').length;
+    const kpis=[
+      {k:'Calls answered today',v:callsAnswered+callsPlaced,d:'inbound + outbound'},
+      {k:'Bookings made today',v:bookedIn+bookedOut,d:'inbound + outbound'},
+      {k:'Claims awaiting approval',v:claimsAwaiting,d:claimsAwaiting?'needs owner review':'all clear'},
+      {k:'Agents live',v:liveCount+' / '+HUB_IDS.length,d:'on right now'},
+    ];
+    document.getElementById('kpiCards').innerHTML=kpis.map(x=>
+      `<div class="card"><div class="k">${esc(x.k)}</div><div class="v">${esc(String(x.v))}</div><div class="dlt" style="color:var(--dim)">${esc(x.d)}</div></div>`).join('');
+    const maxToday=Math.max(1,...HUB_IDS.map(id=>Number(agentData[id].todayStats?.[0]?.value)||0));
+    document.getElementById('actRows').innerHTML=HUB_IDS.map(id=>{
+      const h=agentData[id],col=hex(deptColorByHubId[id]);
+      const primary=h.todayStats?.[0]||{label:'Today',value:0};
+      const val=Number(primary.value)||0;
+      const pct=Math.max(4,Math.round((val/maxToday)*100));
+      return `<div class="row"><span class="dot" style="background:${col};box-shadow:0 0 8px ${col}"></span>
+        <span class="rn">${esc(h.name)}</span>
+        <span class="bar"><i style="width:${pct}%;background:${col}"></i></span>
+        <span class="rv">${esc(primary.label)}: ${esc(String(primary.value))}</span></div>`;
+    }).join('');
+  }
+  function renderWork(){
+    document.getElementById('wGrid').innerHTML=HUB_IDS.map(id=>{
+      const h=agentData[id],col=hex(deptColorByHubId[id]);
+      const sc=STATUS_COLOR[h.status]||'#6f6f74',st=STATUS_TEXT[h.status]||h.status;
+      const last=(h.recentActivity||[])[0];
+      return `<div class="wcard" data-hub="${id}">
+        <div class="wtop">
+          <div class="wglyph" style="border-color:${col};color:${col}">${h.glyph}</div>
+          <div><div class="wname">${esc(h.name)}</div><div class="wsub">${esc(AGENT_DEPT[id])} · ${esc(h.tagline||"")}</div></div>
+          <div class="wstatus" style="color:${sc}"><span class="dot" style="background:${sc};box-shadow:0 0 8px ${sc}"></span>${esc(st)}</div>
+        </div>
+        <div class="wstats">${(h.todayStats||[]).map(s=>`<div class="wstat"><div class="n">${esc(String(s.value))}</div><div class="l">${esc(s.label)}</div></div>`).join('')}</div>
+        <div class="wlast">${last?esc(last.summary)+' — '+fmtRelative(last.ts):'No activity yet.'}</div>
+      </div>`;
+    }).join('');
+    document.querySelectorAll('.wcard').forEach(c=>{
+      c.onclick=()=>{const di=deptIndexByHubId[c.dataset.hub];setView('map');if(di>=0)setTimeout(()=>focusDept(di),120)};
+    });
+  }
+  renderDash();renderWork();
+
+  async function refreshRealData(){
+    const details=await Promise.all(HUB_IDS.map(id=>api('/api/brain/agents/'+id)));
+    details.forEach(h=>{Object.assign(agentData[h.id],h)});
+    depts.forEach(D=>{
+      const reals=Object.values(D.def.realDetails);
+      D.def.active=reals.some(h=>h.status==='active'||h.status==='needs_review');
+    });
+    if(view==='dash')renderDash();
+    if(view==='work')renderWork();
+    if(sbOpen&&sbMode==='skill'&&sbOpenHubId){
+      const info=realAgentInfo(agentData[sbOpenHubId]);
+      const statsEl=document.getElementById('sbStats'),listEl=document.getElementById('sbList'),logEl=document.getElementById('sbLog');
+      if(statsEl)statsEl.innerHTML=info.stats.map(s=>`<div class="sb-stat"><div class="n">${esc(String(s.n))}</div><div class="l">${esc(s.l)}</div></div>`).join('');
+      if(listEl)listEl.innerHTML=sbActsHTML(info);
+      if(logEl)logEl.textContent=logLines(agentData[sbOpenHubId]);
+    }
+  }
+  setInterval(refreshRealData,10000);
+
+  /* ------------------------------ ticker ------------------------------------ */
+  let t=0,lastSkillA=-1;
+  app.ticker.add(delta=>{
+    const dt=Math.min(delta/60,.05);
+    t+=dt;
+    let layoutDirty=false;
+
+    if(morphTween){
+      morphTween.t+=delta*16.7;
+      const k=easeInOut(Math.min(1,morphTween.t/morphTween.dur));
+      morph=morphTween.from+(morphTween.to-morphTween.from)*k;
+      if(morphTween.t>=morphTween.dur){morph=morphTween.to;morphTween=null}
+      layoutDirty=true;
+    }
+    if(tween){
+      tween.t+=delta*16.7;
+      const p=Math.min(1,tween.t/tween.dur);
+      const kZoom=tween.overshoot?easeOutBack(p):easeOutCubic(p);
+      const kPos=easeOutCubic(p);
+      cam.s=lerp(tween.from.s,tween.to.s,kZoom);
+      cam.x=lerp(tween.from.x,tween.to.x,kPos);
+      cam.y=lerp(tween.from.y,tween.to.y,kPos);
+      if(p>=1)tween=null;
+    }
+    const shiftGoal=sbShiftT*Math.min(230,app.screen.width*.15);
+    if(Math.abs(shiftGoal-sbShift)>.4)sbShift+=(shiftGoal-sbShift)*Math.min(1,dt*14);
+    applyCam();
+
+    if(layoutDirty){updateLayout();edgesDirty=true}
+    if(edgesDirty){redrawEdges();edgesDirty=false}
+
+    // spotlight: while a department is focused, only IT stays fully lit —
+    // every other department (already sitting in its own strip slot)
+    // fades to a faint ghost, giving the "cleanly showcased, only one
+    // tree visible at a time" look. In ring view (nothing focused), the
+    // same mechanism drives the fast hover spotlight instead.
+    const highlightTarget=focused>=0?focused:hoverDept;
+    for(const D of depts){
+      const isTarget=highlightTarget<0||D.di===highlightTarget;
+      const targetA=isTarget?1:.08;
+      D._spot=D._spot===undefined?1:D._spot;
+      D._spot+=(targetA-D._spot)*Math.min(1,dt*10);
+      D.hub.alpha=D._spot;
+      D.nm.alpha=D._spot;D.sb.alpha=D._spot;
+      D.ghost.alpha=D.ghostBase*Math.max(.3,D._spot);
+      for(const NN of D.nodes)NN.cont.alpha=D._spot;
+    }
+    edgesDirty=true;
+
+    const s=cam.s,m=morph;
+    const deptA=Math.max(clamp01((1.5-s)/.6)*(1-m),m);
+    const skillA=Math.max(clamp01((s-1.2)/.7),m*.9);
+    layerDeptTx.alpha=deptA;
+    layerLabels.alpha=1; // per-node label alpha (hover-only) drives visibility now
+    layerGhost.alpha=.3+.35*clamp01((s-.8)/1.3);
+    updatePieGlow();
+    if(Math.abs(skillA-lastSkillA)>.01){
+      for(const D of depts)for(const N of D.nodes)N.iconC.alpha=skillA;
+      lastSkillA=skillA;
+    }
+
+    for(const D of depts){
+      D.hubGlow.alpha=D.def.active?.5+Math.sin(t*1.4+D.hubPh)*.35:.15;
+    }
+    // only actively-running real nodes get a per-frame pulse; everything
+    // else is a static alpha set once at construction — the main lag fix.
+    for(const D of depts)for(const N of D.nodes){
+      if(N.isReal&&N.runningNow)N.glow.alpha=(.75+Math.sin(t*1.6+N.idx)*.15)*N.dim;
+    }
+
+    // core: gentle static-position shimmer only (alpha, not xy) — cheap.
+    coreHaze.alpha=.24+Math.sin(t*.6)*.05;
+    if(Math.floor(t*20)%3===0)for(const p of coreDust){p.alpha=p._base.alpha*(0.85+0.15*Math.sin(t*1.1+p._base.x*.05))}
+
+    // bloom flash timed to the dive/settle transition
+    if(bloomT>0){
+      bloomT-=dt/0.45;
+      const b=Math.max(0,bloomT);
+      layerFlash.alpha=Math.sin(Math.PI*clamp01(1-b))*.35*clamp01(b*3);
     }
   });
-}
 
-function initGraph() {
-  tooltip = $("tooltip");
-  Graph = ForceGraph()($("graph"))
-    .backgroundColor("#FAFAF8")
-    .nodeId("id")
-    .linkSource("source")
-    .linkTarget("target")
-    .d3AlphaDecay(0.03)
-    .d3VelocityDecay(0.4)
-    .warmupTicks(100)
-    .cooldownTime(3000)
-    .linkColor((l) => (l.kind === "handoff" ? "rgba(17,17,17,0.28)" : "rgba(100,116,139,0.20)"))
-    .linkWidth((l) => (l.kind === "handoff" ? 1.6 : 0.6))
-    .linkDirectionalParticles((l) => (l.kind === "handoff" || l.kind === "spoke" ? 2 : 0))
-    .linkDirectionalParticleWidth((l) => (l.kind === "spoke" ? 2 : 2.4))
-    .linkDirectionalParticleColor((l) => (l.kind === "spoke" ? "rgba(30,58,138,0.55)" : "rgba(17,17,17,0.5)"))
-    .linkDirectionalParticleSpeed(0.006)
-    .nodeCanvasObject(paintNode)
-    .onNodeHover(onHover)
-    .onNodeClick(onClick)
-    .onBackgroundClick(() => { closeInspector(); });
-
-  Graph.d3Force("charge").strength((n) => (n.type === "clinic" || n.type === "agent" ? -40 : -90));
-  Graph.d3Force("link").distance((l) => (l.kind === "handoff" ? HUB_RADIUS : l.kind === "spoke" ? HUB_RADIUS : 30));
-  Graph.onEngineStop(() => Graph.zoomToFit(400, 90));
-  [300, 1000, 2500].forEach((ms) => setTimeout(() => Graph.zoomToFit(300, 90), ms));
-
-  window.addEventListener("resize", () => Graph.width(window.innerWidth).height(window.innerHeight));
-  window.addEventListener("mousemove", (e) => {
-    tooltip.style.left = (e.clientX + 14) + "px";
-    tooltip.style.top = (e.clientY - 10) + "px";
-  });
-}
-
-function paintNode(node, ctx, globalScale) {
-  if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
-  const dimmed = hoveredNode && !neighbors.has(node.id) && node.id !== hoveredNode.id;
-  const alpha = dimmed ? 0.12 : 1;
-
-  if (node.type === "clinic") {
-    const size = 22;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = "rgba(14,165,233,0.45)"; ctx.shadowBlur = 22;
-    const grad = ctx.createRadialGradient(node.x, node.y, 1, node.x, node.y, size);
-    grad.addColorStop(0, "#1E3A8A"); grad.addColorStop(1, "#0EA5E9");
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(node.x, node.y, size, 0, 2 * Math.PI); ctx.fill();
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.font = "20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("⛵", node.x, node.y + 1);
-    ctx.restore();
-    if (globalScale > 0.35) drawLabel(ctx, node.x, node.y + size + 16, node.name, alpha, 14, true, "#111");
-    return;
-  }
-
-  if (node.type === "agent") {
-    const size = 19;
-    const active = node.status === "active";
-    const t = window.__brainT || 0;
-    const pulse = active ? 1 + 0.1 * Math.sin(t / 18) : 1;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = node.color; ctx.shadowBlur = active ? 28 : 16;
-    const grad = ctx.createRadialGradient(node.x, node.y, 1, node.x, node.y, size * pulse);
-    grad.addColorStop(0, node.color); grad.addColorStop(1, shade(node.color, -18));
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(node.x, node.y, size * pulse, 0, 2 * Math.PI); ctx.fill();
-    ctx.strokeStyle = node.id === selectedAgent ? "#111" : "#fff";
-    ctx.lineWidth = node.id === selectedAgent ? 3 : 2.5; ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "#fff"; ctx.font = "15px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(node.glyph, node.x, node.y + 1);
-    ctx.restore();
-    if (globalScale > 0.35) drawLabel(ctx, node.x, node.y + size * pulse + 16, node.name, alpha, 13, true, "#111");
-    return;
-  }
-
-  if (node.type === "workflow") { drawGlowDot(ctx, node, 4, "#D9A441", alpha); return; }
-
-  if (node.type === "tool") {
-    const size = 5;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = "#F4F4F2";
-    roundRect(ctx, node.x - size, node.y - size, size * 2, size * 2, 2); ctx.fill();
-    ctx.strokeStyle = node.connected ? (node.color || "#8A8A86") : "rgba(138,138,134,0.5)";
-    ctx.lineWidth = 1.2; ctx.stroke();
-    ctx.restore();
-    if (globalScale > 1.6) drawLabel(ctx, node.x, node.y + 11, node.name, alpha * 0.85, 9, false, "#52514E");
-    return;
-  }
-
-  if (node.type === "event") { drawGlowDot(ctx, node, 2.4, node.color, alpha * 0.7); return; }
-
-  if (node.type === "patient") {
-    ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = "#C9C9C6";
-    ctx.beginPath(); ctx.arc(node.x, node.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
-    if (globalScale > 1.4) drawLabel(ctx, node.x, node.y + 10, node.name, alpha * 0.85, 9, false, "#52514E");
-    return;
-  }
-}
-
-function onHover(node) {
-  hoveredNode = node;
-  neighbors = new Set();
-  if (node) {
-    graphData.links.forEach((l) => {
-      const s = typeof l.source === "object" ? l.source.id : l.source;
-      const t = typeof l.target === "object" ? l.target.id : l.target;
-      if (s === node.id) neighbors.add(t);
-      if (t === node.id) neighbors.add(s);
+  /* ------------------------------- intro ------------------------------------ */
+  updateLayout();redrawEdges();
+  document.fonts.ready.then(()=>{
+    applyCam();
+    requestAnimationFrame(()=>{
+      document.getElementById('fader').style.opacity=0;
+      fitAll();
     });
-    tooltip.textContent = node.name || node.type;
-    tooltip.style.opacity = 1;
-    document.body.style.cursor = "pointer";
-  } else {
-    tooltip.style.opacity = 0;
-    document.body.style.cursor = "default";
-  }
+  });
+  window.addEventListener('resize',applyCam);
 }
 
-function onClick(node) {
-  if (node.type === "agent") {
-    selectedAgent = node.id;
-    Graph.centerAt(node.x, node.y, 600);
-    Graph.zoom(2.1, 600);
-    openInspector(node.id);
-  } else if (node.type === "clinic") {
-    closeInspector();
-    Graph.zoomToFit(500, 90);
-  }
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-function drawGlowDot(ctx, node, r, color, alpha) {
-  ctx.save(); ctx.globalAlpha = alpha; ctx.shadowColor = color; ctx.shadowBlur = 7;
-  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(node.x, node.y, r, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
-}
-function drawLabel(ctx, x, y, text, alpha, size, bold, color) {
-  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = color || "#52514E";
-  ctx.font = `${bold ? 700 : 400} ${size}px Archivo, sans-serif`;
-  ctx.textAlign = "center"; ctx.fillText(text, x, y); ctx.restore();
-}
-function shade(hex, percent) {
-  const num = parseInt(hex.slice(1), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.max(0, Math.min(255, (num >> 16) + amt));
-  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) + amt));
-  const B = Math.max(0, Math.min(255, (num & 0x0000ff) + amt));
-  return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
-}
-
-async function refreshGraph() {
-  const d = await api("/api/brain/graph");
-  $("statsline").textContent = `Agents: ${d.stats.agents} · Actions this week: ${d.stats.actionsThisWeek} · Connections: ${d.stats.connections}`;
-  pinRadialBackbone(d.nodes);
-  // spoke edges are agent -> clinic, so directional particles read as
-  // "the agents feed the center" rather than the center broadcasting out
-  d.links.forEach((l) => { if (l.kind === "spoke") { const t = l.target; l.target = l.source; l.source = t; } });
-  graphData = d;
-  Graph.graphData(d);
-  if (selectedAgent && $("inspector").classList.contains("open")) refreshInspector(selectedAgent);
-}
-
-async function openInspector(agentId) {
-  $("inspector").classList.add("open");
-  await refreshInspector(agentId);
-}
-function closeInspector() {
-  selectedAgent = null;
-  $("inspector").classList.remove("open");
-}
-
-async function refreshInspector(agentId) {
-  const a = await api("/api/brain/agents/" + agentId);
-  $("insAvatar").style.background = a.color;
-  $("insAvatar").textContent = a.glyph;
-  $("insName").textContent = a.name;
-  $("insStatusDot").style.background = STATUS_COLOR[a.status] || "var(--muted)";
-  $("insStatusLabel").textContent = STATUS_TEXT[a.status] || a.status;
-  $("insStatusLabel").style.color = STATUS_COLOR[a.status] || "var(--muted)";
-
-  $("insStats").innerHTML = a.todayStats.map((s) => `<div class="stat-row"><span>${esc(s.label)}</span><span class="v">${esc(String(s.value))}</span></div>`).join("");
-
-  $("insWorkflows").innerHTML = a.workflows.map((w) => `<div class="wf-row"><span class="wf-dot"></span>${esc(w)}</div>`).join("");
-
-  $("insTools").innerHTML = a.tools.map((t) => `<span class="chip ${t.connected ? "connected" : ""}">${t.connected ? "✓ " : ""}${esc(t.name)}</span>`).join("") || `<span class="empty">No tools configured</span>`;
-
-  $("insActivity").innerHTML = a.recentActivity.map((ev) => `
-    <div class="activity-row">
-      <div class="summary">${esc(ev.summary)}</div>
-      <div class="meta"><span class="ts">${fmtRelative(ev.ts)}</span><span class="status-pill">${esc(ev.status || "")}</span></div>
-      ${ev.status === "awaiting_approval" && ev.id ? `<button class="primary approve-btn" onclick="approveFromInspector('${ev.id}')">Approve &amp; submit</button>` : ""}
-    </div>`).join("") || `<div class="empty">Nothing yet.</div>`;
-}
-
-async function approveFromInspector(claimId) {
-  if (!claimId) return;
-  await api(`/api/claims/${claimId}/approve`, { method: "POST" });
-  refreshGraph();
-}
-
-async function boot() {
-  const me = await api("/api/dashboard");
-  $("clinicName").textContent = me.settings.clinicName;
-  initGraph();
-  Graph.width(window.innerWidth).height(window.innerHeight);
-  await refreshGraph();
-  setInterval(refreshGraph, 10000);
-  (function tick(){ window.__brainT = (window.__brainT || 0) + 1; requestAnimationFrame(tick); })();
-}
-
-if (token) {
-  $("login").classList.add("hidden"); $("app").classList.remove("hidden");
-  boot().catch(() => {});
+if(token){
+  $("login").classList.add("hidden");$("app").classList.remove("hidden");
+  boot().catch(err=>console.error(err));
 }
 </script>
 </body>
