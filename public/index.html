@@ -9,13 +9,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
   :root{--bg:#0a0a0d;--ink:#e8e6e0;--dim:#6b6b72;--accent:#c9a066;--panel:#111114;--line:rgba(232,230,224,.08);--glass:rgba(13,13,15,.9)}
+  :root[data-theme="light"]{--bg:#ffffff;--ink:#17140f;--dim:#7a756c;--accent:#a8763f;--panel:#f4f2ec;--line:rgba(20,18,12,.1);--glass:rgba(255,255,255,.92)}
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);font-family:'Inter',sans-serif;
-    -webkit-user-select:none;user-select:none}
+    -webkit-user-select:none;user-select:none;transition:background-color .3s ease}
   canvas{display:block;position:absolute;inset:0}
   .hidden{display:none!important}
   .vignette{position:fixed;inset:0;pointer-events:none;z-index:2;
     background:radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0,0,0,.5) 100%)}
+  :root[data-theme="light"] .vignette{background:radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0,0,0,.06) 100%)}
   button{font-family:inherit}
+  #themeVeil{position:fixed;inset:0;z-index:9999;background:#0a0a0d;opacity:0;pointer-events:none;transition:opacity .28s ease}
+  #themeVeil.show{opacity:1}
+  .theme-btn{position:relative;width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,255,255,.07);
+    background:rgba(14,14,15,.85);color:#77777c;cursor:pointer;font-size:13px;display:flex;
+    align-items:center;justify-content:center;transition:color .2s}
+  .theme-btn:hover{color:#f0ead8}
 
   /* ---------- top chrome ---------- */
   #topbar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;
@@ -29,9 +37,9 @@
   .tabs button{appearance:none;border:0;background:transparent;color:var(--dim);cursor:pointer;
     font:600 10px 'Inter';letter-spacing:.2em;text-transform:uppercase;padding:8px 16px;border-radius:999px;
     transition:color .15s,background .15s}
-  .tabs button.active{background:var(--ink);color:#111}
+  .tabs button.active{background:var(--ink);color:var(--bg)}
   .tabs button:not(.active):hover{color:var(--ink)}
-  .tb-right{display:flex;align-items:center;gap:10px}
+  .tb-right{display:flex;align-items:center;gap:10px;margin-left:auto}
   #navInfo{display:none;text-align:right;font:500 9px 'Inter';letter-spacing:.18em;color:var(--dim);text-transform:uppercase;
     line-height:1.6}
   #navInfo.show{display:block}
@@ -55,7 +63,7 @@
   #sideRight{right:16px}
 
   .brand{position:fixed;left:20px;bottom:56px;z-index:10;pointer-events:none;transition:opacity .2s}
-  .brand .t{font-family:'Cormorant Garamond',serif;font-size:16px;letter-spacing:.24em;color:#cfc7ad;text-transform:uppercase}
+  .brand .t{font-family:'Cormorant Garamond',serif;font-size:16px;letter-spacing:.24em;color:var(--ink);text-transform:uppercase;transition:color .3s ease}
   .brand .s{font:500 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-top:4px}
   .tip{position:fixed;z-index:45;pointer-events:none;background:var(--glass);
     border:1px solid rgba(232,230,224,.14);border-radius:8px;padding:7px 11px;opacity:0;
@@ -137,7 +145,7 @@
   .sb-item .ts{font:500 9px 'JetBrains Mono',monospace;color:#5d5d63;margin-right:8px}
   .approve-btn{margin-top:6px;padding:5px 12px;border-radius:999px;border:1px solid var(--ink);
     background:transparent;color:var(--ink);font:600 8.5px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
-  .approve-btn:hover{background:var(--ink);color:#111}
+  .approve-btn:hover{background:var(--ink);color:var(--bg)}
   .sb-log{font:400 9.5px 'JetBrains Mono',monospace;color:#8a856f;background:rgba(0,0,0,.35);
     border:1px solid var(--line);border-radius:10px;padding:12px;line-height:1.75;max-height:140px;
     overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin:0}
@@ -161,7 +169,7 @@
     background:rgba(255,255,255,.03);color:var(--ink);font:400 13px 'Inter'}
   #login .err{color:#e08a7a;font:500 11px 'Inter';margin-bottom:10px;min-height:14px}
   #login button{width:100%;padding:12px;border-radius:999px;border:1px solid var(--ink);
-    background:var(--ink);color:#111;font:700 11px 'Inter';letter-spacing:.14em;
+    background:var(--ink);color:var(--bg);font:700 11px 'Inter';letter-spacing:.14em;
     text-transform:uppercase;cursor:pointer}
 
   /* ---------- notification bell (design tokens match public/brain.html) ---------- */
@@ -172,7 +180,7 @@
   .bell-btn:hover{color:#f0ead8}
   .bell-badge{position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;
     background:#e0673f;color:#0b0c0a;font:700 9px 'Inter';display:flex;align-items:center;justify-content:center;line-height:1}
-  .bell-drop{position:absolute;top:44px;right:0;width:340px;max-height:420px;overflow-y:auto;
+  .bell-drop{position:absolute;top:44px;right:0;width:min(340px,88vw);max-height:420px;overflow-y:auto;
     background:rgba(13,13,15,.88);border:1px solid rgba(240,234,216,.09);border-radius:14px;
     opacity:0;pointer-events:none;transform:translateY(-8px);
     transition:opacity .22s cubic-bezier(.22,1,.36,1), transform .22s cubic-bezier(.22,1,.36,1);z-index:50}
@@ -219,9 +227,32 @@
   .chat-send:hover{background:rgba(240,234,216,.14)}
   .chat-send:disabled{opacity:.5;cursor:default}
   .chat-empty{padding:24px 0;text-align:center;font:400 11px 'Inter';color:#77777c}
+
+  /* ---------- mobile / narrow-viewport chrome ---------- */
+  @media (max-width:640px){
+    #topbar{padding:12px 12px;flex-wrap:wrap;row-gap:8px}
+    .tabs{position:static;left:auto;top:auto;transform:none;gap:2px}
+    .tabs button{padding:6px 9px;font-size:8.5px}
+    .tb-right{gap:6px}
+    .bell-btn,.theme-btn{width:28px;height:28px;font-size:11px}
+    .brand{left:12px;bottom:48px}
+    .brand .t{font-size:13px}
+    .brand .s{font-size:8px}
+    #sideLeft{left:6px}#sideRight{right:6px}
+    .side-label{font-size:9px}
+    #sidebar{width:100vw}
+    #chatDrawer{width:100vw}
+    .tip{max-width:70vw}
+    .view h1{font-size:22px}
+    #crumbBack.show ~ .tabs{display:none}
+  }
+  @media (max-width:640px) and (orientation:landscape){
+    #sidebar,#chatDrawer{width:min(420px,86vw)}
+  }
 </style>
 </head>
 <body>
+<script>if(localStorage.getItem('sailz-theme')==='light')document.documentElement.dataset.theme='light';</script>
 
 <div id="login">
   <div class="card">
@@ -246,6 +277,7 @@
     <button data-v="work">Chart</button>
   </div>
   <div class="tb-right">
+    <button class="theme-btn" id="themeBtn" title="Toggle light/dark">☾</button>
     <button class="bell-btn" id="chatBtn" title="Chat with the brain">💬</button>
     <div class="bell-wrap" id="bellWrap">
       <button class="bell-btn" id="bellBtn" title="Needs attention">🔔<span class="bell-badge" id="bellBadge" style="display:none">0</span></button>
@@ -307,6 +339,7 @@
 </aside>
 
 <div class="fader" id="fader"></div>
+<div id="themeVeil"></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
@@ -405,6 +438,13 @@ function blendGray(colorInt,factor){
   return (nr<<16)|(ng<<8)|nb;
 }
 
+// Long workflow/skill names shouldn't sprawl across the canvas — the full
+// name is always available in the DOM tooltip on hover, so the in-canvas
+// label can stay short.
+function truncateLabel(s,maxLen){
+  return s.length>maxLen ? s.slice(0,maxLen-1).trimEnd()+'…' : s;
+}
+
 /* agentData: hubId -> live detail object, mutated in place on refresh so
    every reference to it (dept.realDetails, dashboard, workforce, sidebar)
    stays in sync without rebuilding the map. */
@@ -473,7 +513,7 @@ async function boot(){
   world.eventMode='static';
   app.stage.addChild(world);
   const layerStars=new PIXI.Container();
-  const layerPie=new PIXI.Graphics();
+  const layerPie=new PIXI.Container();
   const layerGhost=new PIXI.Container();
   const layerCore=new PIXI.Container();
   const layerFlash=new PIXI.Sprite();
@@ -500,6 +540,12 @@ async function boot(){
     return PIXI.Texture.from(c);
   }
   const GLOW=makeGlow(128);
+  // department "light up" glow: a soft translucent radial light in the
+  // hovered/focused department's own color, replacing the old pie-slice
+  // wedge fill — reads as a light source, not a geometric sector.
+  const pieGlow=new PIXI.Sprite(GLOW);
+  pieGlow.anchor.set(.5);pieGlow.blendMode=PIXI.BLEND_MODES.ADD;pieGlow.alpha=0;
+  layerPie.addChild(pieGlow);
   function makeDot(size){
     const c=document.createElement('canvas');c.width=c.height=size;
     const g=c.getContext('2d');
@@ -542,6 +588,54 @@ async function boot(){
     coreDust.push(p);layerCore.addChild(p);
   }
 
+  /* ------------------------------ theme (dark/light) ------------------------ */
+  // Neutral (theme-dependent) colors for canvas elements — department accent
+  // colors themselves stay constant across themes, only the grays/blacks/
+  // whites that read as "ink" flip.
+  const PAL={
+    dark:{bg:0x0a0a0d,ink:0xe9e2cd,dim:0x6f6f74,ghost:0xe8e6e0,leafDim:0xb9b3a0,
+      hubFill:0x0c0c0e,coreDot:0xfdf9ee,shadowDot:0xa8a398,iconDiscFill:0x0b0b0d,
+      chipFill:0x08080a,chipAlpha:.62,starAlpha:1},
+    light:{bg:0xffffff,ink:0x18150f,dim:0x8a8578,ghost:0x141210,leafDim:0x5c5648,
+      hubFill:0xf3f1ea,coreDot:0x18150f,shadowDot:0x4a463c,iconDiscFill:0xf3f1ea,
+      chipFill:0xf3f1ea,chipAlpha:.72,starAlpha:.22},
+  };
+  let theme=localStorage.getItem('sailz-theme')==='light'?'light':'dark';
+  app.renderer.background.color=PAL[theme].bg;
+  layerStars.alpha=PAL[theme].starAlpha;
+  function redrawChip(lb,chip){
+    const p=PAL[theme];
+    chip.clear();
+    chip.beginFill(p.chipFill,p.chipAlpha).drawRoundedRect(-lb.width/2-6,-3,lb.width+12,lb.height+6,6).endFill();
+  }
+  function redrawHubFill(gfx){
+    const p=PAL[theme];
+    gfx.clear();gfx.beginFill(p.hubFill,.94).drawCircle(0,0,15).endFill();
+  }
+  function redrawIdisc(gfx,deptColor){
+    const p=PAL[theme];
+    gfx.clear();
+    gfx.beginFill(p.iconDiscFill,.94).drawCircle(0,0,10).endFill();
+    gfx.lineStyle(1,deptColor,.6).drawCircle(0,0,10);
+  }
+  function applyPixiTheme(){
+    const p=PAL[theme];
+    app.renderer.background.color=p.bg;
+    layerStars.alpha=p.starAlpha;
+    for(const D of depts){
+      D.nm.style.fill=D.def.active?p.ink:p.dim;
+      D.sb.style.fill=p.dim;
+      D.ghost.style.fill=p.ghost;
+      redrawHubFill(D.hFill);
+      for(const N of D.nodes){
+        N.core.tint=N.shadowed?p.shadowDot:p.coreDot;
+        redrawIdisc(N.idisc,D.def.color);
+        N.lb.style.fill=p.leafDim;
+        redrawChip(N.lb,N.lblChip);
+      }
+    }
+  }
+
   /* ----------------------------- build depts (clean ring) ------------------- */
   const N_DEPT=DEPT_DEFS.length;
   const STRIP_GAP=620;
@@ -556,7 +650,7 @@ async function boot(){
     const D={def,di,ringAngle,ringX,ringY,stripX,nodes:[],edges:[]};
 
     D.ghost=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontSize:74,fontWeight:'500',
-      fill:0xe8e6e0,letterSpacing:16});
+      fill:PAL[theme].ghost,letterSpacing:16});
     D.ghost.anchor.set(.5);D.ghostBase=def.active?.02:.008;D.ghost.alpha=D.ghostBase;
     layerGhost.addChild(D.ghost);
 
@@ -564,7 +658,7 @@ async function boot(){
     const hub=new PIXI.Container();
     const hGlow=new PIXI.Sprite(GLOW);hGlow.anchor.set(.5);hGlow.tint=hubColor;
     hGlow.scale.set(1.1);hGlow.alpha=.5;
-    const hFill=new PIXI.Graphics();hFill.beginFill(0x0c0c0e,.94).drawCircle(0,0,15).endFill();
+    const hFill=new PIXI.Graphics();redrawHubFill(hFill);
     const hRing=new PIXI.Graphics();
     hRing.lineStyle(1.4,hubColor,def.active?.9:.4).drawCircle(0,0,16);
     hRing.lineStyle(1,hubColor,def.active?.25:.1).drawCircle(0,0,22);
@@ -576,13 +670,13 @@ async function boot(){
     hub.on('pointerover',()=>{setHoverTarget(di);showTip(def.name,def.sub,hub)});
     hub.on('pointerout',()=>{setHoverTarget(-1);hideTip()});
     layerNodes.addChild(hub);
-    D.hub=hub;D.hubGlow=hGlow;D.hubPh=di*1.7;
+    D.hub=hub;D.hubGlow=hGlow;D.hubPh=di*1.7;D.hFill=hFill;
 
-    D.nm=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontWeight:'600',fontSize:26,
-      fill:def.active?0xe9e2cd:0x6f6f74,letterSpacing:9});
+    D.nm=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontWeight:'600',fontSize:16,
+      fill:def.active?PAL[theme].ink:PAL[theme].dim,letterSpacing:6});
     D.nm.anchor.set(.5,0);
-    D.sb=new PIXI.Text(def.sub.toUpperCase(),{fontFamily:'Inter',fontWeight:'500',fontSize:8,
-      fill:0x6b6b72,letterSpacing:3.5});
+    D.sb=new PIXI.Text(def.sub.toUpperCase(),{fontFamily:'Inter',fontWeight:'500',fontSize:6.5,
+      fill:PAL[theme].dim,letterSpacing:2.6});
     D.sb.anchor.set(.5,0);
     layerDeptTx.addChild(D.nm,D.sb);
 
@@ -606,31 +700,41 @@ async function boot(){
       const rad=7;
       g.scale.set(rad/16);g.alpha=(.75+.15*(isReal&&runningNow?1:0))*nodeDim;
       const core=new PIXI.Sprite(DOT);core.anchor.set(.5);
-      core.scale.set(rad/22);core.tint=shadowed?0xa8a398:0xfdf9ee;
+      core.scale.set(rad/22);core.tint=shadowed?PAL[theme].shadowDot:PAL[theme].coreDot;
       const iconC=new PIXI.Container();
       const idisc=new PIXI.Graphics();
-      idisc.beginFill(0x0b0b0d,.94).drawCircle(0,0,10).endFill();
-      idisc.lineStyle(1,def.color,.6).drawCircle(0,0,10);
+      redrawIdisc(idisc,def.color);
       const iglyph=new PIXI.Text(ICONS[iconIdx++%ICONS.length],{fontFamily:'Inter',fontSize:9,fill:def.color});
       iglyph.anchor.set(.5,.54);
       iconC.addChild(idisc,iglyph);iconC.alpha=0;
       const haloRing=new PIXI.Graphics();
       haloRing.lineStyle(2,0xffffff,.9).drawCircle(0,0,rad+6);haloRing.alpha=0;
       node.addChild(g,core,iconC,haloRing);
-      const lb=new PIXI.Text(skill.toUpperCase(),{fontFamily:'Inter',fontWeight:'500',fontSize:7.5,
-        fill:0xb9b3a0,letterSpacing:2});
-      lb.anchor.set(.5,0);lb.alpha=0; // names only reveal on hover — never clutter by default
-      layerLabels.addChild(lb);
 
-      const N={cont:node,glow:g,iconC,haloRing,label:lb,branchFrac,forkOffset,dist,dim:nodeDim,isReal,runningNow};
+      // label: small, truncated (full name is always in the DOM tooltip), on
+      // a soft "undershadow" backing chip so a long name never reads as
+      // raw text sitting on top of busy branch lines. Hidden by default,
+      // revealed only on hover — the map stays clean at rest.
+      const shortSkill=truncateLabel(skill.toUpperCase(),22);
+      const lb=new PIXI.Text(shortSkill,{fontFamily:'Inter',fontWeight:'500',fontSize:6.5,
+        fill:PAL[theme].leafDim,letterSpacing:1.3});
+      lb.anchor.set(.5,0);
+      const lblChip=new PIXI.Graphics();
+      const lblWrap=new PIXI.Container();
+      lblWrap.addChild(lblChip,lb);
+      lblWrap.alpha=0; // names only reveal on hover — never clutter by default
+      layerLabels.addChild(lblWrap);
+      requestAnimationFrame(()=>redrawChip(lb,lblChip));
+
+      const N={cont:node,glow:g,iconC,haloRing,label:lblWrap,lb,lblChip,lblW:()=>lb.width,branchFrac,forkOffset,dist,dim:nodeDim,isReal,runningNow,core,idisc,shadowed};
 
       node.eventMode='static';node.cursor='pointer';node.hitArea=new PIXI.Circle(0,0,15);
       node.on('pointertap',()=>{
         if(dragDist>=6)return;
         selectAgentNode(di,N,skill);
       });
-      node.on('pointerover',()=>{setHoverTarget(di);showTip(skill,def.name,node);lb.alpha=1});
-      node.on('pointerout',()=>{setHoverTarget(-1);hideTip();lb.alpha=0});
+      node.on('pointerover',()=>{setHoverTarget(di);showTip(skill,def.name,node);lblWrap.alpha=1});
+      node.on('pointerout',()=>{setHoverTarget(-1);hideTip();lblWrap.alpha=0});
       layerNodes.addChild(node);
 
       D.nodes.push(N);
@@ -650,25 +754,17 @@ async function boot(){
     depts.push(D);
   });
 
-  // 7 equal pie-slice divider lines from the core — one along each
-  // boundary between adjacent departments, so the ring visibly reads as
-  // "the brain divided into 7 equal triangular sectors."
-  // No visible divider lines — instead, the hovered/focused department's
-  // whole pie-slice sector gets a soft glow fill, so the "7 equal slices"
-  // structure is felt (branches always stay inside their own slice) but
-  // is only ever shown as a highlight, never as static clutter.
+  // Hovered/focused department gets a soft translucent light-up glow in
+  // its own color, centered on its hub — an ambient light source, not a
+  // geometric pie-slice fill. No visible divider lines otherwise.
   function updatePieGlow(){
     const target=focused>=0?focused:hoverDept;
-    layerPie.clear();
-    if(target<0||morph>0.6)return;
+    if(target<0||morph>0.6){pieGlow.alpha=0;return}
     const D=depts[target];
-    const half=Math.PI/N_DEPT;
-    const r=RING_R+90;
-    layerPie.beginFill(D.def.color,.07*(1-morph/0.6));
-    layerPie.moveTo(CORE.x,CORE.y);
-    layerPie.arc(CORE.x,CORE.y,r,D.ringAngle-half,D.ringAngle+half);
-    layerPie.lineTo(CORE.x,CORE.y);
-    layerPie.endFill();
+    pieGlow.tint=D.def.color;
+    pieGlow.position.copyFrom(D.hub.position);
+    pieGlow.scale.set(5.2);
+    pieGlow.alpha=.4*(1-morph/0.6);
   }
 
   /* --------------------------- deterministic layout -------------------------- */
@@ -751,8 +847,15 @@ async function boot(){
   function tweenTo(s,x,y,dur,overshoot){
     tween={t:0,dur:dur||700,from:{...cam},to:{s,x,y},overshoot:overshoot||0};
   }
+  // idle ring view stays at exactly 100% on any viewport roomy enough to
+  // show it comfortably (desktop/tablet, unchanged from before) but shrinks
+  // to fit on narrow/short screens (phones) instead of overflowing them.
+  function idleScale(){
+    const w=app.screen.width,h=app.screen.height;
+    return Math.max(.48,Math.min(1,Math.min(w,h)/600));
+  }
   function fitAll(){
-    tweenTo(1,0,0,650,0); // idle ring view is always locked at exactly 100%
+    tweenTo(idleScale(),0,0,650,0);
   }
   function deptFocusScale(){
     const w=app.screen.width,h=app.screen.height;
@@ -1184,6 +1287,24 @@ async function boot(){
   });
   $("chatInput").addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'});
 
+  /* ------------------------------ theme toggle ------------------------------ */
+  $("themeBtn").textContent=theme==='light'?'☀':'☾';
+  $("themeBtn").onclick=async()=>{
+    const next=theme==='light'?'dark':'light';
+    const veil=$("themeVeil");
+    veil.style.background=PAL[next].bg===0xffffff?'#ffffff':'#0a0a0d';
+    veil.classList.add('show');
+    await new Promise(r=>setTimeout(r,290));
+    theme=next;
+    localStorage.setItem('sailz-theme',theme);
+    document.documentElement.dataset.theme=theme==='light'?'light':'';
+    applyPixiTheme();
+    $("themeBtn").textContent=theme==='light'?'☀':'☾';
+    await new Promise(r=>requestAnimationFrame(r));
+    veil.classList.remove('show');
+  };
+  applyPixiTheme();
+
   /* ------------------------------ ticker ------------------------------------ */
   let t=0,lastSkillA=-1;
   app.ticker.add(delta=>{
@@ -1221,15 +1342,24 @@ async function boot(){
     // tree visible at a time" look. In ring view (nothing focused), the
     // same mechanism drives the fast hover spotlight instead.
     const highlightTarget=focused>=0?focused:hoverDept;
+    const nothingActive=highlightTarget<0;
     for(const D of depts){
-      const isTarget=highlightTarget<0||D.di===highlightTarget;
+      const isTarget=!nothingActive&&D.di===highlightTarget;
       const targetA=isTarget?1:.08;
       D._spot=D._spot===undefined?1:D._spot;
       D._spot+=(targetA-D._spot)*Math.min(1,dt*10);
       D.hub.alpha=D._spot;
-      D.nm.alpha=D._spot;D.sb.alpha=D._spot;
       D.ghost.alpha=D.ghostBase*Math.max(.3,D._spot);
       for(const NN of D.nodes)NN.cont.alpha=D._spot;
+
+      // department heading/sub-heading: "undershadow" by default (dim, out
+      // of the way) so the ring doesn't read as 7 loud labels at once —
+      // hovering (or focusing) that department brings its name to full
+      // brightness, same reveal-on-hover language as the skill labels.
+      const targetTxtA=isTarget?1:(nothingActive?.34:.05);
+      D._txtSpot=D._txtSpot===undefined?.34:D._txtSpot;
+      D._txtSpot+=(targetTxtA-D._txtSpot)*Math.min(1,dt*10);
+      D.nm.alpha=D._txtSpot;D.sb.alpha=D._txtSpot;
     }
     edgesDirty=true;
 
@@ -1255,7 +1385,7 @@ async function boot(){
     }
 
     // core: gentle static-position shimmer only (alpha, not xy) — cheap.
-    coreHaze.alpha=.24+Math.sin(t*.6)*.05;
+    coreHaze.alpha=(theme==='light'?.09:.24)+Math.sin(t*.6)*(theme==='light'?.02:.05);
     if(Math.floor(t*20)%3===0)for(const p of coreDust){p.alpha=p._base.alpha*(0.85+0.15*Math.sin(t*1.1+p._base.x*.05))}
 
     // bloom flash timed to the dive/settle transition
@@ -1275,7 +1405,13 @@ async function boot(){
       fitAll();
     });
   });
-  window.addEventListener('resize',applyCam);
+  // Resizes (window resize, and — the common mobile case — a device
+  // rotation) re-fit the current view to the new viewport instead of just
+  // reapplying a now-stale scale/position.
+  window.addEventListener('resize',()=>{
+    applyCam();
+    if(focused<0)fitAll();else focusCamTarget(depts[focused]);
+  });
 }
 
 if(token){
