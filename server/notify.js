@@ -9,8 +9,12 @@ const { load, save, log } = require("./store");
 const calendarApi = require("./calendar");
 const { instance, messages } = require("./instance");
 
+// TWILIO_ACCOUNT_SID (always AC...) identifies the account in the request
+// path. TWILIO_SID/TWILIO_AUTH are the Basic Auth credential pair, which
+// Twilio accepts as either the Account SID + Auth Token, or an API Key SID
+// (SK...) + API Key Secret — both authenticate the same account.
 function hasTwilio() {
-  return !!(process.env.TWILIO_SID && process.env.TWILIO_AUTH && process.env.TWILIO_FROM);
+  return !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_SID && process.env.TWILIO_AUTH && process.env.TWILIO_FROM);
 }
 function hasResend() {
   return !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM);
@@ -24,7 +28,7 @@ async function sendSMS(to, body) {
   }
   try {
     const auth = Buffer.from(`${process.env.TWILIO_SID}:${process.env.TWILIO_AUTH}`).toString("base64");
-    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_SID}/Messages.json`, {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`, {
       method: "POST",
       headers: { Authorization: `Basic ${auth}`, "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ To: to, From: process.env.TWILIO_FROM, Body: body }),
