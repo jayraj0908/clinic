@@ -4,9 +4,7 @@ require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const { load, save, DB_PATH } = require("./store");
 const fs = require("fs");
-const path = require("path");
-
-const clinicProfile = JSON.parse(fs.readFileSync(path.join(__dirname, "knowledge-base", "clinic-profile.json"), "utf8"));
+const { instance, profile: clinicProfile } = require("./instance");
 
 if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
 const db = load();
@@ -20,7 +18,8 @@ db.users.push({
 });
 
 db.settings = {
-  clinicName: process.env.CLINIC_NAME || "Your Clinic",
+  clinicName: process.env.CLINIC_NAME || instance.name || "Your Clinic",
+  brandColor: instance.brandColor || "#c9a066",
   receptionistNumber: process.env.RECEPTIONIST_NUMBER || "(000) 000-0000",
   avgVisitValue: 405,
   receptionist: {
