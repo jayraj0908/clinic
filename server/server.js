@@ -270,6 +270,23 @@ app.post("/api/chat", auth, async (req, res) => {
   }
 });
 
+// ---------- calls ----------
+app.get("/api/calls", auth, (req, res) => {
+  const db = load();
+  const { filter, period } = req.query;
+  let calls = db.calls;
+  if (period === "today") {
+    const today = new Date().toDateString();
+    calls = calls.filter((c) => new Date(c.ts).toDateString() === today);
+  } else if (period === "week") {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    calls = calls.filter((c) => new Date(c.ts).getTime() >= weekAgo);
+  }
+  if (filter === "missed") calls = calls.filter((c) => c.outcome === "missed");
+  else if (filter === "booked") calls = calls.filter((c) => c.outcome === "booked");
+  res.json({ calls });
+});
+
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------
 
 function formatAvailability(out, dateISO) {
@@ -399,6 +416,8 @@ app.post("/webhooks/vapi", async (req, res) => {
   // end-of-call report → call record + booking
   const db = load();
   const analysis = m.analysis || {};
+  const durationSeconds = m.durationSeconds ?? m.duration ??
+    (m.startedAt && m.endedAt ? Math.round((new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime()) / 1000) : null);
   const call = {
     id: "C" + Date.now(),
     dir: m.call?.type === "outboundPhoneCall" ? "outbound" : "inbound",
@@ -406,6 +425,12 @@ app.post("/webhooks/vapi", async (req, res) => {
     summary: analysis.summary || m.summary || "Call completed",
     outcome: analysis.structuredData?.outcome || "completed",
     ts: new Date().toISOString(),
+    // Additive, defensively normalized like normalizeToolCall — Vapi's
+    // exact field names/nesting vary by plan/version, and any of these can
+    // legitimately be absent (e.g. recording disabled); null, never throw.
+    recordingUrl: m.recordingUrl ?? m.artifact?.recordingUrl ?? null,
+    transcript: m.transcript ?? m.artifact?.transcript ?? null,
+    durationSeconds: typeof durationSeconds === "number" && !Number.isNaN(durationSeconds) ? durationSeconds : null,
   };
   db.calls.unshift(call);
   const leadId = m.call?.metadata?.leadId;
