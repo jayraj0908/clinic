@@ -287,6 +287,43 @@ app.get("/api/calls", auth, (req, res) => {
   res.json({ calls });
 });
 
+// ---------- calendar ----------
+app.get("/api/calendar/events", auth, async (req, res) => {
+  const db = load();
+  const from = req.query.from || new Date().toISOString();
+  const to = req.query.to || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const google = await calendarApi.getEventsInRange(from, to);
+  const localAppts = db.appointments.filter((a) => a.time >= from && a.time <= to);
+  const localGoogleIds = new Set(localAppts.map((a) => a.googleEventId).filter(Boolean));
+  const events = localAppts.map((a) => ({
+    start: a.time,
+    end: a.time,
+    title: a.service || "Appointment",
+    patient: a.name || null,
+    service: a.service || null,
+    source: a.source === "AI line" ? "ai_line" : a.source || "manual",
+    status: a.status,
+    googleEventId: a.googleEventId || null,
+  }));
+  // Google events not already represented by a local appointment row —
+  // dedupe by googleEventId so an AI-booked event never shows twice.
+  for (const e of google.events) {
+    if (localGoogleIds.has(e.googleEventId)) continue;
+    events.push({ start: e.start, end: e.end, title: e.title, patient: null, service: null, source: "google", status: "confirmed", googleEventId: e.googleEventId });
+  }
+  res.json({ events, googleConnected: google.ok });
+});
+
+app.post("/api/calendar/block", auth, requireOwner, async (req, res) => {
+  const { startISO, endISO, reason } = req.body || {};
+  if (!startISO || !endISO) return res.status(400).json({ error: "startISO and endISO are required" });
+  const out = await calendarApi.blockTime({ startISO, endISO, reason });
+  if (!out.configured) return res.json({ blocked: false, reason: "Google Calendar isn't connected — nothing to block against." });
+  if (out.error) return res.status(502).json({ blocked: false, reason: out.error });
+  log("system", `${req.user.id} blocked ${startISO} – ${endISO}${reason ? " (" + reason + ")" : ""}`);
+  res.json({ blocked: true, eventId: out.eventId });
+});
+
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------
 
 function formatAvailability(out, dateISO) {

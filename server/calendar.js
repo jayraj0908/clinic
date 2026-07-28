@@ -185,4 +185,54 @@ async function bookAppointment({ name, phone, service, startISO, durationMinutes
   return { configured: true, eventId: data.id, htmlLink: data.htmlLink, startISO, endISO };
 }
 
-module.exports = { configured, getAvailability, bookAppointment, serviceDurationMinutes, clinicWindowFor, zonedTimeToISO, tz, parseTimeArg, isValidDateISO };
+// Lists events in range for the calendar view. Any failure — not
+// configured, or a live API error (revoked creds, network) — collapses to
+// the same { ok:false, events:[] } shape, so the caller has one fallback
+// path instead of two, and the calendar view degrades to local
+// appointments only rather than ever showing an error screen.
+async function getEventsInRange(fromISO, toISO) {
+  const cal = await client();
+  if (!cal) return { ok: false, events: [] };
+  try {
+    const { data } = await cal.events.list({
+      calendarId: calendarId(),
+      timeMin: fromISO,
+      timeMax: toISO,
+      singleEvents: true,
+      orderBy: "startTime",
+      maxResults: 250,
+    });
+    const events = (data.items || [])
+      .filter((e) => e.start && (e.start.dateTime || e.start.date))
+      .map((e) => ({
+        googleEventId: e.id,
+        title: e.summary || "Busy",
+        start: e.start.dateTime || e.start.date,
+        end: (e.end && (e.end.dateTime || e.end.date)) || e.start.dateTime || e.start.date,
+      }));
+    return { ok: true, events };
+  } catch (e) {
+    return { ok: false, events: [] };
+  }
+}
+
+async function blockTime({ startISO, endISO, reason }) {
+  const cal = await client();
+  if (!cal) return { configured: false };
+  try {
+    const { data } = await cal.events.insert({
+      calendarId: calendarId(),
+      requestBody: {
+        summary: `Blocked${reason ? ": " + reason : ""}`,
+        start: { dateTime: startISO, timeZone: tz() },
+        end: { dateTime: endISO, timeZone: tz() },
+      },
+      sendUpdates: "none",
+    });
+    return { configured: true, eventId: data.id };
+  } catch (e) {
+    return { configured: true, error: e.message };
+  }
+}
+
+module.exports = { configured, getAvailability, bookAppointment, serviceDurationMinutes, clinicWindowFor, zonedTimeToISO, tz, parseTimeArg, isValidDateISO, getEventsInRange, blockTime };
