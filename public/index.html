@@ -298,6 +298,41 @@
   .call-drawer-actions button:hover:not(:disabled){background:rgba(240,234,216,.14)}
   .call-drawer-actions button:disabled{opacity:.5;cursor:default}
   .lead-link{color:#e0904a;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  /* ---------- memory drawer (same right slide-in pattern as callDrawer) ---------- */
+  #memoryDrawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);z-index:60;
+    background:rgba(10,10,12,.94);border-left:1px solid rgba(240,234,216,.09);backdrop-filter:blur(22px);
+    transform:translateX(103%);transition:transform .6s cubic-bezier(.22,1,.36,1);
+    display:flex;flex-direction:column;overflow:hidden}
+  #memoryDrawer.show{transform:translateX(0)}
+  .mem-add-form{display:flex;flex-direction:column;gap:8px;padding:14px;margin-bottom:20px;
+    background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px}
+  .mem-add-form select,.mem-add-form textarea,.mem-add-form input{
+    background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;color:var(--ink);
+    font:400 12px 'Inter';padding:8px 10px;resize:vertical}
+  .mem-type-chip{display:inline-block;font:600 8px 'Inter';letter-spacing:.08em;text-transform:uppercase;
+    padding:3px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+  .mem-item{padding:14px 0;border-bottom:1px solid rgba(232,230,224,.05)}
+  .mem-item:last-child{border-bottom:0}
+  .mem-item .mtop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .mem-item .mts{font:400 9px 'Inter';color:var(--dim)}
+  .mem-item .mfact{font:400 12.5px 'Inter';color:var(--ink);line-height:1.55}
+  .mem-item .msource{font:400 10px 'Inter';color:var(--dim);margin-top:5px}
+  .mem-item .mactions{display:flex;gap:8px;margin-top:10px}
+  .mem-item .mactions button{flex:1;appearance:none;border:1px solid rgba(240,234,216,.2);
+    background:rgba(240,234,216,.06);color:#f0ead8;border-radius:8px;padding:7px 0;
+    font:600 9px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:background .2s}
+  .mem-item .mactions button:hover:not(:disabled){background:rgba(240,234,216,.14)}
+  .mem-item .mactions button:disabled{opacity:.5;cursor:default}
+  .mem-status{font:600 8.5px 'Inter';letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+  .mem-empty{padding:24px 0;text-align:center;color:var(--dim);font:400 12px 'Inter'}
+  .sync-status{margin-top:14px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--line);
+    border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .sync-status .st{font:400 11px 'Inter';color:var(--dim)}
+  .sync-status button{appearance:none;border:1px solid rgba(240,234,216,.2);background:rgba(240,234,216,.06);
+    color:#f0ead8;border-radius:8px;padding:7px 14px;font:600 9px 'Inter';letter-spacing:.1em;
+    text-transform:uppercase;cursor:pointer;transition:background .2s;white-space:nowrap}
+  .sync-status button:hover:not(:disabled){background:rgba(240,234,216,.14)}
+  .sync-status button:disabled{opacity:.5;cursor:default}
   /* ---------- calendar page ---------- */
   .cal-toolbar{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
   .cal-week-label{font:600 11px 'Inter';letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
@@ -378,6 +413,7 @@
   </div>
   <div class="tb-right">
     <button class="theme-btn" id="themeBtn" title="Toggle light/dark">☾</button>
+    <button class="bell-btn" id="memoryBtn" title="What the brain has learned">🧠</button>
     <button class="bell-btn" id="chatBtn" title="Chat with the brain">💬</button>
     <div class="bell-wrap" id="bellWrap">
       <button class="bell-btn" id="bellBtn" title="Needs attention">🔔<span class="bell-badge" id="bellBadge" style="display:none">0</span></button>
@@ -457,6 +493,28 @@
     <div class="chat-close" id="callDrawerClose">✕</div>
   </div>
   <div class="call-drawer-body" id="callDrawerBody"></div>
+</aside>
+
+<aside id="memoryDrawer">
+  <div class="chat-head">
+    <div class="chat-title">What the brain has learned</div>
+    <div class="chat-close" id="memoryDrawerClose">✕</div>
+  </div>
+  <div class="call-drawer-body">
+    <div class="mem-add-form" id="memAddForm">
+      <select id="memAddType">
+        <option value="faq_gap">FAQ gap</option>
+        <option value="policy_correction">Policy correction</option>
+        <option value="preference">Preference</option>
+        <option value="signal">Signal</option>
+      </select>
+      <textarea id="memAddFact" rows="2" placeholder="Teach the brain something directly…"></textarea>
+      <input type="text" id="memAddSource" placeholder="Source (optional — e.g. a patient's name)">
+      <button class="filter-pill active" id="memAddBtn">Teach</button>
+      <span id="memAddMsg" style="font:400 11px 'Inter';color:var(--dim)"></span>
+    </div>
+    <div id="memoryList"></div>
+  </div>
 </aside>
 
 <div class="view" id="viewWork"><div class="view-inner">
@@ -1315,6 +1373,16 @@ async function boot(){
         <div class="eyebrow">LEADS</div>
         <div id="sbLeads">${leadsTableHTML()}</div>
       </div>`:''}
+      ${hubId==='receptionist'&&h.knowledgeSync?`
+      <div class="sb-section">
+        <div class="eyebrow">KNOWLEDGE SYNC</div>
+        <div class="sync-status">
+          <span class="st">${h.knowledgeSync.version
+            ? `Knowledge v${h.knowledgeSync.version}${h.knowledgeSync.dryRun?' (dry-run)':''} · pushed ${esc(fmtRelative(h.knowledgeSync.pushedAt))}`
+            : 'No knowledge pushed yet'}</span>
+          <button id="pushKnowledgeBtn">Push now</button>
+        </div>
+      </div>`:''}
       <div class="sb-section">
         <div class="eyebrow">LATEST ACTIVITY</div>
         <div id="sbList">${sbActsHTML(info)}</div>
@@ -1325,6 +1393,15 @@ async function boot(){
       </div>
     `);
     openPanel();
+    const pushBtn=document.getElementById('pushKnowledgeBtn');
+    if(pushBtn)pushBtn.onclick=async()=>{
+      pushBtn.disabled=true;pushBtn.textContent='…';
+      try{
+        await api('/api/vapi/sync',{method:'POST'});
+        await refreshRealData();
+        if(sbOpen&&sbMode==='skill'&&sbOpenHubId==='receptionist')openRealSkill(D,skill,hubId);
+      }catch(e){pushBtn.disabled=false;pushBtn.textContent='Push now'}
+    };
   }
   function openPlaceholderSkill(D,skill){
     const def=D.def,col=hex(blendGray(def.color,.5));
@@ -1674,6 +1751,66 @@ async function boot(){
     }catch(e){msg.textContent=e.message||'Something went wrong.'}
   };
 
+  /* ------------------------------ memory (brain learning) ------------------------------ */
+  const MEM_TYPE_META={
+    faq_gap:{label:'FAQ gap',color:'#e0904a'},
+    policy_correction:{label:'Policy correction',color:'#e08a7a'},
+    preference:{label:'Preference',color:'#7fa8d6'},
+    signal:{label:'Signal',color:'#7fd6b0'},
+  };
+  let memoryData=[];
+  async function renderMemory(){
+    const data=await api('/api/memory');
+    memoryData=data.memory||[];
+    const list=document.getElementById('memoryList');
+    if(!memoryData.length){list.innerHTML='<div class="mem-empty">Nothing learned yet — the librarian runs nightly, or teach it something above.</div>';return}
+    list.innerHTML=memoryData.map((m)=>{
+      const meta=MEM_TYPE_META[m.type]||{label:m.type,color:'#77777c'};
+      const actions=m.status==='proposed'
+        ? `<div class="mactions"><button data-approve="${esc(m.id)}">Approve</button><button data-reject="${esc(m.id)}">Reject</button></div>`
+        : `<div class="mem-status">${esc(m.status)}</div>`;
+      return `<div class="mem-item">
+        <div class="mtop"><span class="mem-type-chip" style="color:${meta.color}">${esc(meta.label)}</span><span class="mts">${esc(fmtRelative(m.ts))}</span></div>
+        <div class="mfact">${esc(m.fact)}</div>
+        ${m.source?`<div class="msource">${esc(m.source)}</div>`:''}
+        ${actions}
+      </div>`;
+    }).join('');
+    list.querySelectorAll('[data-approve]').forEach(btn=>{
+      btn.onclick=async()=>{
+        btn.disabled=true;btn.textContent='…';
+        try{await api(`/api/memory/${btn.dataset.approve}/approve`,{method:'POST'});await renderMemory();refreshAttention()}
+        catch(e){btn.disabled=false;btn.textContent='Approve'}
+      };
+    });
+    list.querySelectorAll('[data-reject]').forEach(btn=>{
+      btn.onclick=async()=>{
+        btn.disabled=true;btn.textContent='…';
+        try{await api(`/api/memory/${btn.dataset.reject}/reject`,{method:'POST'});await renderMemory();refreshAttention()}
+        catch(e){btn.disabled=false;btn.textContent='Reject'}
+      };
+    });
+  }
+  function openMemoryDrawer(){document.getElementById('memoryDrawer').classList.add('show');renderMemory()}
+  document.getElementById('memoryBtn').onclick=openMemoryDrawer;
+  document.getElementById('memoryDrawerClose').onclick=()=>{document.getElementById('memoryDrawer').classList.remove('show')};
+  document.getElementById('memAddBtn').onclick=async()=>{
+    const type=document.getElementById('memAddType').value;
+    const fact=document.getElementById('memAddFact').value.trim();
+    const source=document.getElementById('memAddSource').value.trim();
+    const msg=document.getElementById('memAddMsg');
+    if(!fact){msg.textContent='Write the fact first.';return}
+    msg.textContent='Teaching…';
+    try{
+      await api('/api/memory',{method:'POST',body:JSON.stringify({type,fact,source})});
+      document.getElementById('memAddFact').value='';
+      document.getElementById('memAddSource').value='';
+      msg.textContent='✓ Learned.';
+      await renderMemory();
+      setTimeout(()=>{msg.textContent=''},1500);
+    }catch(e){msg.textContent=e.message||'Something went wrong.'}
+  };
+
   renderDash();renderWork();
 
   async function refreshRealData(){
@@ -1718,7 +1855,11 @@ async function boot(){
       btn.onclick=async()=>{
         const item=attentionItems[+btn.dataset.i];
         if(!item.action)return;
-        if(item.action.method==='GET'){$("bellDrop").classList.remove('show');setView(item.action.path);return}
+        if(item.action.method==='GET'){
+          $("bellDrop").classList.remove('show');
+          if(item.action.path==='memory')openMemoryDrawer();else setView(item.action.path);
+          return;
+        }
         btn.disabled=true;btn.textContent='…';
         try{await api(item.action.path,{method:item.action.method});await refreshAttention()}
         catch(e){btn.disabled=false;btn.textContent=item.action.label}
