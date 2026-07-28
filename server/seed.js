@@ -41,6 +41,10 @@ db.agents = [
   { id: "setter", name: "Appointment Setter", desc: "Calls qualified leads and books open slots", schedule: "*/10 9-18 * * 1-6", scheduleLabel: "9 AM–7 PM · Mon–Sat", on: false, lastRun: null, lastResult: "", stat: "" },
   { id: "audit", name: "Visit Audit", desc: "Structures provider notes into billing-ready SOAP", schedule: "*/30 8-19 * * *", scheduleLabel: "After each visit", on: true, lastRun: null, lastResult: "", stat: "" },
   { id: "billing", name: "Insurance Billing", desc: "Codes visits, builds claims, submits after approval", schedule: "0 17 * * *", scheduleLabel: "Daily · 5:00 PM batch", on: false, lastRun: null, lastResult: "", stat: "" },
+  // On by default (unlike setter/billing): the librarian only ever drafts
+  // proposed facts for owner review — it can't take a real-world-consequence
+  // action on its own, so there's no reason to default it off.
+  { id: "librarian", name: "Librarian", desc: "Reads the last 24h of activity and drafts durable facts for owner review", schedule: "0 2 * * *", scheduleLabel: "Nightly · 2:00 AM", on: true, lastRun: null, lastResult: "", stat: "" },
 ];
 
 db.integrations = [
@@ -68,6 +72,8 @@ db.appointments = [];
 db.visits = [];
 db.claims = [];
 db.activity = [];
+db.memory = [];
+db.promptVersions = [];
 
 save();
 console.log("Seeded", DB_PATH);

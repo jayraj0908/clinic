@@ -7,6 +7,42 @@ const { profile } = require("./instance");
 
 const hasKey = (k) => !!process.env[k];
 
+// Simple word-overlap (Jaccard) similarity — no new dep, good enough to
+// catch "we already proposed basically this" without needing real NLP.
+function wordSet(s) {
+  return new Set(String(s || "").toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean));
+}
+function factSimilarity(a, b) {
+  const A = wordSet(a), B = wordSet(b);
+  if (!A.size || !B.size) return 0;
+  let overlap = 0;
+  for (const w of A) if (B.has(w)) overlap++;
+  return overlap / new Set([...A, ...B]).size;
+}
+// Measured against real (non-deterministic) Claude output describing the
+// same underlying event across separate runs: text similarity for
+// obviously-the-same fact ranged from 0.81 (similar wording) down to 0.37
+// (same meaning, materially different sentence structure) — full-paragraph
+// facts paraphrase too much for word-overlap alone to catch reliably.
+const SIMILARITY_DUP_THRESHOLD = 0.6;
+
+// Second, more reliable signal: same type + a shared named source (caller/
+// lead) almost always means "same underlying event, re-described" even when
+// the wording drifted too far for factSimilarity to catch. Overlap
+// coefficient (not Jaccard) since source strings are short name lists where
+// one being a subset of the other should still count as a strong match.
+function sourceOverlap(a, b) {
+  const A = wordSet(a), B = wordSet(b);
+  if (!A.size || !B.size) return 0;
+  let overlap = 0;
+  for (const w of A) if (B.has(w)) overlap++;
+  return overlap / Math.min(A.size, B.size);
+}
+function isSameFact(existing, candidate) {
+  if (existing.type === candidate.type && sourceOverlap(existing.source, candidate.source) > 0.5) return true;
+  return factSimilarity(existing.fact, candidate.fact) > SIMILARITY_DUP_THRESHOLD;
+}
+
 // Renders the instance's clinic-profile facts as plain-text knowledge to
 // append after an agent's brain-file body — the same profile that seeds
 // db.settings.receptionist, so agents and the dashboard never disagree.
@@ -142,6 +178,62 @@ const agents = {
     save();
     log("agent", `Insurance Billing: ${ready.length} claim(s) drafted → awaiting human approval`);
     return `${ready.length} drafted`;
+  },
+
+  // 5 ─ Librarian: drafts durable facts from the last 24h for owner review.
+  // Never writes anything the phone assistant says — only ever proposes;
+  // approval (server.js /api/memory/:id/approve) and the sync step
+  // (server/vapiSync.js) are separate, human-gated steps.
+  async librarian() {
+    const db = load();
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    const recentCalls = db.calls.filter((c) => new Date(c.ts).getTime() >= since);
+    const recentLeads = db.leads.filter((l) => new Date(l.createdAt).getTime() >= since);
+    if (!recentCalls.length && !recentLeads.length) {
+      log("agent", "Librarian: nothing in the last 24h to review");
+      return "nothing to review";
+    }
+    const activityText = [
+      recentCalls.length ? "CALLS:\n" + recentCalls.map((c) => `- ${c.who} · ${c.dir} · outcome: ${c.outcome} · "${c.summary || ""}"`).join("\n") : "",
+      recentLeads.length ? "LEADS:\n" + recentLeads.map((l) => `- ${l.name} · service: ${l.service || "unspecified"} · source: ${l.source} · status: ${l.status}`).join("\n") : "",
+    ].filter(Boolean).join("\n\n");
+
+    if (!hasKey("ANTHROPIC_API_KEY")) {
+      log("agent", "Librarian: reviewed activity, but ANTHROPIC_API_KEY isn't set — nothing extracted");
+      return "no API key";
+    }
+
+    const out = await claude(
+      `Review this clinic's last 24h of call/lead activity. Extract ONLY durable, generalizable facts worth remembering long-term — not one-off noise or anything already obvious from the clinic profile.\n\n` +
+        `Type each fact exactly one of:\n` +
+        `- faq_gap: callers keep asking something the assistant couldn't answer\n` +
+        `- policy_correction: the assistant said something wrong or outdated\n` +
+        `- preference: a specific patient's stated preference (name who)\n` +
+        `- signal: a business-level pattern/insight, not phone-prompt material\n\n` +
+        `Output strict JSON: {"facts":[{"type":"...","fact":"...","source":"..."}]}. ` +
+        `source = brief context (caller name, or "N calls this week"). ` +
+        `Return {"facts":[]} if nothing durable stands out — don't manufacture facts from thin activity.\n\n${activityText}`,
+      systemPromptFor("librarian", "Silence (an empty facts array) is a valid and often correct output — you are a careful curator, not an eager pattern-matcher.")
+    );
+
+    let extracted = [];
+    try { extracted = JSON.parse((out || "{}").replace(/```json|```/g, "")).facts || []; } catch { extracted = []; }
+
+    const VALID_TYPES = new Set(["faq_gap", "policy_correction", "preference", "signal"]);
+    const existing = db.memory.filter((m) => m.status === "proposed" || m.status === "approved");
+    const added = [];
+    for (const f of extracted) {
+      if (!f || !f.fact || !VALID_TYPES.has(f.type)) continue;
+      const isDup = existing.some((e) => isSameFact(e, f)) || added.some((a) => isSameFact(a, f));
+      if (isDup) continue;
+      const entry = { id: "M" + Date.now() + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), type: f.type, fact: f.fact, source: f.source || "", status: "proposed" };
+      db.memory.push(entry);
+      added.push(entry);
+    }
+    save();
+    if (added.length) log("agent", `Librarian: learned ${added.length} new thing(s) — review in Memory`);
+    else log("agent", "Librarian: reviewed activity, nothing new to learn");
+    return `${added.length} learned`;
   },
 };
 

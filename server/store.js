@@ -16,6 +16,14 @@ function load() {
     db = { users: [], leads: [], calls: [], appointments: [], visits: [], claims: [], agents: [], integrations: [], activity: [], settings: {} };
     save();
   }
+  // Additive migration: fields added after a given deployment's db.json was
+  // first created won't exist on it yet — default them in place rather than
+  // requiring every call site to null-check. Never destructive, never
+  // touches existing fields.
+  let migrated = false;
+  if (!Array.isArray(db.memory)) { db.memory = []; migrated = true; }
+  if (!Array.isArray(db.promptVersions)) { db.promptVersions = []; migrated = true; }
+  if (migrated) save();
   return db;
 }
 

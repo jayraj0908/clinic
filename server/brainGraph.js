@@ -178,7 +178,7 @@ function buildAgentDetail(db, hubId) {
   const hub = HUBS.find((h) => h.id === hubId);
   if (!hub) return null;
   const a = hub.agentId ? db.agents.find((x) => x.id === hub.agentId) : null;
-  return {
+  const detail = {
     id: hub.id, name: hub.name, color: hub.color, glyph: hub.glyph, tagline: hub.tagline,
     agentId: hub.agentId || null,
     status: agentStatus(db, hub),
@@ -190,6 +190,19 @@ function buildAgentDetail(db, hubId) {
     todayStats: todayStats(db, hub.id),
     recentActivity: recentActivity(db, hub.id),
   };
+  // The librarian/vapiSync pipeline only ever affects the receptionist's
+  // live phone prompt — surface its sync status right on that hub, not as
+  // a separate UI area.
+  if (hubId === "receptionist") {
+    const versions = db.promptVersions || [];
+    const latest = versions[versions.length - 1] || null;
+    detail.knowledgeSync = {
+      version: versions.length,
+      pushedAt: latest ? latest.ts : null,
+      dryRun: latest ? !!latest.dryRun : null,
+    };
+  }
+  return detail;
 }
 
 module.exports = { buildGraph, buildAgentDetail, HUBS };

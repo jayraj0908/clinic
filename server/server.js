@@ -16,6 +16,7 @@ const brainGraph = require("./brainGraph");
 const notify = require("./notify");
 const chat = require("./chat");
 const { maskPhone, verifyMetaSignature } = require("./security");
+const vapiSync = require("./vapiSync");
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -232,6 +233,92 @@ app.post("/api/claims/:id/approve", auth, requireOwner, (req, res) => {
   res.json(c);
 });
 
+// ---------- memory (the brain's learning — human-gated) ----------
+// The librarian agent only ever writes status:"proposed" facts here. Owner
+// approval is the one and only path to status:"approved", and only
+// approved faq_gap/policy_correction facts ever reach syncToVapi() — see
+// server/vapiSync.js. Nothing in this file writes what the phone assistant
+// says.
+const MEMORY_TYPES = new Set(["faq_gap", "policy_correction", "preference", "signal"]);
+
+app.get("/api/memory", auth, (req, res) => {
+  const db = load();
+  const { status } = req.query;
+  const memory = (status ? db.memory.filter((m) => m.status === status) : db.memory)
+    .slice()
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+  res.json({ memory });
+});
+
+app.post("/api/memory", auth, requireOwner, (req, res) => {
+  const { type, fact, source } = req.body || {};
+  if (!fact || !MEMORY_TYPES.has(type)) {
+    return res.status(400).json({ error: "type (faq_gap|policy_correction|preference|signal) and fact are required" });
+  }
+  const db = load();
+  // The owner typing a fact in directly IS the approval — there's no
+  // meaningful separate review step for something a human just authored.
+  const entry = {
+    id: "M" + Date.now() + Math.random().toString(36).slice(2, 6),
+    ts: new Date().toISOString(),
+    type, fact,
+    source: source || `${req.user.id} (added manually)`,
+    status: "approved",
+    approvedBy: req.user.id,
+    approvedAt: new Date().toISOString(),
+  };
+  db.memory.push(entry);
+  mergePreferenceIfApplicable(db, entry);
+  save();
+  log("system", `${req.user.id} taught the brain a ${type} fact directly`);
+  if (type === "faq_gap" || type === "policy_correction") vapiSync.scheduleSyncDebounced(req.user.id);
+  res.json(entry);
+});
+
+function mergePreferenceIfApplicable(db, m) {
+  if (m.type !== "preference" || !m.source) return;
+  const lead = db.leads.find((l) => l.name && m.source.toLowerCase().includes(l.name.toLowerCase()));
+  if (!lead) return;
+  lead.preferences = lead.preferences || [];
+  if (!lead.preferences.includes(m.fact)) lead.preferences.push(m.fact);
+}
+
+app.post("/api/memory/:id/approve", auth, requireOwner, (req, res) => {
+  const db = load();
+  const m = db.memory.find((x) => x.id === req.params.id);
+  if (!m) return res.status(404).json({ error: "Memory fact not found" });
+  m.status = "approved";
+  m.approvedBy = req.user.id;
+  m.approvedAt = new Date().toISOString();
+  mergePreferenceIfApplicable(db, m);
+  save();
+  log("system", `Memory fact ${m.id} (${m.type}) approved by ${req.user.id}`);
+  if (m.type === "faq_gap" || m.type === "policy_correction") vapiSync.scheduleSyncDebounced(req.user.id);
+  res.json(m);
+});
+
+app.post("/api/memory/:id/reject", auth, requireOwner, (req, res) => {
+  const db = load();
+  const m = db.memory.find((x) => x.id === req.params.id);
+  if (!m) return res.status(404).json({ error: "Memory fact not found" });
+  m.status = "rejected";
+  m.rejectedBy = req.user.id;
+  save();
+  log("system", `Memory fact ${m.id} (${m.type}) rejected by ${req.user.id}`);
+  res.json(m);
+});
+
+// Manual re-sync / "Push now" button — same code path the debounced
+// post-approval sync and the weekly cron use.
+app.post("/api/vapi/sync", auth, requireOwner, async (req, res) => {
+  try {
+    const result = await vapiSync.syncToVapi(req.user.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ---------- attention inbox ----------
 // Computed entirely from data already in the store — no new infra. Each
 // item's action either maps to a real one-click route (method POST) or is
@@ -291,6 +378,16 @@ app.get("/api/attention", auth, (req, res) => {
         action: lead ? { label: "Have agent call back", method: "POST", path: `/api/leads/${lead.id}/queue-call` } : null,
       });
     });
+
+  const proposedMemory = db.memory.filter((m) => m.status === "proposed");
+  if (proposedMemory.length) {
+    items.push({
+      type: "memory_review", severity: "medium",
+      title: `Brain learned ${proposedMemory.length} new thing${proposedMemory.length > 1 ? "s" : ""} — review`,
+      detail: proposedMemory.slice(0, 3).map((m) => m.fact).join(" · ").slice(0, 160),
+      action: { label: "Review", method: "GET", path: "memory" },
+    });
+  }
 
   res.json({ items, count: items.length });
 });
@@ -681,6 +778,18 @@ function bootBackupCron() {
   cron.schedule("0 3 * * *", runBackup, { timezone: calendarApi.tz() });
 }
 
+// Weekly safety re-sync — catches drift (e.g. a manually-added fact whose
+// debounced push got interrupted by a restart) even if no approval happens
+// that week. Same syncToVapi() path as everything else; still respects
+// VAPI_SYNC_DRY_RUN.
+function bootVapiSyncCron() {
+  cron.schedule(
+    "0 18 * * 0",
+    () => vapiSync.syncToVapi("weekly-cron").catch((e) => log("error", `Weekly Vapi sync failed: ${e.message}`)),
+    { timezone: calendarApi.tz() }
+  );
+}
+
 // Webhook secrets are optional-if-unset (an instance can come up before
 // they're wired), but that should never be silent — a loud boot warning is
 // the difference between "we forgot to set this" being caught in the
@@ -697,6 +806,11 @@ function warnUnsetWebhookSecrets() {
   }
   if (!process.env.GOOGLE_CALENDAR_CREDENTIALS) {
     console.warn("WARNING: GOOGLE_CALENDAR_CREDENTIALS is not set — calendar features will run in local-only fallback mode.");
+  }
+  if (!vapiSync.hasVapiConfig()) {
+    console.warn("NOTE: VAPI_API_KEY or VAPI_INBOUND_ASSISTANT_ID is not set — Vapi knowledge sync will no-op with a log line even if VAPI_SYNC_DRY_RUN=0.");
+  } else if (vapiSync.isDryRun()) {
+    console.log("Vapi knowledge sync is in DRY RUN mode (default) — composed prompts are logged, never pushed. Set VAPI_SYNC_DRY_RUN=0 to go live.");
   }
 }
 
@@ -719,5 +833,6 @@ app.listen(PORT, () => {
   bootSchedules();
   bootReminderCron();
   bootBackupCron();
+  bootVapiSyncCron();
   warnUnsetWebhookSecrets();
 });
