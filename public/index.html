@@ -151,6 +151,33 @@
     overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin:0}
   .help-btn{margin-top:24px;width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
     background:transparent;color:var(--dim);font:600 10px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+  /* ---------- leads table + lead detail ---------- */
+  .lead-row{display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:1px solid rgba(232,230,224,.05);
+    cursor:pointer;transition:background .15s;border-radius:6px}
+  .lead-row:hover{background:rgba(255,255,255,.04)}
+  .lead-row:last-child{border-bottom:0}
+  .lead-row .ln{flex:1;min-width:0;font:600 12px 'Inter';color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lead-row .ls{font:400 10px 'Inter';color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px}
+  .lead-row .lb{flex:none;font:600 8px 'Inter';letter-spacing:.08em;text-transform:uppercase;
+    padding:3px 8px;border-radius:999px;border:1px solid currentColor}
+  .lead-empty{padding:14px 0;color:var(--dim);font:400 12px 'Inter'}
+  .lead-detail-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid rgba(232,230,224,.05);font:400 12px 'Inter'}
+  .lead-detail-row:last-child{border-bottom:0}
+  .lead-detail-row .k{color:var(--dim);text-transform:uppercase;font:600 8.5px 'Inter';letter-spacing:.1em;flex:none;padding-top:1px}
+  .lead-detail-row .v{color:var(--ink);text-align:right}
+  .back-link{display:inline-flex;align-items:center;gap:4px;color:var(--dim);font:600 9px 'Inter';
+    letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-bottom:14px;margin-top:26px}
+  .back-link:hover{color:var(--ink)}
+  /* ---------- department team log (real activity, styled as messages) ---------- */
+  .team-msg{display:flex;gap:9px;padding:8px 0}
+  .team-msg .av{flex:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font:700 9px 'Inter';color:#0b0c0a;margin-top:1px}
+  .team-msg .body{flex:1;min-width:0}
+  .team-msg .who{display:flex;align-items:baseline;gap:7px}
+  .team-msg .who .n{font:700 11.5px 'Inter';color:var(--ink)}
+  .team-msg .who .t{font:400 9px 'Inter';color:var(--dim)}
+  .team-msg .msg{font:400 12px 'Inter';color:#b9b3a5;line-height:1.5;margin-top:1px}
+  .team-empty{padding:10px 0;color:var(--dim);font:400 12px 'Inter'}
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:rgba(232,230,224,.14);border-radius:2px}
   ::-webkit-scrollbar-track{background:transparent}
 
@@ -227,6 +254,11 @@
   .chat-send:hover{background:rgba(240,234,216,.14)}
   .chat-send:disabled{opacity:.5;cursor:default}
   .chat-empty{padding:24px 0;text-align:center;font:400 11px 'Inter';color:#77777c}
+  .chat-action-btn{display:block;width:100%;margin-top:8px;appearance:none;border:1px solid rgba(240,234,216,.25);
+    background:rgba(240,234,216,.08);color:#f0ead8;border-radius:8px;padding:8px 10px;
+    font:600 9.5px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:background .2s}
+  .chat-action-btn:hover:not(:disabled){background:rgba(240,234,216,.18)}
+  .chat-action-btn:disabled{opacity:.55;cursor:default}
 
   /* ---------- mobile / narrow-viewport chrome ---------- */
   @media (max-width:640px){
@@ -1002,17 +1034,60 @@ async function boot(){
     else{sbBody.innerHTML=html}
   }
 
+  function initials(name){
+    return(name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  }
+  // A real, from-the-log team feed — not simulated chatter. Most of our
+  // own log() calls already write "Agent Name: did the thing", so that
+  // prefix reliably attributes an entry to the agent that did it; entries
+  // without that prefix fall back to a type→agent relevance guess, and are
+  // dropped entirely if they don't plausibly belong to this department.
+  // The brain-graph hubs (leads/receptionist/calling/audit/billing, what the
+  // map displays) and the legacy cron scheduler (intake/setter/audit/billing,
+  // what server/agents.js actually logs against via "Agent Name: did X") are
+  // two separate naming systems that don't share display names — even
+  // 'audit'/'billing' share an id but not a name ("Audit Notes Agent" vs
+  // "Visit Audit"). Map hub id -> the legacy log-message prefix it actually
+  // writes, so real entries get found; always DISPLAY the hub's own name so
+  // it stays consistent with the rest of this sidebar.
+  const HUB_LEGACY_PREFIX={leads:'Lead Intake',calling:'Appointment Setter',audit:'Visit Audit',billing:'Insurance Billing'};
+  function deptActivityHTML(reals,def){
+    const all=dash.activity||[];
+    const items=all.filter(ev=>{
+      if(!ev.message)return false;
+      if(reals.some(h=>{const p=HUB_LEGACY_PREFIX[h.id];return p&&ev.message.startsWith(p+':')}))return true;
+      if(ev.type==='call'||ev.type==='notify')return reals.some(h=>h.id==='receptionist');
+      return false;
+    }).slice(0,8);
+    if(!items.length)return'<div class="team-empty">No team activity yet.</div>';
+    return items.map(ev=>{
+      const owner=reals.find(h=>{const p=HUB_LEGACY_PREFIX[h.id];return p&&ev.message.startsWith(p+':')});
+      const who=owner?owner.name:(reals.find(h=>h.id==='receptionist')||reals[0]).name;
+      const msg=owner?ev.message.slice(HUB_LEGACY_PREFIX[owner.id].length+1).trim():ev.message;
+      return `<div class="team-msg">
+        <div class="av" style="background:${hex(def.color)}">${esc(initials(who))}</div>
+        <div class="body">
+          <div class="who"><span class="n">${esc(who)}</span><span class="t">${esc(fmtRelative(ev.ts))}</span></div>
+          <div class="msg">${esc(msg)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
   function openDeptSidebar(di){
     const D=depts[di],def=D.def,col=hex(def.color);
     sbOpenDi=di;sbOpenHubId=null;sbOpenSkill=null;sbMode='dept';
     setNodeHalo(null,null);
     const reals=Object.values(def.realDetails);
     const liveReals=reals.filter(h=>h.status==='active'||h.status==='needs_review');
-    const allSkills=def.branches.flat();
+    // def.branches is [{root, forks:[...]}], not plain strings — flatten to
+    // real skill-name strings (this was silently rendering "[object Object]"
+    // and empty pills before).
+    const allSkills=def.branches.flatMap(b=>[b.root,...(b.forks||[])]);
     const desc=reals.length
       ? `${esc(def.name)} runs ${reals.map(h=>esc(h.name)).join(' and ')} — ${liveReals.length?'live right now.':'currently paused.'}`
       : `${esc(def.name)} has no agent built yet. It's mapped and ready — an empty seat waiting for its first Sailz agent.`;
-    const covers=def.branches.slice(0,6).map(b=>b[0]);
+    const covers=def.branches.slice(0,6).map(b=>b.root);
     const startHere=reals.length?(reals[0].workflows||[])[0]:allSkills[0];
     const totalToday=reals.reduce((s,h)=>s+Number((h.todayStats||[])[0]?.value||0),0);
     swapSidebar(`
@@ -1028,6 +1103,11 @@ async function boot(){
         <div class="eyebrow">THE FUNCTIONS</div>
         ${allSkills.map(s=>{const isReal=!!def.realSkillMap[s];return `<div class="func-row"><span class="fdot${isReal?' on':''}"></span>${esc(s)}</div>`}).join('')}
       </div>
+      ${reals.length?`
+      <div class="sb-section">
+        <div class="eyebrow">TEAM ACTIVITY</div>
+        ${deptActivityHTML(reals,def)}
+      </div>`:''}
       <div class="sb-section">
         <div class="eyebrow accent">START HERE</div>
         <div class="sb-desc" style="margin-bottom:0">${reals.length?`Begin with <b style="color:var(--ink)">${esc(startHere)}</b> — already live.`:`Begin with <b style="color:var(--ink)">${esc(startHere)}</b> once this department is built out.`}</div>
@@ -1046,6 +1126,15 @@ async function boot(){
     const hubId=def.realSkillMap&&def.realSkillMap[skill];
     setNodeHalo(di,skill);
     if(hubId){openRealSkill(D,skill,hubId)}else{openPlaceholderSkill(D,skill)}
+  }
+  // Workflow/skill names are often full phrases ("Save every caller as a
+  // lead"), not short labels — shrink the sidebar's name heading to match,
+  // instead of rendering a whole sentence at agent-name size.
+  function sbNameSize(s){
+    if(s.length>34)return'15px';
+    if(s.length>24)return'18px';
+    if(s.length>16)return'21px';
+    return'26px';
   }
 
   function realAgentInfo(h){
@@ -1069,16 +1158,46 @@ async function boot(){
     return lines.length?lines.join('\n'):'No activity yet.';
   }
 
+  // Leads flow through 3 real agents: intake creates/qualifies them,
+  // the receptionist saves callers as leads, the setter calls qualified
+  // ones. The lead record itself doesn't track which agent touched it
+  // (there's no such field in the schema), so all three show the same
+  // current leads list rather than a fabricated per-agent split.
+  const LEAD_AGENTS=new Set(['leads','receptionist','calling']);
+  const LEAD_STATUS_META={
+    new:{label:'New',color:'#e0904a'}, qualified:{label:'Qualified',color:'#c9a066'},
+    call_scheduled:{label:'Call scheduled',color:'#7fa8d6'}, booked:{label:'Booked',color:'#7fd6b0'},
+    closed_lost:{label:'Closed',color:'#8a8578'},
+  };
+  function leadStatusMeta(status){return LEAD_STATUS_META[status]||{label:status||'Unknown',color:'#6f6f74'}}
+  function leadsTableHTML(){
+    const leads=(dash.leads||[]).slice(0,10);
+    if(!leads.length)return'<div class="lead-empty">No leads yet — they\'ll show up here the moment one comes in.</div>';
+    return leads.map(l=>{
+      const m=leadStatusMeta(l.status);
+      return `<div class="lead-row" data-lead="${esc(l.id)}">
+        <span class="ln">${esc(l.name||'Unknown')}</span>
+        <span class="ls">${esc(l.service||l.source||'')}</span>
+        <span class="lb" style="color:${m.color}">${esc(m.label)}</span>
+      </div>`;
+    }).join('');
+  }
+
   function openRealSkill(D,skill,hubId){
     const def=D.def,col=hex(def.color),h=agentData[hubId],info=realAgentInfo(h);
     sbOpenDi=D.di;sbOpenHubId=hubId;sbOpenSkill=skill;sbMode='skill';
     const tag=STATUS_TEXT[h.status]||h.status,tagCol=STATUS_COLOR[h.status]||'#6f6f74';
     swapSidebar(`
       <div class="eyebrow accent" style="color:${tagCol}">${esc(tag.toUpperCase())}</div>
-      <div id="sbName" style="color:${col}">${esc(skill)}</div>
+      <div id="sbName" style="color:${col};font-size:${sbNameSize(skill)}">${esc(skill)}</div>
       <div id="sbSub">${esc(def.name)} · ${esc(h.name)}</div>
       <div class="sb-section"><div class="sb-stats" id="sbStats">${info.stats.map(s=>
         `<div class="sb-stat"><div class="n">${esc(String(s.n))}</div><div class="l">${esc(s.l)}</div></div>`).join('')}</div></div>
+      ${LEAD_AGENTS.has(hubId)?`
+      <div class="sb-section">
+        <div class="eyebrow">LEADS</div>
+        <div id="sbLeads">${leadsTableHTML()}</div>
+      </div>`:''}
       <div class="sb-section">
         <div class="eyebrow">LATEST ACTIVITY</div>
         <div id="sbList">${sbActsHTML(info)}</div>
@@ -1095,15 +1214,59 @@ async function boot(){
     sbOpenDi=D.di;sbOpenHubId=null;sbOpenSkill=null;sbMode='placeholder';
     swapSidebar(`
       <div class="eyebrow">NOT YET BUILT</div>
-      <div id="sbName" style="color:${col}">${esc(skill)}</div>
+      <div id="sbName" style="color:${col};font-size:${sbNameSize(skill)}">${esc(skill)}</div>
       <div id="sbSub">${esc(def.name)}</div>
       <div class="sb-desc">This role isn't built yet — available as a future Sailz agent for ${esc(def.name)}.</div>
     `);
     openPanel();
   }
+  let sbReturnTo=null;
+  function openLeadSidebar(leadId){
+    const lead=(dash.leads||[]).find(l=>l.id===leadId);
+    if(!lead)return;
+    const prevDi=sbOpenDi,prevHubId=sbOpenHubId,prevSkill=sbOpenSkill,prevMode=sbMode;
+    sbReturnTo=()=>{
+      if(prevMode==='skill'&&prevHubId&&depts[prevDi])openRealSkill(depts[prevDi],prevSkill,prevHubId);
+      else if(prevMode==='dept'&&depts[prevDi])openDeptSidebar(prevDi);
+      else closeSidebar();
+    };
+    sbOpenHubId=null;sbOpenSkill=null;sbMode='lead';
+    const m=leadStatusMeta(lead.status);
+    const linkedAppts=(dash.appointments||[]).filter(a=>lead.phone&&a.phone===lead.phone);
+    const linkedCalls=(dash.calls||[]).filter(c=>c.who===lead.name||c.who===lead.phone);
+    swapSidebar(`
+      <div class="back-link" id="sbBack">‹ Back</div>
+      <div class="eyebrow accent" style="color:${m.color}">${esc(m.label.toUpperCase())}</div>
+      <div id="sbName" style="color:var(--ink);font-size:${sbNameSize(lead.name||'Unknown caller')}">${esc(lead.name||'Unknown caller')}</div>
+      <div id="sbSub">${esc(lead.service||'No service noted')}</div>
+      <div class="sb-section">
+        <div class="lead-detail-row"><span class="k">Phone</span><span class="v">${esc(lead.phone||'—')}</span></div>
+        <div class="lead-detail-row"><span class="k">Email</span><span class="v">${esc(lead.email||'—')}</span></div>
+        <div class="lead-detail-row"><span class="k">Source</span><span class="v">${esc(lead.source||'—')}</span></div>
+        <div class="lead-detail-row"><span class="k">First contact</span><span class="v">${esc(fmtRelative(lead.createdAt))}</span></div>
+      </div>
+      ${linkedAppts.length?`
+      <div class="sb-section">
+        <div class="eyebrow">APPOINTMENTS</div>
+        ${linkedAppts.map(a=>`<div class="sb-item">${esc(a.service||'Visit')} — ${esc(new Date(a.time).toLocaleString())} · ${esc(a.status)}</div>`).join('')}
+      </div>`:''}
+      ${linkedCalls.length?`
+      <div class="sb-section">
+        <div class="eyebrow">CALLS</div>
+        ${linkedCalls.map(c=>`<div class="sb-item"><span class="ts">${esc(fmtRelative(c.ts))}</span>${esc(c.summary||'Call')}${c.outcome?' · '+esc(c.outcome):''}</div>`).join('')}
+      </div>`:''}
+    `);
+    openPanel();
+    document.getElementById('sbBack').onclick=()=>sbReturnTo&&sbReturnTo();
+  }
   function openPanel(){
     sidebar.classList.add('show');sbOpen=true;sbShiftT=1;
     document.getElementById('sbList')?.addEventListener('click',onApproveClick);
+    document.getElementById('sbLeads')?.addEventListener('click',onLeadRowClick);
+  }
+  function onLeadRowClick(e){
+    const row=e.target.closest('.lead-row');if(!row)return;
+    openLeadSidebar(row.dataset.lead);
   }
   async function onApproveClick(e){
     const btn=e.target.closest('.approve-btn');if(!btn)return;
@@ -1194,15 +1357,21 @@ async function boot(){
       const reals=Object.values(D.def.realDetails);
       D.def.active=reals.some(h=>h.status==='active'||h.status==='needs_review');
     });
+    // dash (leads/appointments/claims/activity — backs the leads table, lead
+    // detail, and department activity log) is otherwise fetched once at boot
+    // and would go stale for the rest of the session without this.
+    try{Object.assign(dash,await api('/api/dashboard'))}catch(e){}
     if(view==='dash')renderDash();
     if(view==='work')renderWork();
     if(sbOpen&&sbMode==='skill'&&sbOpenHubId){
       const info=realAgentInfo(agentData[sbOpenHubId]);
-      const statsEl=document.getElementById('sbStats'),listEl=document.getElementById('sbList'),logEl=document.getElementById('sbLog');
+      const statsEl=document.getElementById('sbStats'),listEl=document.getElementById('sbList'),logEl=document.getElementById('sbLog'),leadsEl=document.getElementById('sbLeads');
       if(statsEl)statsEl.innerHTML=info.stats.map(s=>`<div class="sb-stat"><div class="n">${esc(String(s.n))}</div><div class="l">${esc(s.l)}</div></div>`).join('');
       if(listEl)listEl.innerHTML=sbActsHTML(info);
       if(logEl)logEl.textContent=logLines(agentData[sbOpenHubId]);
+      if(leadsEl)leadsEl.innerHTML=leadsTableHTML();
     }
+    if(sbOpen&&sbMode==='dept'&&sbOpenDi>=0)openDeptSidebar(sbOpenDi);
   }
   setInterval(refreshRealData,10000);
 
@@ -1244,12 +1413,31 @@ async function boot(){
   setInterval(refreshAttention,30000);
 
   /* ------------------------------ chat with the brain ------------------------------ */
-  let chatHistory=[];
+  let chatHistory=[]; // {role, content, actions?, actionsDone?}
   function renderChat(){
     const body=$("chatBody");
     if(!chatHistory.length){body.innerHTML='<div class="chat-empty">Ask about leads, calls, appointments, or claims.</div>';return}
-    body.innerHTML=chatHistory.map(m=>`<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join('');
+    body.innerHTML=chatHistory.map((m,i)=>`<div class="chat-msg ${m.role}">${esc(m.content)}
+      ${(m.actions||[]).map((a,ai)=>`<button class="chat-action-btn" data-mi="${i}" data-ai="${ai}" ${m.actionsDone&&m.actionsDone[ai]?'disabled':''}>
+        ${m.actionsDone&&m.actionsDone[ai]?'✓ Done':esc(a.label)}</button>`).join('')}
+      </div>`).join('');
+    body.querySelectorAll('.chat-action-btn').forEach(btn=>{btn.onclick=()=>runChatAction(+btn.dataset.mi,+btn.dataset.ai)});
     body.scrollTop=body.scrollHeight;
+  }
+  async function runChatAction(mi,ai){
+    const m=chatHistory[mi];const action=m&&m.actions&&m.actions[ai];
+    if(!action)return;
+    m.actionsDone=m.actionsDone||{};
+    try{
+      await api(action.path,{method:action.method});
+      m.actionsDone[ai]=true;
+      renderChat();
+      refreshAttention();
+      Object.assign(dash,await api('/api/dashboard'));
+    }catch(e){
+      chatHistory.push({role:'assistant',content:`Couldn't complete that — ${e.message||'please try again.'}`});
+      renderChat();
+    }
   }
   function showChatShimmer(){
     const body=$("chatBody");
@@ -1267,9 +1455,10 @@ async function boot(){
     $("chatSend").disabled=true;
     showChatShimmer();
     try{
-      const data=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:chatHistory})});
+      const apiMessages=chatHistory.map(m=>({role:m.role,content:m.content}));
+      const data=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:apiMessages})});
       hideChatShimmer();
-      chatHistory.push({role:'assistant',content:data.reply||data.error||'…'});
+      chatHistory.push({role:'assistant',content:data.reply||data.error||'…',actions:data.actions||[]});
       renderChat();
     }catch(e){
       hideChatShimmer();

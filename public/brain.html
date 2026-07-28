@@ -187,6 +187,11 @@
   .chat-send:hover{background:rgba(240,234,216,.14)}
   .chat-send:disabled{opacity:.5;cursor:default}
   .chat-empty{padding:24px 0;text-align:center;font:400 11px 'Inter';color:var(--dim)}
+  .chat-action-btn{display:block;width:100%;margin-top:8px;appearance:none;border:1px solid rgba(240,234,216,.25);
+    background:rgba(240,234,216,.08);color:var(--ink);border-radius:8px;padding:8px 10px;
+    font:600 9.5px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:background .2s}
+  .chat-action-btn:hover:not(:disabled){background:rgba(240,234,216,.18)}
+  .chat-action-btn:disabled{opacity:.55;cursor:default}
 </style>
 </head>
 <body>
@@ -837,12 +842,30 @@ refreshAttention();
 setInterval(refreshAttention,30000);
 
 /* ------------------------------ chat with the brain ------------------------------ */
-let chatHistory=[];
+let chatHistory=[]; // {role, content, actions?, actionsDone?}
 function renderChat(){
   const body=document.getElementById('chatBody');
   if(!chatHistory.length){body.innerHTML='<div class="chat-empty">Ask about leads, calls, appointments, or claims.</div>';return}
-  body.innerHTML=chatHistory.map(m=>`<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join('');
+  body.innerHTML=chatHistory.map((m,i)=>`<div class="chat-msg ${m.role}">${esc(m.content)}
+    ${(m.actions||[]).map((a,ai)=>`<button class="chat-action-btn" data-mi="${i}" data-ai="${ai}" ${m.actionsDone&&m.actionsDone[ai]?'disabled':''}>
+      ${m.actionsDone&&m.actionsDone[ai]?'✓ Done':esc(a.label)}</button>`).join('')}
+    </div>`).join('');
+  body.querySelectorAll('.chat-action-btn').forEach(btn=>{btn.onclick=()=>runChatAction(+btn.dataset.mi,+btn.dataset.ai)});
   body.scrollTop=body.scrollHeight;
+}
+async function runChatAction(mi,ai){
+  const m=chatHistory[mi];const action=m&&m.actions&&m.actions[ai];
+  if(!action)return;
+  m.actionsDone=m.actionsDone||{};
+  try{
+    await api(action.path,{method:action.method});
+    m.actionsDone[ai]=true;
+    renderChat();
+    refreshAttention();
+  }catch(e){
+    chatHistory.push({role:'assistant',content:`Couldn't complete that — ${e.message||'please try again.'}`});
+    renderChat();
+  }
 }
 function showChatShimmer(){
   const body=document.getElementById('chatBody');
@@ -860,9 +883,10 @@ async function sendChat(){
   document.getElementById('chatSend').disabled=true;
   showChatShimmer();
   try{
-    const data=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:chatHistory})});
+    const apiMessages=chatHistory.map(m=>({role:m.role,content:m.content}));
+    const data=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:apiMessages})});
     hideChatShimmer();
-    chatHistory.push({role:'assistant',content:data.reply||data.error||'…'});
+    chatHistory.push({role:'assistant',content:data.reply||data.error||'…',actions:data.actions||[]});
     renderChat();
   }catch(e){
     hideChatShimmer();

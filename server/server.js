@@ -108,7 +108,7 @@ app.get("/api/dashboard", auth, (req, res) => {
     calls: db.calls.slice(0, 8),
     appointments: db.appointments.slice(0, 8),
     claims: db.claims.filter((c) => c.status === "awaiting_approval"),
-    activity: db.activity.slice(0, 20),
+    activity: db.activity.slice(0, 80),
     leads: db.leads,
   });
 });
@@ -263,8 +263,8 @@ app.post("/api/chat", auth, async (req, res) => {
   const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
   if (!messages.length) return res.status(400).json({ error: "messages is required" });
   try {
-    const reply = await chat.runChat(messages);
-    res.json({ reply });
+    const { reply, actions } = await chat.runChat(messages);
+    res.json({ reply, actions: actions || [] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
