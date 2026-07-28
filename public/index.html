@@ -535,7 +535,11 @@ async function doLogin(){
 function logout(){sessionStorage.removeItem("token");location.reload()}
 $("pw").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
 
-function esc(s){const d=document.createElement("div");d.textContent=s??"";return d.innerHTML}
+// Text-node escaping (via textContent round-trip) neutralizes < > & but not
+// quote characters — those aren't special in a text node, but ARE special
+// wherever this output lands inside an HTML attribute (data-id="...",
+// src="..."). Encode quotes too so esc() is safe in both contexts.
+function esc(s){const d=document.createElement("div");d.textContent=s??"";return d.innerHTML.replace(/"/g,"&quot;").replace(/'/g,"&#39;")}
 function fmtRelative(ts){
   const diffMs=Date.now()-new Date(ts).getTime();
   const mins=Math.round(diffMs/60000);

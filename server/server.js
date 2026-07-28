@@ -1,17 +1,23 @@
 require("dotenv").config();
 const fs = require("fs");
+const zlib = require("zlib");
 const express = require("express");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { nanoid } = require("nanoid");
 const cron = require("node-cron");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const { load, save, log, DB_PATH } = require("./store");
 const { runAgent } = require("./agents");
 const calendarApi = require("./calendar");
 const brainGraph = require("./brainGraph");
 const notify = require("./notify");
 const chat = require("./chat");
+const { maskPhone, verifyMetaSignature } = require("./security");
+
+const NODE_ENV = process.env.NODE_ENV || "development";
 
 // First boot (e.g. a fresh Railway deploy with no persistent volume yet):
 // seed so the owner login exists. Skipped whenever a database already
@@ -22,17 +28,83 @@ if (!fs.existsSync(DB_PATH)) {
 }
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+app.set("trust proxy", 1); // Railway sits behind a proxy — needed for express-rate-limit to see the real client IP
+
+// helmet with a CSP compatible with brain.html's design system: inline
+// <script type="module">/<style> blocks (this app has no build step, so
+// there's no nonce/bundle to switch to), PixiJS from cdnjs, Google Fonts,
+// and audio playback from wherever Vapi hosts call recordings (unknown
+// domain in advance, hence the broad https: allowance on media-src only).
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        // 'unsafe-eval' is required by PixiJS 7's WebGL renderer itself
+        // (shader/geometry program compilation) — confirmed by testing:
+        // without it, PixiJS throws "does not allow unsafe-eval" and the
+        // brain map never renders at all. This is PixiJS's own documented
+        // limitation (they ship a separate @pixi/unsafe-eval module to work
+        // around it, out of scope for this pass).
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdnjs.cloudflare.com"],
+        // helmet defaults script-src-attr/style-src-attr to 'none'
+        // regardless of script-src/style-src — a SEPARATE directive
+        // specifically for inline event-handler attributes (onclick="...")
+        // and inline style="..." attributes, both used throughout this
+        // app's no-build-step HTML. Without these, the login button (and
+        // every style="color:${col}"-style dynamic color) silently stops
+        // working under CSP.
+        scriptSrcAttr: ["'unsafe-inline'"],
+        styleSrcAttr: ["'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        mediaSrc: ["'self'", "https:"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+// verify captures the raw request body bytes onto req.rawBody — needed to
+// check Meta's X-Hub-Signature-256 HMAC, which is computed over the exact
+// bytes Meta sent, not a re-serialization of the parsed JSON.
+app.use(express.json({ limit: "2mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.static(path.join(__dirname, "..", "public")));
 
+if (!process.env.JWT_SECRET) {
+  if (NODE_ENV === "production") {
+    console.error("FATAL: JWT_SECRET is not set. Refusing to start in production without a real secret.");
+    process.exit(1);
+  }
+  console.warn("WARNING: JWT_SECRET is not set — using an insecure development-only secret. This MUST be set before any real deploy.");
+}
 const SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 
 // ---------- auth ----------
-app.post("/api/auth/login", (req, res) => {
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts — try again in 15 minutes." },
+});
+
+// A real bcrypt hash of a value nobody will ever type, computed once at
+// boot — used only to give the "no such user" path the same bcrypt cost as
+// a real comparison (see the login route below).
+const DUMMY_HASH = bcrypt.hashSync("no-such-user-timing-decoy", 10);
+
+app.post("/api/auth/login", loginLimiter, (req, res) => {
   const { email, password } = req.body || {};
   const u = load().users.find((x) => x.email === email);
-  if (!u || !bcrypt.compareSync(password || "", u.passHash))
-    return res.status(401).json({ error: "Invalid email or password" });
+  // Always run bcrypt, even when no user matches, so a nonexistent email
+  // doesn't respond measurably faster than a real one with a wrong password
+  // — otherwise response timing itself is a user-exists oracle.
+  const ok = bcrypt.compareSync(password || "", u ? u.passHash : DUMMY_HASH);
+  if (!u || !ok) return res.status(401).json({ error: "Invalid email or password" });
   res.json({ token: jwt.sign({ id: u.id, role: u.role }, SECRET, { expiresIn: "7d" }), name: u.name });
 });
 
@@ -337,6 +409,17 @@ app.post("/api/calendar/block", auth, requireOwner, async (req, res) => {
 
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------
 
+// Moderate ceiling — real call volume for a single clinic is nowhere near
+// this; it's a burst brake against abuse, not a throttle on legitimate
+// traffic. Keyed by IP; Vapi/Meta/Google each call from a small, stable set
+// of source IPs in practice.
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 function formatAvailability(out, dateISO) {
   if (out.invalidDate) return "I didn't catch that date clearly — could you repeat it?";
   if (!out.configured) return "I'm not able to check the live calendar right now — let me have a team member confirm a time and call you back.";
@@ -379,7 +462,7 @@ function upsertLead(db, { name, phone, service, source }) {
 }
 
 // Vapi: live tool calls during an active call, and the end-of-call report
-app.post("/webhooks/vapi", async (req, res) => {
+app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
   if (process.env.VAPI_SERVER_SECRET && req.headers["x-vapi-secret"] !== process.env.VAPI_SERVER_SECRET) {
     return res.sendStatus(403);
   }
@@ -403,7 +486,7 @@ app.post("/webhooks/vapi", async (req, res) => {
           }
           const lead = upsertLead(db, { name, phone, service, source: "ai_line" });
           save();
-          log("lead", `${lead.name} (${lead.phone}) called in${service ? " about " + service : ""} — saved to leads`);
+          log("lead", `${lead.name} (${maskPhone(lead.phone)}) called in${service ? " about " + service : ""} — saved to leads`);
           results.push({ toolCallId: tc.id, result: "Got it, saved." });
         } else if (tc.name === "book_appointment") {
           const { date, time, name, phone, service } = tc.arguments || {};
@@ -496,17 +579,23 @@ app.post("/webhooks/vapi", async (req, res) => {
     db.appointments.unshift({ id: "A" + Date.now(), time: analysis.structuredData.slot, name: call.who, service: analysis.structuredData.service || "", source: call.dir === "inbound" ? "AI line" : "Outbound", status: "unconfirmed", vapiCallId: m.call?.id });
   }
   save();
-  log("call", `${call.dir === "inbound" ? "Inbound" : "Outbound"} · ${call.who}: ${call.summary}`);
+  // call.who is a display name when Vapi has caller-ID data, otherwise it's
+  // the raw phone number itself — mask only in that second case, since the
+  // activity log (unlike the Calls tab) is visible to every authenticated
+  // user, not just the owner.
+  const whoForLog = m.customer?.name || maskPhone(call.who);
+  log("call", `${call.dir === "inbound" ? "Inbound" : "Outbound"} · ${whoForLog}: ${call.summary}`);
   res.json({ ok: true });
 });
 
 // Meta Lead Ads: verification + lead payloads
-app.get("/webhooks/meta", (req, res) => {
+app.get("/webhooks/meta", webhookLimiter, (req, res) => {
   if (req.query["hub.verify_token"] === process.env.META_VERIFY_TOKEN)
     return res.send(req.query["hub.challenge"]);
   res.sendStatus(403);
 });
-app.post("/webhooks/meta", (req, res) => {
+app.post("/webhooks/meta", webhookLimiter, (req, res) => {
+  if (!verifyMetaSignature(req)) return res.sendStatus(403);
   const db = load();
   let added = 0;
   for (const entry of req.body?.entry || []) {
@@ -523,7 +612,7 @@ app.post("/webhooks/meta", (req, res) => {
 });
 
 // Google Ads lead form webhook
-app.post("/webhooks/google", (req, res) => {
+app.post("/webhooks/google", webhookLimiter, (req, res) => {
   if (process.env.GOOGLE_ADS_WEBHOOK_KEY && req.body?.google_key !== process.env.GOOGLE_ADS_WEBHOOK_KEY)
     return res.sendStatus(403);
   const db = load();
@@ -569,9 +658,66 @@ function bootReminderCron() {
   );
 }
 
+// Nightly backup: gzip db.json onto the same volume, keep the last 14. Not
+// offsite (see README) — this only protects against corruption/bad-deploy
+// data loss, not a lost/destroyed Railway volume, but it's the floor every
+// production instance should have.
+const BACKUPS_DIR = path.join(path.dirname(DB_PATH), "backups");
+function runBackup() {
+  try {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    const raw = fs.readFileSync(DB_PATH);
+    const gz = zlib.gzipSync(raw);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    fs.writeFileSync(path.join(BACKUPS_DIR, `db-${stamp}.json.gz`), gz);
+    const files = fs.readdirSync(BACKUPS_DIR).filter((f) => /^db-.*\.json\.gz$/.test(f)).sort();
+    while (files.length > 14) fs.unlinkSync(path.join(BACKUPS_DIR, files.shift()));
+    log("system", `Backup created (${Math.min(files.length, 14)} kept)`);
+  } catch (e) {
+    console.error("Backup failed:", e.message);
+  }
+}
+function bootBackupCron() {
+  cron.schedule("0 3 * * *", runBackup, { timezone: calendarApi.tz() });
+}
+
+// Webhook secrets are optional-if-unset (an instance can come up before
+// they're wired), but that should never be silent — a loud boot warning is
+// the difference between "we forgot to set this" being caught in the
+// deploy log versus discovered later as an incident.
+function warnUnsetWebhookSecrets() {
+  if (!process.env.VAPI_SERVER_SECRET) {
+    console.warn("WARNING: VAPI_SERVER_SECRET is not set — /webhooks/vapi will accept requests from anyone. Set the same value as the Server URL secret in the Vapi assistant/phone number settings.");
+  }
+  if (!process.env.META_APP_SECRET) {
+    console.warn("WARNING: META_APP_SECRET is not set — /webhooks/meta will accept unsigned lead payloads from anyone who finds the URL.");
+  }
+  if (!process.env.GOOGLE_ADS_WEBHOOK_KEY) {
+    console.warn("WARNING: GOOGLE_ADS_WEBHOOK_KEY is not set — /webhooks/google will accept requests from anyone.");
+  }
+  if (!process.env.GOOGLE_CALENDAR_CREDENTIALS) {
+    console.warn("WARNING: GOOGLE_CALENDAR_CREDENTIALS is not set — calendar features will run in local-only fallback mode.");
+  }
+}
+
+// Unauthed by design (for uptime monitors) — deliberately returns no data,
+// just process/liveness signals.
+const { version } = require("../package.json");
+app.get("/api/health", (req, res) => {
+  let dbWritable = true;
+  try {
+    fs.accessSync(path.dirname(DB_PATH), fs.constants.W_OK);
+  } catch {
+    dbWritable = false;
+  }
+  res.json({ ok: true, version, dbWritable });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Clinic suite running → http://localhost:${PORT}`);
   bootSchedules();
   bootReminderCron();
+  bootBackupCron();
+  warnUnsetWebhookSecrets();
 });

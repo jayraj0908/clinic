@@ -8,6 +8,7 @@
 const { load, save, log } = require("./store");
 const calendarApi = require("./calendar");
 const { instance, messages } = require("./instance");
+const { maskPhone, maskEmail } = require("./security");
 
 // TWILIO_ACCOUNT_SID (always AC...) identifies the account in the request
 // path. TWILIO_SID/TWILIO_AUTH are the Basic Auth credential pair, which
@@ -23,7 +24,7 @@ function hasResend() {
 async function sendSMS(to, body) {
   if (!to) { log("notify", "SMS skipped — no phone number on file"); return { sent: false, reason: "no recipient" }; }
   if (!hasTwilio()) {
-    log("notify", `SMS skipped (Twilio not configured) — would send to ${to}: ${body}`);
+    log("notify", `SMS skipped (Twilio not configured) — would send to ${maskPhone(to)}`);
     return { sent: false, reason: "twilio not configured" };
   }
   try {
@@ -34,11 +35,15 @@ async function sendSMS(to, body) {
       body: new URLSearchParams({ To: to, From: process.env.TWILIO_FROM, Body: body }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) { log("notify", `SMS failed to ${to}: ${data.message || res.status}`); return { sent: false, reason: data.message || String(res.status) }; }
-    log("notify", `SMS sent to ${to}: ${body}`);
+    // Message content (body) is deliberately never logged — it's the
+    // rendered template with the patient's name/service/appointment time
+    // baked in, and this activity feed is visible to every authenticated
+    // user, not just the owner.
+    if (!res.ok) { log("notify", `SMS failed to ${maskPhone(to)}: ${data.message || res.status}`); return { sent: false, reason: data.message || String(res.status) }; }
+    log("notify", `SMS sent to ${maskPhone(to)}`);
     return { sent: true, sid: data.sid };
   } catch (e) {
-    log("notify", `SMS error to ${to}: ${e.message}`);
+    log("notify", `SMS error to ${maskPhone(to)}: ${e.message}`);
     return { sent: false, reason: e.message };
   }
 }
@@ -46,7 +51,7 @@ async function sendSMS(to, body) {
 async function sendEmail(to, subject, html) {
   if (!to) return { sent: false, reason: "no recipient" }; // most leads have no email on file — not worth logging every time
   if (!hasResend()) {
-    log("notify", `Email skipped (Resend not configured) — would send to ${to}: ${subject}`);
+    log("notify", `Email skipped (Resend not configured) — would send to ${maskEmail(to)}`);
     return { sent: false, reason: "resend not configured" };
   }
   try {
@@ -56,11 +61,11 @@ async function sendEmail(to, subject, html) {
       body: JSON.stringify({ from: process.env.RESEND_FROM, to, subject, html }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) { log("notify", `Email failed to ${to}: ${data.message || res.status}`); return { sent: false, reason: data.message || String(res.status) }; }
-    log("notify", `Email sent to ${to}: ${subject}`);
+    if (!res.ok) { log("notify", `Email failed to ${maskEmail(to)}: ${data.message || res.status}`); return { sent: false, reason: data.message || String(res.status) }; }
+    log("notify", `Email sent to ${maskEmail(to)}`);
     return { sent: true, id: data.id };
   } catch (e) {
-    log("notify", `Email error to ${to}: ${e.message}`);
+    log("notify", `Email error to ${maskEmail(to)}: ${e.message}`);
     return { sent: false, reason: e.message };
   }
 }

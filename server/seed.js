@@ -71,4 +71,7 @@ db.activity = [];
 
 save();
 console.log("Seeded", DB_PATH);
-console.log("Login:", db.users[0].email, "/", process.env.OWNER_PASSWORD || "changeme123");
+// Never print the actual password — this line lands in deployment logs
+// (Railway retains them), which would put a live credential in plaintext
+// log history. Check the OWNER_PASSWORD env var directly if you need it.
+console.log("Login:", db.users[0].email, process.env.OWNER_PASSWORD ? "(password set via OWNER_PASSWORD)" : "(using the default password — set OWNER_PASSWORD before deploying)");

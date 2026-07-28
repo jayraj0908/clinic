@@ -804,7 +804,10 @@ document.querySelectorAll('.nav button').forEach(b=>{b.onclick=()=>{
 }});
 
 /* ------------------------------ attention bell ------------------------------ */
-function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML}
+// Text-node escaping (via textContent round-trip) neutralizes < > & but not
+// quote characters — safe in text content, not in an HTML attribute. Encode
+// quotes too so esc() is safe in both contexts.
+function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 let attentionItems=[];
 function renderBellList(){
   const list=document.getElementById('bellList');

@@ -124,6 +124,37 @@ intentionally NOT multi-tenant-in-one-process (see Honest limits below).
   — verify per state/market before launch (see each instance's
   `clinic-profile.json` `aiDisclosure` field).
 
+## Backups & disaster recovery
+
+`data/db.json` is the only copy of every lead, call, appointment, and claim
+— there's no separate database to fail over to. A nightly cron (3am,
+instance-local time) gzips it into `data/backups/db-<timestamp>.json.gz` on
+the **same** Railway volume, keeping the last 14.
+
+**This protects against:** accidental data corruption, a bad deploy that
+mangles `db.json`, or needing to roll back a few days.
+**This does NOT protect against:** the Railway volume itself being lost,
+deleted, or the project being removed — a same-volume backup dies with the
+volume. Before onboarding a second client (or sooner), add an offsite copy:
+the simplest option is a small cron/GitHub Action that pulls the latest
+`data/backups/*.gz` via `railway ssh` (or a scheduled `railway run` job) and
+pushes it to S3/Backblaze/etc. Not implemented here — flagged as the next
+real gap to close.
+
+### Restore procedure
+
+1. `railway ssh` (or however you get a shell on the running instance).
+2. Pick a backup: `ls -la data/backups/` (newest last).
+3. Decompress it: `gunzip -k data/backups/db-<timestamp>.json.gz` — the
+   `-k` keeps the original `.gz` in place in case you need to try another one.
+4. **Stop the app** (or at least accept a brief window where writes could be
+   lost) before replacing the live file: `cp data/backups/db-<timestamp>.json data/db.json`.
+5. Restart the app. It picks up the restored file on next `load()` — no
+   migration step, since a backup is just a byte-for-byte earlier version of
+   the same file.
+6. Sanity-check: hit `GET /api/health` (should be `{"ok":true}`), then log in
+   and spot-check a few recent leads/appointments look right.
+
 ## Honest limits
 
 - One instance = one deployment = one JSON-file database. To run many
@@ -131,8 +162,16 @@ intentionally NOT multi-tenant-in-one-process (see Honest limits below).
   column and a real database (Postgres) — explicitly out of scope until
   this engine/instance refactor has been stable in production for a
   while (see `SAILZ-PLAYBOOK.md` for the build roadmap).
-- Webhook signature verification is stubbed for Meta/Google — add
-  per-provider verification before high-stakes production traffic.
+- Webhook signature verification: Vapi (`VAPI_SERVER_SECRET`) and Meta
+  (`META_APP_SECRET`, HMAC-SHA256 of the raw payload) are enforced when
+  their secret env vars are set, with a boot-time warning when they aren't.
+  Google Ads has an equivalent optional key check. None of these are
+  mandatory-by-default yet — an instance can still come up before they're
+  wired, which is intentional (see `SECURITY-REVIEW.md` CRIT-4), but it
+  means it's on you to actually set them before real traffic arrives.
 - The onboarding flow for a new instance is still manual file-editing
   (Stage 4 of the refactor); an onboarding wizard that writes
   `instances/<id>/` from a form is a planned next step, not built yet.
+- See `SECURITY-REVIEW.md` for the full security audit and
+  `HIPAA-POSTURE.md` for what PHI this app holds, where it lives, and which
+  vendors do/don't offer a BAA today.
