@@ -593,10 +593,10 @@ async function boot(){
   // colors themselves stay constant across themes, only the grays/blacks/
   // whites that read as "ink" flip.
   const PAL={
-    dark:{bg:0x0a0a0d,ink:0xe9e2cd,dim:0x6f6f74,ghost:0xe8e6e0,leafDim:0xb9b3a0,
+    dark:{bg:0x0a0a0d,ink:0xe9e2cd,dim:0x9c9790,ghost:0xe8e6e0,leafDim:0xc9c3b3,
       hubFill:0x0c0c0e,coreDot:0xfdf9ee,shadowDot:0xa8a398,iconDiscFill:0x0b0b0d,
       chipFill:0x08080a,chipAlpha:.62,starAlpha:1},
-    light:{bg:0xffffff,ink:0x18150f,dim:0x8a8578,ghost:0x141210,leafDim:0x5c5648,
+    light:{bg:0xffffff,ink:0x18150f,dim:0x4a4638,ghost:0x141210,leafDim:0x3a362a,
       hubFill:0xf3f1ea,coreDot:0x18150f,shadowDot:0x4a463c,iconDiscFill:0xf3f1ea,
       chipFill:0xf3f1ea,chipAlpha:.72,starAlpha:.22},
   };
@@ -1352,12 +1352,12 @@ async function boot(){
       D.ghost.alpha=D.ghostBase*Math.max(.3,D._spot);
       for(const NN of D.nodes)NN.cont.alpha=D._spot;
 
-      // department heading/sub-heading: "undershadow" by default (dim, out
-      // of the way) so the ring doesn't read as 7 loud labels at once —
-      // hovering (or focusing) that department brings its name to full
-      // brightness, same reveal-on-hover language as the skill labels.
-      const targetTxtA=isTarget?1:(nothingActive?.34:.05);
-      D._txtSpot=D._txtSpot===undefined?.34:D._txtSpot;
+      // department heading/sub-heading: readable at rest (not the near-
+      // invisible level skill labels use), dimming further only for OTHER
+      // departments once something is actually hovered/focused — that's
+      // where the "undershadow, one glows" effect belongs.
+      const targetTxtA=isTarget?1:(nothingActive?.78:.05);
+      D._txtSpot=D._txtSpot===undefined?.78:D._txtSpot;
       D._txtSpot+=(targetTxtA-D._txtSpot)*Math.min(1,dt*10);
       D.nm.alpha=D._txtSpot;D.sb.alpha=D._txtSpot;
     }
