@@ -296,6 +296,7 @@ app.get("/api/calendar/events", auth, async (req, res) => {
   const localAppts = db.appointments.filter((a) => a.time >= from && a.time <= to);
   const localGoogleIds = new Set(localAppts.map((a) => a.googleEventId).filter(Boolean));
   const events = localAppts.map((a) => ({
+    id: a.id,
     start: a.time,
     end: a.time,
     title: a.service || "Appointment",
@@ -309,9 +310,19 @@ app.get("/api/calendar/events", auth, async (req, res) => {
   // dedupe by googleEventId so an AI-booked event never shows twice.
   for (const e of google.events) {
     if (localGoogleIds.has(e.googleEventId)) continue;
-    events.push({ start: e.start, end: e.end, title: e.title, patient: null, service: null, source: "google", status: "confirmed", googleEventId: e.googleEventId });
+    events.push({ id: null, start: e.start, end: e.end, title: e.title, patient: null, service: null, source: "google", status: "confirmed", googleEventId: e.googleEventId });
   }
   res.json({ events, googleConnected: google.ok });
+});
+
+app.post("/api/appointments/:id/cancel", auth, (req, res) => {
+  const db = load();
+  const appt = db.appointments.find((a) => a.id === req.params.id);
+  if (!appt) return res.status(404).json({ error: "Appointment not found" });
+  appt.status = "cancelled";
+  save();
+  log("system", `Appointment ${appt.id} (${appt.name || "unknown"}) cancelled by ${req.user.id}`);
+  res.json(appt);
 });
 
 app.post("/api/calendar/block", auth, requireOwner, async (req, res) => {
