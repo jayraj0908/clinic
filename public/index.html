@@ -828,7 +828,13 @@ function buildDeptDefs(agentData){
    Everything below runs only after login, once real agent data is fetched.
    ========================================================================= */
 async function boot(){
-  const HUB_IDS=['leads','receptionist','calling','audit','billing'];
+  // Derived from the live graph, not hardcoded — an instance can run a
+  // reduced agent set (server/brain.js's disabled:true override or
+  // instance.json's "agents" allowlist, e.g. The Burg's receptionist +
+  // librarian only). Hardcoding the full dental roster here 404'd on
+  // every agent this instance doesn't have and crashed the rest of boot().
+  const graphPreview=await api('/api/brain/graph');
+  const HUB_IDS=graphPreview.nodes.filter(n=>n.type==='agent').map(n=>n.id);
   const [dash, ...hubDetails]=await Promise.all([
     api('/api/dashboard'),
     ...HUB_IDS.map(id=>api('/api/brain/agents/'+id)),
