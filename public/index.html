@@ -182,23 +182,27 @@
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:rgba(232,230,224,.14);border-radius:2px}
   ::-webkit-scrollbar-track{background:transparent}
 
-  /* ---------- login ---------- */
-  #login{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:var(--bg)}
-  #login .card{width:100%;max-width:380px;padding:36px;background:var(--glass);border:1px solid var(--line);border-radius:16px}
-  #login .boat{width:40px;height:40px;border-radius:50%;
+  /* ---------- login (+ forgot/magic/forced-change auth screens, same look) ---------- */
+  #login,#forgotPanel,#magicPanel,#forceChangePw{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+  #login .card,#forgotPanel .card,#magicPanel .card,#forceChangePw .card{width:100%;max-width:380px;padding:36px;background:var(--glass);border:1px solid var(--line);border-radius:16px}
+  #login .boat,#forgotPanel .boat,#magicPanel .boat,#forceChangePw .boat{width:40px;height:40px;border-radius:50%;
     background:radial-gradient(circle at 35% 30%,#fff8e8,#d9c78f 60%,#8f7658);margin-bottom:18px}
-  #login h1{font-family:'Cormorant Garamond',serif;font-size:26px;letter-spacing:.12em;color:var(--ink);
+  #login h1,#forgotPanel h1,#magicPanel h1,#forceChangePw h1{font-family:'Cormorant Garamond',serif;font-size:26px;letter-spacing:.12em;color:var(--ink);
     text-transform:uppercase;margin-bottom:4px}
-  #login p.sub{font:500 10px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:26px}
-  #login .field{margin-bottom:18px}
-  #login label{display:block;font:600 9px 'Inter';letter-spacing:.18em;color:var(--dim);
+  #login p.sub,#forgotPanel p.sub,#magicPanel p.sub,#forceChangePw p.sub{font:500 10px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:26px}
+  #login .field,#forgotPanel .field,#magicPanel .field,#forceChangePw .field{margin-bottom:18px}
+  #login label,#forgotPanel label,#magicPanel label,#forceChangePw label{display:block;font:600 9px 'Inter';letter-spacing:.18em;color:var(--dim);
     text-transform:uppercase;margin-bottom:6px}
-  #login input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;
+  #login input,#forgotPanel input,#magicPanel input,#forceChangePw input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;
     background:rgba(255,255,255,.03);color:var(--ink);font:400 13px 'Inter'}
-  #login .err{color:#e08a7a;font:500 11px 'Inter';margin-bottom:10px;min-height:14px}
-  #login button{width:100%;padding:12px;border-radius:999px;border:1px solid var(--ink);
+  #login .err,#forgotPanel .err,#magicPanel .err,#forceChangePw .err{color:#e08a7a;font:500 11px 'Inter';margin-bottom:10px;min-height:14px}
+  #login .ok,#forgotPanel .ok,#magicPanel .ok{color:#7fd6b0;font:500 11px 'Inter';margin-bottom:14px;line-height:1.5}
+  #login button,#forgotPanel button,#magicPanel button,#forceChangePw button{width:100%;padding:12px;border-radius:999px;border:1px solid var(--ink);
     background:var(--ink);color:var(--bg);font:700 11px 'Inter';letter-spacing:.14em;
     text-transform:uppercase;cursor:pointer}
+  .authlinks{display:flex;justify-content:space-between;margin-top:16px;gap:10px;flex-wrap:wrap}
+  .authlinks a{font:500 10px 'Inter';color:var(--dim);text-decoration:underline;text-underline-offset:3px}
+  .authlinks a:hover{color:var(--ink)}
 
   /* ---------- notification bell (design tokens match public/brain.html) ---------- */
   .bell-wrap{position:relative}
@@ -420,6 +424,49 @@
     <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password"></div>
     <div class="err" id="loginErr"></div>
     <button onclick="doLogin()">Sign in</button>
+    <div class="authlinks">
+      <a href="#" onclick="showForgot();return false">Forgot password?</a>
+      <a href="#" onclick="showMagic();return false">Email me a login link</a>
+    </div>
+  </div>
+</div>
+
+<div id="forgotPanel" class="hidden">
+  <div class="card">
+    <div class="boat"></div>
+    <h1>Sailz</h1>
+    <p class="sub">Reset your password</p>
+    <div class="field"><label for="fg_em">Email</label><input id="fg_em" type="email" autocomplete="username"></div>
+    <div class="err" id="forgotErr"></div>
+    <div class="ok" id="forgotOk" style="display:none">If that email has an account, a reset link is on its way.</div>
+    <button onclick="doForgot()">Send reset link</button>
+    <div class="authlinks"><a href="#" onclick="showLogin();return false">‹ Back to sign in</a></div>
+  </div>
+</div>
+
+<div id="magicPanel" class="hidden">
+  <div class="card">
+    <div class="boat"></div>
+    <h1>Sailz</h1>
+    <p class="sub">Get a login link by email</p>
+    <div class="field"><label for="mg_em">Email</label><input id="mg_em" type="email" autocomplete="username"></div>
+    <div class="err" id="magicErr"></div>
+    <div class="ok" id="magicOk" style="display:none">If that email has an account, a login link is on its way — it works once and expires in 15 minutes.</div>
+    <button onclick="doMagic()">Send login link</button>
+    <div class="authlinks"><a href="#" onclick="showLogin();return false">‹ Back to sign in</a></div>
+  </div>
+</div>
+
+<div id="forceChangePw" class="hidden">
+  <div class="card">
+    <div class="boat"></div>
+    <h1>Sailz</h1>
+    <p class="sub">Set a new password to continue</p>
+    <div class="field"><label for="fc_cur">Current password</label><input id="fc_cur" type="password" autocomplete="current-password"></div>
+    <div class="field"><label for="fc_new">New password</label><input id="fc_new" type="password" autocomplete="new-password"></div>
+    <div class="field"><label for="fc_new2">Confirm new password</label><input id="fc_new2" type="password" autocomplete="new-password"></div>
+    <div class="err" id="forceChangeErr"></div>
+    <button onclick="doForceChange()">Set password &amp; continue</button>
   </div>
 </div>
 
@@ -619,17 +666,62 @@ async function api(path, opts={}){
   if(res.status===401){logout();throw new Error("auth")}
   return res.json();
 }
+function hideAuthPanels(){
+  ["login","forgotPanel","magicPanel","forceChangePw"].forEach(id=>$(id).classList.add("hidden"));
+}
+function showLogin(){ hideAuthPanels(); $("login").classList.remove("hidden"); }
+function showForgot(){ hideAuthPanels(); $("forgotPanel").classList.remove("hidden"); $("forgotErr").textContent=""; $("forgotOk").style.display="none"; }
+function showMagic(){ hideAuthPanels(); $("magicPanel").classList.remove("hidden"); $("magicErr").textContent=""; $("magicOk").style.display="none"; }
+function showForceChange(){ hideAuthPanels(); $("forceChangeErr").textContent=""; $("fc_cur").value=""; $("fc_new").value=""; $("fc_new2").value=""; $("forceChangePw").classList.remove("hidden"); }
+
+async function afterAuth(data){
+  token=data.token; sessionStorage.setItem("token",token);
+  if(data.mustChangePassword){
+    sessionStorage.setItem("mustChangePassword","1");
+    showForceChange();
+    return;
+  }
+  sessionStorage.removeItem("mustChangePassword");
+  hideAuthPanels(); $("app").classList.remove("hidden");
+  boot().catch(err=>console.error(err));
+}
 async function doLogin(){
   $("loginErr").textContent="";
   const res=await fetch("/api/auth/login",{method:"POST",headers:{"content-type":"application/json"},
     body:JSON.stringify({email:$("em").value.trim(),password:$("pw").value})});
   const data=await res.json();
   if(!res.ok){$("loginErr").textContent=data.error||"Sign-in failed";return}
-  token=data.token;sessionStorage.setItem("token",token);
-  $("login").classList.add("hidden");$("app").classList.remove("hidden");
+  afterAuth(data);
+}
+async function doForgot(){
+  $("forgotErr").textContent=""; $("forgotOk").style.display="none";
+  const res=await fetch("/api/auth/forgot",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:$("fg_em").value.trim()})});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){$("forgotErr").textContent=data.error||"Something went wrong — try again.";return}
+  $("forgotOk").style.display="block";
+}
+async function doMagic(){
+  $("magicErr").textContent=""; $("magicOk").style.display="none";
+  const res=await fetch("/api/auth/magic",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:$("mg_em").value.trim()})});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){$("magicErr").textContent=data.error||"Something went wrong — try again.";return}
+  $("magicOk").style.display="block";
+}
+async function doForceChange(){
+  $("forceChangeErr").textContent="";
+  const cur=$("fc_cur").value, p1=$("fc_new").value, p2=$("fc_new2").value;
+  if(!cur){$("forceChangeErr").textContent="Enter your current password";return}
+  if(p1.length<8){$("forceChangeErr").textContent="New password must be at least 8 characters";return}
+  if(p1!==p2){$("forceChangeErr").textContent="Passwords don't match";return}
+  const res=await fetch("/api/auth/change-password",{method:"POST",headers:{"content-type":"application/json",Authorization:"Bearer "+token},
+    body:JSON.stringify({currentPassword:cur,newPassword:p1})});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){$("forceChangeErr").textContent=data.error||"Couldn't set that password — try again.";return}
+  sessionStorage.removeItem("mustChangePassword");
+  hideAuthPanels(); $("app").classList.remove("hidden");
   boot().catch(err=>console.error(err));
 }
-function logout(){sessionStorage.removeItem("token");location.reload()}
+function logout(){sessionStorage.removeItem("token");sessionStorage.removeItem("mustChangePassword");location.reload()}
 $("pw").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
 
 // Text-node escaping (via textContent round-trip) neutralizes < > & but not
@@ -2201,8 +2293,12 @@ async function boot(){
 }
 
 if(token){
-  $("login").classList.add("hidden");$("app").classList.remove("hidden");
-  boot().catch(err=>console.error(err));
+  if(sessionStorage.getItem("mustChangePassword")==="1"){
+    showForceChange();
+  }else{
+    hideAuthPanels(); $("app").classList.remove("hidden");
+    boot().catch(err=>console.error(err));
+  }
 }
 </script>
 </body>

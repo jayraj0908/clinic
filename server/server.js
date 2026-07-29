@@ -110,7 +110,7 @@ app.post("/api/auth/login", loginLimiter, (req, res) => {
   // — otherwise response timing itself is a user-exists oracle.
   const ok = bcrypt.compareSync(password || "", u ? u.passHash : DUMMY_HASH);
   if (!u || !ok) return res.status(401).json({ error: "Invalid email or password" });
-  res.json({ token: jwt.sign({ id: u.id, role: u.role }, SECRET, { expiresIn: "7d" }), name: u.name });
+  res.json({ token: jwt.sign({ id: u.id, role: u.role }, SECRET, { expiresIn: "7d" }), name: u.name, mustChangePassword: !!u.mustChangePassword });
 });
 
 function auth(req, res, next) {
@@ -132,7 +132,7 @@ app.post("/api/users/invite", auth, requireOwner, (req, res) => {
   const roleValue = role === "owner" ? "owner" : "staff";
   const db = load();
   if (db.users.find((u) => u.email === email)) return res.status(409).json({ error: "A user with that email already exists" });
-  const user = { id: "u" + nanoid(10), email, passHash: bcrypt.hashSync(tempPassword, 10), name: email.split("@")[0], role: roleValue };
+  const user = { id: "u" + nanoid(10), email, passHash: bcrypt.hashSync(tempPassword, 10), name: email.split("@")[0], role: roleValue, mustChangePassword: true };
   db.users.push(user);
   save();
   log("system", `${req.user.id} invited ${email} as ${roleValue}`);
@@ -152,9 +152,94 @@ app.post("/api/auth/change-password", auth, (req, res) => {
   if (!u) return res.status(404).json({ error: "User not found" });
   if (!bcrypt.compareSync(currentPassword || "", u.passHash)) return res.status(401).json({ error: "Current password is incorrect" });
   u.passHash = bcrypt.hashSync(newPassword, 10);
+  u.mustChangePassword = false;
   save();
   log("system", `${u.email} changed their password`);
   res.json({ ok: true });
+});
+
+// ---------- forgot password / magic-link login ----------
+// Both request paths return the exact same {ok:true} whether or not the
+// email has an account — the response (and its timing) must never let a
+// caller distinguish "no such user" from "email sent", or the endpoint
+// becomes an account-existence oracle. Tightly rate-limited since each hit
+// is a real email send attempt. The consume routes (reset/magic-consume)
+// get their OWN, more generous limiter — a legitimate user retyping a
+// mistyped new password, or a stale page reload, shouldn't burn through the
+// same 3/hour budget as requesting the email in the first place.
+const forgotLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 3, standardHeaders: true, legacyHeaders: false, message: { error: "Too many reset requests — try again in an hour." } });
+const magicLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 3, standardHeaders: true, legacyHeaders: false, message: { error: "Too many login-link requests — try again in an hour." } });
+const consumeLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false, message: { error: "Too many attempts — try again in an hour." } });
+
+app.post("/api/auth/forgot", forgotLimiter, async (req, res) => {
+  const { email } = req.body || {};
+  const db = load();
+  const u = db.users.find((x) => x.email === email);
+  if (u) {
+    const resetToken = nanoid(32);
+    db.passwordResets.push({ token: resetToken, userId: u.id, expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(), used: false, createdAt: new Date().toISOString() });
+    save();
+    const link = `${req.protocol}://${req.get("host")}/reset/${resetToken}`;
+    notify.sendEmail(u.email, "Reset your Sailz password", `<p>Reset your password (expires in 30 minutes, works once):</p><p><a href="${link}">${link}</a></p><p>Didn't request this? You can ignore this email.</p>`)
+      .catch((e) => log("notify", `Password reset email error: ${e.message}`));
+  }
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/reset", consumeLimiter, (req, res) => {
+  const { token: resetToken, newPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: "New password must be at least 8 characters" });
+  const db = load();
+  const entry = db.passwordResets.find((r) => r.token === resetToken);
+  if (!entry || entry.used || new Date(entry.expiresAt).getTime() < Date.now()) {
+    return res.status(400).json({ error: "This reset link is invalid or has expired — request a new one." });
+  }
+  const u = db.users.find((x) => x.id === entry.userId);
+  if (!u) return res.status(400).json({ error: "This reset link is invalid or has expired — request a new one." });
+  u.passHash = bcrypt.hashSync(newPassword, 10);
+  u.mustChangePassword = false;
+  entry.used = true;
+  save();
+  log("system", `${u.email} reset their password via emailed link`);
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/magic", magicLimiter, async (req, res) => {
+  const { email } = req.body || {};
+  const db = load();
+  const u = db.users.find((x) => x.email === email);
+  if (u) {
+    const magicToken = nanoid(32);
+    db.magicLinks.push({ token: magicToken, userId: u.id, expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), used: false, createdAt: new Date().toISOString() });
+    save();
+    const link = `${req.protocol}://${req.get("host")}/magic/${magicToken}`;
+    notify.sendEmail(u.email, "Your Sailz login link", `<p>Sign in (expires in 15 minutes, works once):</p><p><a href="${link}">${link}</a></p><p>Didn't request this? You can ignore this email.</p>`)
+      .catch((e) => log("notify", `Magic-link email error: ${e.message}`));
+  }
+  res.json({ ok: true });
+});
+
+app.get("/magic/:token", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "magic.html"));
+});
+
+app.post("/api/auth/magic/consume", consumeLimiter, (req, res) => {
+  const { token: magicToken } = req.body || {};
+  const db = load();
+  const entry = db.magicLinks.find((r) => r.token === magicToken);
+  if (!entry || entry.used || new Date(entry.expiresAt).getTime() < Date.now()) {
+    return res.status(400).json({ error: "This login link is invalid or has expired — request a new one." });
+  }
+  const u = db.users.find((x) => x.id === entry.userId);
+  if (!u) return res.status(400).json({ error: "This login link is invalid or has expired — request a new one." });
+  entry.used = true;
+  save();
+  log("system", `${u.email} signed in via magic link`);
+  res.json({ token: jwt.sign({ id: u.id, role: u.role }, SECRET, { expiresIn: "7d" }), name: u.name, mustChangePassword: !!u.mustChangePassword });
+});
+
+app.get("/reset/:token", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "reset.html"));
 });
 
 // ---------- dashboard aggregate ----------
