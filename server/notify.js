@@ -120,6 +120,77 @@ async function notifyReminder(appt) {
   return sendSMS(appt.phone, renderTemplate(messages.reminderSMS, vars));
 }
 
+function formatMoney(n) {
+  return `$${Number(n || 0).toFixed(2)}`;
+}
+function formatClockTime(iso, timeZone) {
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone }).format(new Date(iso));
+}
+function formatOrderItemsForTemplate(items) {
+  return items.map((it) => `${it.qty}x ${it.name}${it.modifiers?.length ? ` (${it.modifiers.join(", ")})` : ""}`).join(", ");
+}
+
+// Customer confirmation SMS for a placed order — restaurant vertical only
+// (fired right after place_order succeeds, same fire-and-forget pattern as
+// notifyBookingConfirmed; never blocks the caller-facing tool response).
+async function notifyOrderConfirmed(order) {
+  const settings = load().settings || {};
+  const tz = calendarApi.tz();
+  const vars = {
+    clinic: instance.name,
+    patient: order.customer.name || "there",
+    orderItems: formatOrderItemsForTemplate(order.items),
+    total: formatMoney(order.total),
+    pickupTime: formatClockTime(order.pickupTime, tz),
+    number: settings.receptionistNumber || "",
+  };
+  return sendSMS(order.customer.phone, renderTemplate(messages.orderConfirmationSMS, vars));
+}
+
+// Kitchen ticket — plain monospace text for whoever's running the kitchen
+// to read off a phone/tablet. Unlike every other message here, this one
+// DOES carry order content in the outbound message (it's an operational
+// message to staff, not something retained in the activity log — sendSMS/
+// sendEmail below never log body content either way) — but the customer's
+// phone is still masked, since a kitchen ticket only needs a callback
+// number, not the number spelled out in full everywhere it appears.
+function formatKitchenTicketText(order, tz) {
+  const lines = [];
+  lines.push(`NEW ORDER — ${order.customer.name || "Unknown"} (${maskPhone(order.customer.phone)})`);
+  lines.push("-".repeat(28));
+  for (const it of order.items) {
+    lines.push(`${it.qty}x ${it.name}`);
+    for (const mod of it.modifiers || []) lines.push(`   - ${mod}`);
+  }
+  lines.push("-".repeat(28));
+  if (order.allergyFlag) lines.push(`** ALLERGY: ${order.allergyNote || "see notes"} **`);
+  if (order.notes) lines.push(`Notes: ${order.notes}`);
+  lines.push(`Total: ${formatMoney(order.total)}`);
+  lines.push(`Pickup: ${formatClockTime(order.pickupTime, tz)}`);
+  return lines.join("\n");
+}
+
+async function sendKitchenTicket(order) {
+  const tz = calendarApi.tz();
+  const ticket = formatKitchenTicketText(order, tz);
+  const smsTo = process.env.KITCHEN_SMS;
+  const emailTo = process.env.KITCHEN_EMAIL;
+  if (!smsTo && !emailTo) {
+    log("notify", "Kitchen ticket skipped — KITCHEN_SMS/KITCHEN_EMAIL not configured");
+    return { sent: false, reason: "not configured" };
+  }
+  const results = {};
+  if (smsTo) results.sms = await sendSMS(smsTo, ticket);
+  if (emailTo) {
+    results.email = await sendEmail(
+      emailTo,
+      `New order — ${order.customer.name || "pickup"} — ${formatMoney(order.total)}`,
+      `<pre style="font-family:monospace">${ticket.replace(/</g, "&lt;")}</pre>`
+    );
+  }
+  return results;
+}
+
 // Same-day-boundary-safe date key in the clinic's own timezone (not the
 // server process's timezone), so "tomorrow" means tomorrow for the clinic.
 function localDateKey(date, timeZone) {
@@ -145,4 +216,4 @@ async function runDailyReminders() {
   return due.length;
 }
 
-module.exports = { sendSMS, sendEmail, hasTwilio, hasResend, renderTemplate, notifyBookingConfirmed, notifyReminder, runDailyReminders };
+module.exports = { sendSMS, sendEmail, hasTwilio, hasResend, renderTemplate, notifyBookingConfirmed, notifyReminder, runDailyReminders, notifyOrderConfirmed, sendKitchenTicket, formatKitchenTicketText };

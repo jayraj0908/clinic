@@ -645,8 +645,10 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
 
           const existingOrder = db.orders.find((o) => o.vapiCallId === m.call?.id);
           let order;
+          let orderChanged = false;
           if (existingOrder && orders.sameItems(existingOrder.items, matched)) {
-            // exact retry of the same confirmed order — don't double it
+            // exact retry of the same confirmed order — don't double it,
+            // and don't re-fire the kitchen ticket / confirmation SMS
             order = existingOrder;
           } else if (existingOrder) {
             // a genuinely new/different item list on the same live call —
@@ -659,6 +661,7 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
             }
             if (notes) existingOrder.notes = [existingOrder.notes, notes].filter(Boolean).join(" · ");
             order = existingOrder;
+            orderChanged = true;
           } else {
             const pickupISO = new Date(Date.now() + prepMinutes * 60000).toISOString();
             order = {
@@ -675,11 +678,20 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
               vapiCallId: m.call?.id,
             };
             db.orders.unshift(order);
+            orderChanged = true;
           }
           save();
           log("order", `${order.customer.name} placed an order — $${order.total.toFixed(2)}${order.allergyFlag ? " · ALLERGY: " + order.allergyNote : ""}`);
 
-          // Stage 2 wires the kitchen ticket + customer confirmation here.
+          // Fire-and-forget, same pattern as notifyBookingConfirmed — never
+          // make the caller wait on ticket/SMS delivery. Only on a real
+          // creation or addition, never on the exact-duplicate-retry no-op,
+          // so the kitchen and the customer each get exactly one ticket/
+          // text per real change, not one per retried tool call.
+          if (orderChanged) {
+            notify.sendKitchenTicket(order).catch((e) => log("notify", `Kitchen ticket error: ${e.message}`));
+            notify.notifyOrderConfirmed(order).catch((e) => log("notify", `Order confirmation error: ${e.message}`));
+          }
 
           const prepText = Math.round((new Date(order.pickupTime).getTime() - Date.now()) / 60000);
           const spoken = `Order in — $${order.total.toFixed(2)}, ready in about ${Math.max(prepText, 5)} minutes.` +

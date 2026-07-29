@@ -1,0 +1,3 @@
+{
+  "orderConfirmationSMS": "Order in, {patient}! {orderItems} — Total: {total}. We'll have it ready around {pickupTime} at {clinic}. Call {number} if anything changes. Thanks!"
+}

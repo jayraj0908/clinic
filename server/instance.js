@@ -37,6 +37,10 @@ const DEFAULT_MESSAGES = {
   bookingConfirmationEmailSubject: "Your appointment at {clinic} is confirmed",
   bookingConfirmationEmailHTML: "<p>Hi {patient},</p><p>You're booked at <strong>{clinic}</strong> — {service}, {date} {time}.</p><p>Reply to this email or call {number} to reschedule.</p>",
   reminderSMS: "Reminder: you have an appointment at {clinic} tomorrow — {service}, {date} {time}. Call {number} if you need to reschedule.",
+  // Restaurant vertical (orders) — generic engine default; a real
+  // restaurant instance overrides with its own wording (see
+  // instances/the-burg/messages.json). Never used by a non-order instance.
+  orderConfirmationSMS: "Thanks {patient}! Your order at {clinic} is confirmed — {orderItems}. Total: {total}. Ready around {pickupTime}. Call {number} with any changes.",
 };
 
 function readJSONSafe(p, fallback) {
