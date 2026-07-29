@@ -67,6 +67,16 @@ async function syncToVapi(pushedBy) {
     // current docs / a sandbox assistant before the first real
     // VAPI_SYNC_DRY_RUN=0 push — it's implemented from the documented
     // pattern, not yet exercised against a live assistant in this repo.
+    //
+    // Coverage-gap learning (server.js's end-of-call-report handler reads
+    // analysis.structuredData.unansweredQuestions) depends on a SEPARATE
+    // piece of Vapi-side config this PATCH does not manage: the assistant's
+    // analysisPlan.structuredDataSchema needs an `unansweredQuestions`
+    // string-array property declared (Vapi dashboard → assistant →
+    // Analysis, or the equivalent API field) so Vapi's own end-of-call
+    // analysis actually extracts and returns it — the system prompt
+    // instructs the model to flag them, but Vapi's structured-data
+    // extraction is a distinct step that needs its own schema entry.
     const res = await fetch(`https://api.vapi.ai/assistant/${process.env.VAPI_INBOUND_ASSISTANT_ID}`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}`, "content-type": "application/json" },

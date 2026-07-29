@@ -10,7 +10,7 @@ const cron = require("node-cron");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { load, save, log, DB_PATH } = require("./store");
-const { runAgent } = require("./agents");
+const { runAgent, isSameFact } = require("./agents");
 const calendarApi = require("./calendar");
 const brainGraph = require("./brainGraph");
 const notify = require("./notify");
@@ -937,6 +937,37 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
   if (call.outcome === "booked" && analysis.structuredData?.slot && !alreadyBookedByTool) {
     db.appointments.unshift({ id: "A" + Date.now(), time: analysis.structuredData.slot, name: call.who, service: analysis.structuredData.service || "", source: call.dir === "inbound" ? "AI line" : "Outbound", status: "unconfirmed", vapiCallId: m.call?.id });
   }
+
+  // Coverage-gap learning: every question the receptionist couldn't answer
+  // on a real call becomes a proposed faq_gap fact — same human-gated path
+  // as every other memory fact (owner approves in the Memory tab, then
+  // vapiSync pushes it into the live prompt). Requires the assistant's
+  // analysisPlan.structuredDataSchema to declare unansweredQuestions (see
+  // the comment in vapiSync.js) — silently a no-op array until that's
+  // configured, never a crash.
+  const rawUnanswered = Array.isArray(analysis.structuredData?.unansweredQuestions) ? analysis.structuredData.unansweredQuestions : [];
+  // Exact-text dedup within this one call's own list first — isSameFact
+  // below can't be used for that (its source-overlap signal assumes
+  // "same caller/call = same fact re-described", which is backwards here:
+  // every question from THIS call legitimately shares the same source
+  // string, so comparing them against each other would wrongly collapse
+  // genuinely different questions into one).
+  const unanswered = [...new Set(rawUnanswered.filter((q) => typeof q === "string" && q.trim()).map((q) => q.trim()))];
+  if (unanswered.length) {
+    // Only compare against facts that existed BEFORE this call — real
+    // duplicate detection across calls/time, not within this call's list.
+    const priorFacts = db.memory.filter((f) => f.status === "proposed" || f.status === "approved");
+    const source = `call · ${m.customer?.name || maskPhone(call.who)}`;
+    let learned = 0;
+    for (const q of unanswered) {
+      const candidate = { type: "faq_gap", fact: q, source };
+      if (priorFacts.some((e) => isSameFact(e, candidate))) continue;
+      db.memory.push({ id: "M" + Date.now() + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), type: "faq_gap", fact: q, source, status: "proposed" });
+      learned++;
+    }
+    if (learned) log("system", `Coverage gap: ${learned} unanswered question(s) from this call proposed for review`);
+  }
+
   save();
   // call.who is a display name when Vapi has caller-ID data, otherwise it's
   // the raw phone number itself — mask only in that second case, since the
