@@ -3,5 +3,6 @@
   "name": "The Burg",
   "vertical": "restaurant",
   "brandColor": "#e05545",
-  "timezone": "America/New_York"
+  "timezone": "America/New_York",
+  "agents": ["receptionist", "librarian"]
 }

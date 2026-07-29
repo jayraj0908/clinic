@@ -7,7 +7,7 @@
 // over brain/agents/*.md for any file sharing the same `name`.
 const fs = require("fs");
 const path = require("path");
-const { instanceAgentsDir } = require("./instance");
+const { instanceAgentsDir, instance } = require("./instance");
 
 const ENGINE_AGENTS_DIR = path.join(__dirname, "..", "brain", "agents");
 
@@ -69,6 +69,11 @@ function loadAgentFile(filePath) {
     tagline: data.tagline || "",
     runner: data.runner !== undefined ? data.runner : id, // db.agents id this hub's status/stats are read from
     order: Number.isFinite(orderNum) ? orderNum : Infinity,
+    // instance override sets disabled: true to drop this agent entirely for
+    // that instance — see loadAgents() below. A minimal override file
+    // (just name + disabled: true) is enough; nothing else in this record
+    // matters once it's filtered out.
+    disabled: data.disabled === "true" || data.disabled === true,
     // optional pipeline metadata (Stage 2 hard requirement: support, not require)
     triggers: splitList(data.triggers),
     handoff: splitList(data.handoff),
@@ -91,6 +96,25 @@ function loadAgents() {
       byId[agent.id] = agent; // instance file wins over the engine default of the same name
     }
   }
+
+  // An instance override with disabled: true drops that agent entirely —
+  // not just hidden, gone from the graph/scheduler/prompt pipeline, as if
+  // the file were never loaded.
+  for (const id of Object.keys(byId)) {
+    if (byId[id].disabled) delete byId[id];
+  }
+
+  // Optional instance.json "agents" allowlist: if present, only those
+  // named agents load for this instance at all (everything else engine
+  // defaults would normally provide is dropped). Absent = every agent
+  // loads, unchanged from today.
+  if (Array.isArray(instance.agents)) {
+    const allowed = new Set(instance.agents);
+    for (const id of Object.keys(byId)) {
+      if (!allowed.has(id)) delete byId[id];
+    }
+  }
+
   return byId;
 }
 

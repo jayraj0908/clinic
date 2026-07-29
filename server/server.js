@@ -872,7 +872,14 @@ let jobs = [];
 function bootSchedules() {
   jobs.forEach((j) => j.stop());
   jobs = [];
+  // db.agents is a generic fixture seeded the same way for every instance;
+  // brainGraph.HUBS is what actually loaded for THIS instance (after any
+  // disabled: true override or instance.json agents allowlist). Only arm a
+  // cron job for a db.agents row if its id is still a live hub's runner —
+  // an agent dropped for this instance gets nothing scheduled, ever.
+  const activeRunnerIds = new Set(brainGraph.HUBS.map((h) => h.agentId).filter(Boolean));
   for (const a of load().agents) {
+    if (!activeRunnerIds.has(a.id)) continue;
     if (!cron.validate(a.schedule)) continue;
     jobs.push(
       cron.schedule(a.schedule, async () => {
