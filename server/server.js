@@ -17,6 +17,8 @@ const notify = require("./notify");
 const chat = require("./chat");
 const { maskPhone, verifyMetaSignature } = require("./security");
 const vapiSync = require("./vapiSync");
+const { instance, profile } = require("./instance");
+const orders = require("./orders");
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -621,6 +623,68 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
           } else {
             results.push({ toolCallId: tc.id, result: "Sorry, I couldn't book that — the calendar isn't connected right now. A team member will confirm by phone." });
           }
+        } else if (tc.name === "place_order") {
+          // Canonical schema: instances/the-burg/VAPI-SETUP.md — customer_name,
+          // phone, items:[{name,qty,modifiers}], notes, allergy (verbatim
+          // allergy text, not a boolean). Restaurant-vertical only; Shine
+          // Dental's assistant has no place_order tool, so this branch is
+          // simply never reached for that instance.
+          const { customer_name, phone, items: requestedItems, notes, allergy } = tc.arguments || {};
+          const services = profile.services || [];
+          const { matched, unmatched, prepMinutes } = orders.buildOrderItems(requestedItems, services);
+
+          if (!matched.length) {
+            results.push({
+              toolCallId: tc.id,
+              result: unmatched.length
+                ? `I couldn't find ${unmatched.join(", ")} on our menu — could you pick something from the menu instead?`
+                : "I didn't catch any items — what would you like to order?",
+            });
+            continue;
+          }
+
+          const existingOrder = db.orders.find((o) => o.vapiCallId === m.call?.id);
+          let order;
+          if (existingOrder && orders.sameItems(existingOrder.items, matched)) {
+            // exact retry of the same confirmed order — don't double it
+            order = existingOrder;
+          } else if (existingOrder) {
+            // a genuinely new/different item list on the same live call —
+            // the only sensible read is the customer adding to their order
+            existingOrder.items.push(...matched);
+            existingOrder.total = orders.computeTotal(existingOrder.items);
+            if (allergy) {
+              existingOrder.allergyFlag = true;
+              existingOrder.allergyNote = [existingOrder.allergyNote, allergy].filter(Boolean).join("; ");
+            }
+            if (notes) existingOrder.notes = [existingOrder.notes, notes].filter(Boolean).join(" · ");
+            order = existingOrder;
+          } else {
+            const pickupISO = new Date(Date.now() + prepMinutes * 60000).toISOString();
+            order = {
+              id: "O" + Date.now(),
+              ts: new Date().toISOString(),
+              customer: { name: customer_name || m.customer?.name || "Unknown caller", phone: phone || m.customer?.number || "" },
+              items: matched,
+              notes: notes || "",
+              allergyFlag: !!allergy,
+              allergyNote: allergy || "",
+              total: orders.computeTotal(matched),
+              pickupTime: pickupISO,
+              status: "new",
+              vapiCallId: m.call?.id,
+            };
+            db.orders.unshift(order);
+          }
+          save();
+          log("order", `${order.customer.name} placed an order — $${order.total.toFixed(2)}${order.allergyFlag ? " · ALLERGY: " + order.allergyNote : ""}`);
+
+          // Stage 2 wires the kitchen ticket + customer confirmation here.
+
+          const prepText = Math.round((new Date(order.pickupTime).getTime() - Date.now()) / 60000);
+          const spoken = `Order in — $${order.total.toFixed(2)}, ready in about ${Math.max(prepText, 5)} minutes.` +
+            (unmatched.length ? ` I couldn't find ${unmatched.join(", ")} on the menu, so I left that off.` : "");
+          results.push({ toolCallId: tc.id, result: spoken });
         } else {
           results.push({ toolCallId: tc.id, result: "Unknown tool." });
         }

@@ -1,0 +1,21 @@
+{
+  "name": "The Burg",
+  "timezone": "America/New_York",
+  "hours": [
+    { "days": "Mon–Thu", "open": "11:00 AM", "close": "9:00 PM" },
+    { "days": "Fri–Sat", "open": "11:00 AM", "close": "10:30 PM" },
+    { "days": "Sun", "open": "12:00 PM", "close": "8:00 PM" }
+  ],
+  "services": [
+    { "name": "REPLACE — Classic Burger", "price": "$9.99", "duration": "15 min pickup", "modifiers": ["cheese +$1", "bacon +$1.50", "no onion", "extra patty +$3"] },
+    { "name": "REPLACE — Large Pepperoni Pizza", "price": "$14.99", "duration": "20 min pickup", "modifiers": ["extra cheese +$2", "half-and-half toppings ok", "thin or regular crust"] },
+    { "name": "REPLACE — Fries", "price": "$3.99", "duration": "", "modifiers": ["cajun seasoning", "large +$1.50"] }
+  ],
+  "insuranceAccepted": [],
+  "selfPay": "Payment at pickup — card or cash. No payment over the phone.",
+  "policies": [
+    "Pickup orders only through the phone line (no delivery dispatch v1).",
+    "Quote pickup time from current prep-time setting; during rush add 10 minutes.",
+    "Allergy mentions: read back the allergy, flag it clearly on the kitchen ticket, and advise the kitchen will be notified — never guarantee zero cross-contamination."
+  ]
+}

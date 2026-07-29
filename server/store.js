@@ -23,6 +23,7 @@ function load() {
   let migrated = false;
   if (!Array.isArray(db.memory)) { db.memory = []; migrated = true; }
   if (!Array.isArray(db.promptVersions)) { db.promptVersions = []; migrated = true; }
+  if (!Array.isArray(db.orders)) { db.orders = []; migrated = true; }
   if (migrated) save();
   return db;
 }

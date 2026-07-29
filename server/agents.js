@@ -3,7 +3,7 @@
 // without them, they no-op safely and log what they *would* do.
 const { load, save, log } = require("./store");
 const { AGENTS } = require("./brain");
-const { profile } = require("./instance");
+const { profile, instance } = require("./instance");
 
 const hasKey = (k) => !!process.env[k];
 
@@ -52,7 +52,14 @@ function instanceKnowledgeBlock() {
     lines.push("Hours: " + profile.hours.map((h) => `${h.days} ${h.open ? `${h.open}–${h.close}` : "closed"}`).join(", "));
   }
   if (profile.services?.length) {
-    lines.push("Services: " + profile.services.map((s) => `${s.name} (${s.price}, ${s.duration})`).join("; "));
+    // modifiers is additive/optional (used by the restaurant vertical's
+    // menu-as-services — see instances/the-burg) — when absent this is a
+    // no-op, so dental's services render exactly as before.
+    lines.push("Services: " + profile.services.map((s) => {
+      const detail = [s.price, s.duration].filter(Boolean).join(", ");
+      const mods = s.modifiers?.length ? ` [modifiers: ${s.modifiers.join(", ")}]` : "";
+      return `${s.name} (${detail})${mods}`;
+    }).join("; "));
   }
   if (profile.insuranceAccepted?.length) lines.push("Insurance accepted: " + profile.insuranceAccepted.join(", "));
   if (profile.selfPay) lines.push("Self-pay: " + profile.selfPay);
@@ -61,14 +68,16 @@ function instanceKnowledgeBlock() {
 }
 
 // An agent's Claude system prompt = its brain/agents/<id>.md body (or the
-// instance override of the same name) + the instance's clinic knowledge.
+// instance override of the same name) + the instance's business knowledge.
 // Falls back to a minimal generic prompt if the brain file is missing, so
-// a misconfigured instance degrades instead of crashing.
+// a misconfigured instance degrades instead of crashing. Vertical-neutral
+// wording throughout — this composes the live prompt for every instance
+// (dental, restaurant, whatever's next), not just the one this started on.
 function systemPromptFor(agentId, extra) {
   const a = AGENTS[agentId];
-  const base = a ? a.body : `You are the ${agentId} agent for this clinic.`;
+  const base = a ? a.body : `You are the ${agentId} agent for ${instance.name || "this business"}.`;
   const knowledge = instanceKnowledgeBlock();
-  return [base, knowledge ? `## Clinic knowledge\n${knowledge}` : "", extra || ""]
+  return [base, knowledge ? `## Business knowledge\n${knowledge}` : "", extra || ""]
     .filter(Boolean)
     .join("\n\n")
     .trim();

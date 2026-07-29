@@ -72,6 +72,7 @@ db.appointments = [];
 db.visits = [];
 db.claims = [];
 db.activity = [];
+db.orders = [];
 db.memory = [];
 db.promptVersions = [];
 
