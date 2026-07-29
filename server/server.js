@@ -165,6 +165,8 @@ app.get("/api/dashboard", auth, (req, res) => {
   const booked = db.leads.filter((l) => ["booked", "seen", "audited", "billed"].includes(l.status));
   res.json({
     settings: db.settings,
+    vertical: instance.vertical || null,
+    hasOrders: db.orders.length > 0,
     funnel: {
       leads: leadsToday.length || db.leads.length,
       calls: callsToday.length,
@@ -391,6 +393,18 @@ app.get("/api/attention", auth, (req, res) => {
     });
   }
 
+  const FIVE_MIN = 5 * 60 * 1000;
+  db.orders
+    .filter((o) => o.status === "new" && Date.now() - new Date(o.ts).getTime() > FIVE_MIN)
+    .forEach((o) => {
+      items.push({
+        type: "stale_order", severity: "high",
+        title: `${o.customer.name || "An order"} — kitchen hasn't started`,
+        detail: `$${o.total.toFixed(2)} order placed ${o.ts}, still sitting in "new".`,
+        action: { label: "Open orders", method: "GET", path: "orders" },
+      });
+    });
+
   res.json({ items, count: items.length });
 });
 
@@ -504,6 +518,43 @@ app.post("/api/calendar/block", auth, requireOwner, async (req, res) => {
   if (out.error) return res.status(502).json({ blocked: false, reason: out.error });
   log("system", `${req.user.id} blocked ${startISO} – ${endISO}${reason ? " (" + reason + ")" : ""}`);
   res.json({ blocked: true, eventId: out.eventId });
+});
+
+// ---------- orders (restaurant vertical — additive, Shine Dental never
+// has any rows here since it has no place_order tool) ----------
+const ORDER_STATUS_SEQUENCE = ["new", "preparing", "ready", "picked_up"];
+
+app.get("/api/orders", auth, (req, res) => {
+  const db = load();
+  const { status } = req.query;
+  const list = (status ? db.orders.filter((o) => o.status === status) : db.orders)
+    .slice()
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+  res.json({ orders: list });
+});
+
+app.post("/api/orders/:id/advance", auth, (req, res) => {
+  const db = load();
+  const o = db.orders.find((x) => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: "Order not found" });
+  const idx = ORDER_STATUS_SEQUENCE.indexOf(o.status);
+  if (idx === -1 || idx === ORDER_STATUS_SEQUENCE.length - 1) {
+    return res.status(400).json({ error: `Order is ${o.status} — nothing further to advance to` });
+  }
+  o.status = ORDER_STATUS_SEQUENCE[idx + 1];
+  save();
+  log("system", `Order ${o.id} (${o.customer.name || "unknown"}) advanced to ${o.status} by ${req.user.id}`);
+  res.json(o);
+});
+
+app.post("/api/orders/:id/cancel", auth, (req, res) => {
+  const db = load();
+  const o = db.orders.find((x) => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: "Order not found" });
+  o.status = "cancelled";
+  save();
+  log("system", `Order ${o.id} (${o.customer.name || "unknown"}) cancelled by ${req.user.id}`);
+  res.json(o);
 });
 
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------

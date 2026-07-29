@@ -46,7 +46,17 @@ function recentActivity(db, hubId) {
     return db.leads.slice(0, 8).map((l) => ({ ts: l.createdAt, summary: `${l.name} — ${l.service || "inquiry"} (${l.source})`, status: l.status }));
   }
   if (hubId === "receptionist") {
-    return db.calls.filter((c) => c.dir === "inbound").slice(0, 8).map((c) => ({ ts: c.ts, summary: c.summary, status: c.outcome }));
+    // Restaurant vertical: orders feed the same receptionist node's
+    // activity alongside calls, the way visits feed audit and claims feed
+    // billing. Additive/inert for Shine Dental — db.orders is always empty
+    // there, so this merge is a no-op and the feed is exactly what it was.
+    const callEvents = db.calls.filter((c) => c.dir === "inbound").map((c) => ({ ts: c.ts, summary: c.summary, status: c.outcome }));
+    const orderEvents = (db.orders || []).map((o) => ({
+      ts: o.ts,
+      summary: `Order — ${o.customer.name || "unknown"} — $${o.total.toFixed(2)}${o.allergyFlag ? " · ALLERGY" : ""}`,
+      status: o.status,
+    }));
+    return [...callEvents, ...orderEvents].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, 8);
   }
   if (hubId === "calling") {
     return db.calls.filter((c) => c.dir === "outbound").slice(0, 8).map((c) => ({ ts: c.ts, summary: c.summary, status: c.outcome }));

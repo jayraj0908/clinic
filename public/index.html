@@ -361,6 +361,26 @@
   .cal-agenda-date{font:600 9px 'Inter';letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
   @media (max-width:820px){.cal-week-grid{display:block}.cal-day-col{margin-bottom:10px}}
 
+  /* ---------- orders page (restaurant vertical) ---------- */
+  .order-card{display:flex;align-items:center;gap:14px;padding:14px 16px;margin-bottom:8px;
+    background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;cursor:pointer;transition:background .15s}
+  .order-card:hover{background:rgba(255,255,255,.06)}
+  .order-card .oc-main{flex:1;min-width:0}
+  .order-card .oc-name{font-family:'Cormorant Garamond',serif;font-size:17px;color:var(--ink)}
+  .order-card .oc-items{font:400 11px 'Inter';color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .order-card .oc-total{font:600 13px 'Inter';color:var(--ink);flex:none}
+  .order-status-chip{flex:none;font:600 8px 'Inter';letter-spacing:.08em;text-transform:uppercase;
+    padding:4px 10px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+  .order-card .oc-advance{flex:none;appearance:none;border:1px solid rgba(240,234,216,.2);
+    background:rgba(240,234,216,.06);color:#f0ead8;border-radius:8px;padding:8px 14px;
+    font:600 9px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:background .2s}
+  .order-card .oc-advance:hover:not(:disabled){background:rgba(240,234,216,.14)}
+  .order-card .oc-advance:disabled{opacity:.4;cursor:default}
+  .order-ticket{white-space:pre-wrap;font:400 12px 'JetBrains Mono',monospace;color:#d8d3c6;line-height:1.7;
+    background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .allergy-banner{margin:12px 0;padding:10px 14px;background:rgba(224,138,122,.12);border:1px solid rgba(224,138,122,.4);
+    border-radius:8px;color:#e08a7a;font:600 11px 'Inter'}
+
   /* ---------- mobile / narrow-viewport chrome ---------- */
   @media (max-width:640px){
     #topbar{padding:12px 12px;flex-wrap:wrap;row-gap:8px}
@@ -409,6 +429,7 @@
     <button data-v="dash">Dashboards</button>
     <button data-v="calls">Calls</button>
     <button data-v="calendar">Calendar</button>
+    <button data-v="orders" id="ordersTabBtn" style="display:none">Orders</button>
     <button data-v="work">Chart</button>
   </div>
   <div class="tb-right">
@@ -485,6 +506,18 @@
   </div>
   <div id="calGoogleNote" class="cal-google-note" style="display:none">Showing local bookings — Google Calendar isn't connected.</div>
   <div id="calBody"></div>
+</div></div>
+
+<div class="view" id="viewOrders"><div class="view-inner">
+  <h1>Orders</h1><div class="vsub">pickup orders from the phone line</div>
+  <div class="calls-toolbar">
+    <button class="filter-pill active" data-ostatus="all">All</button>
+    <button class="filter-pill" data-ostatus="new">New</button>
+    <button class="filter-pill" data-ostatus="preparing">Preparing</button>
+    <button class="filter-pill" data-ostatus="ready">Ready</button>
+    <button class="filter-pill" data-ostatus="picked_up">Picked up</button>
+  </div>
+  <div id="ordersListWrap"></div>
 </div></div>
 
 <aside id="callDrawer">
@@ -702,6 +735,7 @@ async function boot(){
     ...HUB_IDS.map(id=>api('/api/brain/agents/'+id)),
   ]);
   $("clinicSub").textContent=dash.settings?.clinicName||"";
+  if(dash.vertical==='restaurant'||dash.hasOrders)document.getElementById('ordersTabBtn').style.display='';
 
   const agentData={};
   hubDetails.forEach(h=>{agentData[h.id]=h});
@@ -1477,7 +1511,7 @@ async function boot(){
 
   /* ============================ tabs / views (real data) ===================== */
   let view='map';
-  const views={dash:document.getElementById('viewDash'),work:document.getElementById('viewWork'),calls:document.getElementById('viewCalls'),calendar:document.getElementById('viewCalendar')};
+  const views={dash:document.getElementById('viewDash'),work:document.getElementById('viewWork'),calls:document.getElementById('viewCalls'),calendar:document.getElementById('viewCalendar'),orders:document.getElementById('viewOrders')};
   function setView(v){
     view=v;
     document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
@@ -1485,6 +1519,7 @@ async function boot(){
     if(v!=='map')closeSidebar();
     if(v==='calls')renderCalls();
     if(v==='calendar'&&typeof renderCalendar==='function')renderCalendar();
+    if(v==='orders'&&typeof renderOrders==='function')renderOrders();
   }
   document.querySelectorAll('#tabs button').forEach(b=>{b.onclick=()=>{
     if(b.dataset.v==='map'&&view==='map'){exitFocus();return}
@@ -1810,6 +1845,92 @@ async function boot(){
       setTimeout(()=>{msg.textContent=''},1500);
     }catch(e){msg.textContent=e.message||'Something went wrong.'}
   };
+
+  /* ------------------------------ orders (restaurant vertical) ------------------------------ */
+  const ORDER_STATUS_META={
+    new:{label:'New',color:'#e0904a',next:'preparing',nextLabel:'Start preparing'},
+    preparing:{label:'Preparing',color:'#7fa8d6',next:'ready',nextLabel:'Mark ready'},
+    ready:{label:'Ready',color:'#7fd6b0',next:'picked_up',nextLabel:'Mark picked up'},
+    picked_up:{label:'Picked up',color:'#77777c',next:null,nextLabel:null},
+    cancelled:{label:'Cancelled',color:'#e08a7a',next:null,nextLabel:null},
+  };
+  let ordersData=[],ordersFilter='all';
+  async function renderOrders(){
+    const qs=ordersFilter!=='all'?'?status='+encodeURIComponent(ordersFilter):'';
+    const data=await api('/api/orders'+qs);
+    ordersData=data.orders||[];
+    const wrap=document.getElementById('ordersListWrap');
+    if(!ordersData.length){wrap.innerHTML='<div class="calls-empty">No orders yet — they\'ll show up here the moment the phone line takes one.</div>';return}
+    wrap.innerHTML=ordersData.map((o)=>{
+      const meta=ORDER_STATUS_META[o.status]||{label:o.status,color:'#77777c'};
+      const itemsText=o.items.map(it=>`${it.qty}x ${it.name}`).join(', ');
+      return `<div class="order-card" data-order="${esc(o.id)}">
+        <div class="oc-main">
+          <div class="oc-name">${esc(o.customer.name||'Unknown')}${o.allergyFlag?' ⚠️':''}</div>
+          <div class="oc-items">${esc(itemsText)}</div>
+        </div>
+        <div class="oc-total">$${o.total.toFixed(2)}</div>
+        <span class="order-status-chip" style="color:${meta.color}">${esc(meta.label)}</span>
+        ${meta.next?`<button class="oc-advance" data-advance="${esc(o.id)}">${esc(meta.nextLabel)}</button>`:''}
+      </div>`;
+    }).join('');
+    wrap.querySelectorAll('.oc-advance').forEach(btn=>{
+      btn.onclick=async(e)=>{
+        e.stopPropagation();
+        btn.disabled=true;btn.textContent='…';
+        try{await api(`/api/orders/${btn.dataset.advance}/advance`,{method:'POST'});await renderOrders();refreshAttention()}
+        catch(err){btn.disabled=false}
+      };
+    });
+    wrap.querySelectorAll('.order-card').forEach(card=>{
+      card.onclick=()=>openOrderDrawer(card.dataset.order);
+    });
+  }
+  document.querySelectorAll('.filter-pill[data-ostatus]').forEach(b=>{b.onclick=()=>{
+    document.querySelectorAll('.filter-pill[data-ostatus]').forEach(x=>x.classList.toggle('active',x===b));
+    ordersFilter=b.dataset.ostatus;renderOrders();
+  }});
+  function openOrderDrawer(orderId){
+    const o=ordersData.find(x=>x.id===orderId);
+    if(!o)return;
+    document.getElementById('callDrawerTitle').textContent=o.customer.name||'Order';
+    const meta=ORDER_STATUS_META[o.status]||{label:o.status,color:'#77777c'};
+    const ticketLines=o.items.map(it=>`${it.qty}x ${it.name}${it.modifiers?.length?'\n   - '+it.modifiers.join('\n   - '):''}`).join('\n');
+    document.getElementById('callDrawerBody').innerHTML=`
+      <div class="lead-detail-row"><span class="k">Status</span><span class="v" style="color:${meta.color}">${esc(meta.label)}</span></div>
+      <div class="lead-detail-row"><span class="k">Phone</span><span class="v">${esc(o.customer.phone||'—')}</span></div>
+      <div class="lead-detail-row"><span class="k">Placed</span><span class="v">${esc(new Date(o.ts).toLocaleString())}</span></div>
+      <div class="lead-detail-row"><span class="k">Pickup</span><span class="v">${esc(new Date(o.pickupTime).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}))}</span></div>
+      <div class="lead-detail-row"><span class="k">Total</span><span class="v">$${o.total.toFixed(2)}</span></div>
+      ${o.allergyFlag?`<div class="allergy-banner">⚠️ ALLERGY: ${esc(o.allergyNote||'see notes')}</div>`:''}
+      <div class="sb-section">
+        <div class="eyebrow">TICKET</div>
+        <pre class="order-ticket">${esc(ticketLines)}</pre>
+      </div>
+      ${o.notes?`<div class="sb-section"><div class="eyebrow">NOTES</div><div class="sb-desc" style="margin-bottom:0">${esc(o.notes)}</div></div>`:''}
+      <div class="call-drawer-actions">
+        ${meta.next?`<button id="orderAdvanceBtn">${esc(meta.nextLabel)}</button>`:''}
+        ${o.status!=='cancelled'&&o.status!=='picked_up'?`<button id="orderCancelBtn">Cancel order</button>`:''}
+      </div>
+    `;
+    document.getElementById('callDrawer').classList.add('show');
+    const advBtn=document.getElementById('orderAdvanceBtn');
+    if(advBtn)advBtn.onclick=async()=>{
+      advBtn.disabled=true;advBtn.textContent='…';
+      try{await api(`/api/orders/${o.id}/advance`,{method:'POST'});await renderOrders();openOrderDrawer(o.id)}
+      catch(e){advBtn.disabled=false}
+    };
+    const cxlBtn=document.getElementById('orderCancelBtn');
+    if(cxlBtn){
+      let armed=false;
+      cxlBtn.onclick=async()=>{
+        if(!armed){armed=true;cxlBtn.textContent='Click again to confirm';return}
+        cxlBtn.disabled=true;cxlBtn.textContent='…';
+        try{await api(`/api/orders/${o.id}/cancel`,{method:'POST'});document.getElementById('callDrawer').classList.remove('show');renderOrders()}
+        catch(e){cxlBtn.disabled=false;cxlBtn.textContent='Cancel order';armed=false}
+      };
+    }
+  }
 
   renderDash();renderWork();
 
