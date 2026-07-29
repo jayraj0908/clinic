@@ -4,6 +4,7 @@ require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const { load, save, DB_PATH } = require("./store");
 const fs = require("fs");
+const path = require("path");
 const { instance, profile: clinicProfile } = require("./instance");
 
 if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
@@ -15,6 +16,10 @@ db.users.push({
   passHash: bcrypt.hashSync(process.env.OWNER_PASSWORD || "changeme123", 10),
   name: `${instance.name} Owner`,
   role: "owner",
+  // The seeded password is whatever OWNER_PASSWORD was set to during
+  // provisioning (often a temp value handed to the client) — force a real
+  // change on first login rather than trusting it stays private forever.
+  mustChangePassword: true,
 });
 
 db.settings = {
@@ -73,8 +78,41 @@ db.visits = [];
 db.claims = [];
 db.activity = [];
 db.orders = [];
+db.onboardings = [];
+db.passwordResets = [];
+db.magicLinks = [];
+
 db.memory = [];
 db.promptVersions = [];
+
+// If this instance was born from the onboarding wizard, its draft's
+// approved memory facts were written to instances/<id>/onboarding-memory-
+// seed.json at activation time (server/onboarding.js) — pick them up here
+// so the brain has the knowledge the client typed in from its very first
+// boot, rather than starting blank and waiting on the librarian to
+// rediscover it from scratch. Absent for every hand-provisioned instance
+// (shine-dental, the-burg), so this is a pure no-op for them.
+const onboardingSeedPath = path.join(__dirname, "..", "instances", instance.id, "onboarding-memory-seed.json");
+if (fs.existsSync(onboardingSeedPath)) {
+  try {
+    const seedFacts = JSON.parse(fs.readFileSync(onboardingSeedPath, "utf8"));
+    for (const f of seedFacts) {
+      db.memory.push({
+        id: "M" + Date.now() + Math.random().toString(36).slice(2, 6),
+        ts: new Date().toISOString(),
+        type: f.type || "policy_correction",
+        fact: f.fact,
+        source: f.source || "onboarding",
+        status: "approved",
+        approvedBy: "onboarding",
+        approvedAt: new Date().toISOString(),
+      });
+    }
+    console.log(`Seeded ${seedFacts.length} onboarding-approved memory fact(s)`);
+  } catch (e) {
+    console.warn("Could not read onboarding-memory-seed.json:", e.message);
+  }
+}
 
 save();
 console.log("Seeded", DB_PATH);

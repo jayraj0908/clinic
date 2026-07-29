@@ -19,6 +19,8 @@ const { maskPhone, verifyMetaSignature } = require("./security");
 const vapiSync = require("./vapiSync");
 const { instance, profile } = require("./instance");
 const orders = require("./orders");
+const onboarding = require("./onboarding");
+const multer = require("multer");
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -406,6 +408,17 @@ app.get("/api/attention", auth, (req, res) => {
       });
     });
 
+  db.onboardings
+    .filter((o) => o.status === "completed")
+    .forEach((o) => {
+      items.push({
+        type: "onboarding_ready", severity: "medium",
+        title: `${o.clientName} finished onboarding — review & activate`,
+        detail: `${(o.draft?.memoryFacts || []).length} proposed memory fact(s), draft slug "${o.draft?.instanceJson?.id || "?"}".`,
+        action: { label: "Review", method: "GET", path: `onboarding/${o.id}` },
+      });
+    });
+
   res.json({ items, count: items.length });
 });
 
@@ -575,6 +588,108 @@ app.post("/api/demo/reset", auth, requireOwner, (req, res) => {
   save();
   log("system", `${req.user.id} reset demo data (orders/calls/leads cleared)`);
   res.json({ ok: true });
+});
+
+// ---------- onboarding wizard ----------
+// The wizard never writes live config: /onboard/:token is public but the
+// token is single-use (dead once the client finishes or Sailz activates),
+// and every write lands in db.onboardings[].data/draft until an owner
+// explicitly activates it (see the /api/onboarding/admin/* routes below).
+const onboardingUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 5 },
+  fileFilter(req, file, cb) {
+    const ok = /\.(txt|pdf|docx)$/i.test(file.originalname || "");
+    cb(ok ? null : new Error("Only .txt, .pdf, or .docx files are accepted"), ok);
+  },
+});
+// Public, unauthenticated, and each hop can trigger a Claude call — a
+// tighter ceiling than the webhook limiter, keyed by IP.
+const onboardingLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+
+app.post("/api/onboarding/create", auth, requireOwner, (req, res) => {
+  const { clientName } = req.body || {};
+  if (!clientName) return res.status(400).json({ error: "clientName is required" });
+  const entry = onboarding.createOnboarding({ clientName, createdBy: req.user.id });
+  res.json({ token: entry.token, id: entry.id, url: `${req.protocol}://${req.get("host")}/onboard/${entry.token}` });
+});
+
+app.get("/onboard/:token", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "onboard.html"));
+});
+
+// Owner review/activation routes are registered BEFORE the public
+// /api/onboarding/:token/* routes below — Express matches path segments in
+// registration order, and "admin" would otherwise be swallowed as a :token
+// value by the earlier (identically-shaped) public route.
+app.get("/api/onboarding/admin", auth, requireOwner, (req, res) => {
+  res.json({ onboardings: onboarding.listOnboardings() });
+});
+
+app.get("/api/onboarding/admin/:id", auth, requireOwner, (req, res) => {
+  const found = onboarding.getForReview(req.params.id);
+  if (!found) return res.status(404).json({ error: "Onboarding not found" });
+  res.json(found);
+});
+
+app.post("/api/onboarding/admin/:id/draft", auth, requireOwner, (req, res) => {
+  const result = onboarding.updateDraft(req.params.id, req.body || {});
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.onboarding);
+});
+
+app.post("/api/onboarding/admin/:id/activate", auth, requireOwner, async (req, res) => {
+  try {
+    const result = await onboarding.activateOnboarding(req.params.id, req.user.id);
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/onboarding/:token", onboardingLimiter, (req, res) => {
+  const result = onboarding.getPublicState(req.params.token);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.onboarding);
+});
+
+app.post("/api/onboarding/:token/step", onboardingLimiter, (req, res) => {
+  const { step, data } = req.body || {};
+  if (!step || data === undefined) return res.status(400).json({ error: "step and data are required" });
+  const result = onboarding.saveStep(req.params.token, step, data);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.onboarding);
+});
+
+app.post("/api/onboarding/:token/brain-dump", onboardingLimiter, onboardingUpload.array("files", 5), async (req, res) => {
+  try {
+    const result = await onboarding.runBrainDump(req.params.token, { text: req.body?.text || "", files: req.files || [] });
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    res.json(result.onboarding);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/onboarding/:token/interview/next", onboardingLimiter, async (req, res) => {
+  try {
+    const result = await onboarding.nextInterviewQuestion(req.params.token, { answers: req.body?.answers || [] });
+    if (!result.ok) return res.status(result.status || 500).json({ error: result.error });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/onboarding/:token/complete", onboardingLimiter, async (req, res) => {
+  try {
+    const result = await onboarding.completeOnboarding(req.params.token);
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    res.json(result.onboarding);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------

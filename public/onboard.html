@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sailz — Set up your brain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#f0ead8;--dim:#77777c;--line:rgba(240,234,216,.09);--glass:rgba(13,13,15,.88);--accent:#c9a066}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;min-height:100%;background:#050506;font-family:'Inter',sans-serif;color:var(--ink)}
+  body{background-image:radial-gradient(ellipse at 50% -10%, rgba(201,160,102,.10), transparent 55%)}
+  .wrap{max-width:560px;margin:0 auto;padding:28px 20px 80px;min-height:100vh;display:flex;flex-direction:column}
+  .brand{text-align:center;margin:8px 0 28px}
+  .brand .t{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:22px;letter-spacing:.3em;text-transform:uppercase;color:var(--ink)}
+  .brand .s{font:500 9px 'Inter';letter-spacing:.24em;color:var(--dim);text-transform:uppercase;margin-top:6px}
+  .progress{display:flex;gap:5px;margin-bottom:30px}
+  .progress i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.08);transition:background .3s}
+  .progress i.done{background:var(--accent)}
+  .progress i.now{background:rgba(240,234,216,.5)}
+  .card{background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:26px 22px;flex:1}
+  h1{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:28px;letter-spacing:.04em;margin:0 0 8px;color:var(--ink)}
+  .sub{font:500 12px 'Inter';color:var(--dim);line-height:1.6;margin:0 0 24px}
+  label{display:block;font:600 9px 'Inter';letter-spacing:.16em;color:var(--dim);text-transform:uppercase;margin:18px 0 7px}
+  label:first-of-type{margin-top:0}
+  input[type=text],input[type=tel],input[type=email],textarea,select{
+    width:100%;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);font:400 14px 'Inter';padding:12px 14px;outline:none;transition:border-color .2s}
+  input:focus,textarea:focus,select:focus{border-color:rgba(201,160,102,.5)}
+  textarea{resize:vertical;min-height:90px;line-height:1.5}
+  textarea.mono{font-family:'JetBrains Mono',monospace;font-size:12.5px;min-height:180px}
+  select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='%2377777c' viewBox='0 0 20 20'><path d='M5 8l5 5 5-5z'/></svg>");background-repeat:no-repeat;background-position:right 12px center}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .hint{font:400 11px 'Inter';color:var(--dim);margin-top:6px;line-height:1.5}
+  .btnbar{display:flex;gap:10px;margin-top:28px}
+  button{appearance:none;border:0;cursor:pointer;font:600 11px 'Inter';letter-spacing:.14em;text-transform:uppercase;
+    border-radius:10px;padding:14px 20px;transition:opacity .2s,background .2s}
+  button:disabled{opacity:.4;cursor:default}
+  .btn-primary{background:var(--ink);color:#111;flex:1}
+  .btn-primary:hover:not(:disabled){opacity:.88}
+  .btn-ghost{background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--line)}
+  .btn-ghost:hover{background:rgba(255,255,255,.1)}
+  .btn-link{background:none;color:var(--dim);text-decoration:underline;text-underline-offset:3px;padding:8px 0;text-transform:none;letter-spacing:0;font:500 12px 'Inter'}
+  /* hours grid */
+  .hrow{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .hrow:last-child{border-bottom:0}
+  .hrow .hd{width:70px;font:600 11px 'Inter';letter-spacing:.06em;flex:none}
+  .hrow input{flex:1;padding:9px 10px;font-size:13px}
+  /* service rows */
+  .svc{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;position:relative}
+  .svc .rm{position:absolute;top:10px;right:12px;color:var(--dim);cursor:pointer;font-size:13px}
+  .add-row{display:flex;align-items:center;gap:8px;color:var(--accent);cursor:pointer;font:600 11px 'Inter';letter-spacing:.1em;text-transform:uppercase;margin-top:4px}
+  .add-row:before{content:'+';font-size:15px}
+  /* file upload */
+  .filepick{border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center;cursor:pointer;margin-top:10px;transition:border-color .2s}
+  .filepick:hover{border-color:rgba(201,160,102,.5)}
+  .filepick input{display:none}
+  .filepick .fp-t{font:600 11px 'Inter';letter-spacing:.08em;color:var(--ink)}
+  .filepick .fp-s{font:400 10px 'Inter';color:var(--dim);margin-top:4px}
+  .filelist{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .filechip{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 12px;font:500 11px 'Inter'}
+  .filechip .x{color:var(--dim);cursor:pointer}
+  /* extraction review */
+  .extract-sec{margin-top:18px}
+  .extract-sec .k{font:600 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:16px 0 8px}
+  .extract-sec .k:first-child{margin-top:0}
+  .chip-list{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{background:rgba(201,160,102,.1);border:1px solid rgba(201,160,102,.3);border-radius:999px;padding:6px 12px;font:500 11px 'Inter';color:var(--ink)}
+  .fact-item{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:400 12.5px 'Inter';line-height:1.5;margin-bottom:6px}
+  .fact-item .src{display:block;color:var(--dim);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
+  /* interview chat */
+  .chat{display:flex;flex-direction:column;gap:12px;margin-bottom:18px}
+  .bubble{max-width:88%;padding:12px 15px;border-radius:14px;font:400 13.5px 'Inter';line-height:1.5}
+  .bubble.q{background:rgba(255,255,255,.05);border:1px solid var(--line);align-self:flex-start;border-bottom-left-radius:4px}
+  .bubble.a{background:rgba(201,160,102,.14);align-self:flex-end;border-bottom-right-radius:4px;color:var(--ink)}
+  .qcount{font:500 10px 'Inter';color:var(--dim);letter-spacing:.1em;text-transform:uppercase;text-align:center;margin-bottom:10px}
+  .spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(240,234,216,.2);border-top-color:var(--ink);
+    animation:spin .8s linear infinite;display:inline-block;vertical-align:-3px;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .center-state{text-align:center;padding:50px 10px}
+  .center-state .glyph{font-size:38px;margin-bottom:18px;opacity:.85}
+  .err{color:#e08a7a;font:500 12px 'Inter';margin-top:10px}
+  .done-list{text-align:left;margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
+  .done-list li{font:400 12.5px 'Inter';color:var(--dim);line-height:1.7;margin-bottom:6px}
+  @media (max-width:400px){.row2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><div class="t">Sailz</div><div class="s" id="brandSub">Set up your brain</div></div>
+  <div class="progress" id="progress"></div>
+  <div class="card" id="card"><div class="center-state"><span class="spinner"></span>Loading…</div></div>
+</div>
+
+<script>
+const $=(id)=>document.getElementById(id);
+const token=location.pathname.split('/').pop();
+const STEPS=["basics","hours","services","policies","brainDump","voice","interview","done"];
+let state=null; // {clientName,status,currentStep,data}
+let stepIdx=0;
+
+function esc(s){const d=document.createElement("div");d.textContent=s??"";return d.innerHTML}
+
+async function api(path,opts={}){
+  const res=await fetch(path,opts);
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){const e=new Error(data.error||"Something went wrong");e.status=res.status;throw e}
+  return data;
+}
+
+function renderProgress(){
+  $("progress").innerHTML=STEPS.map((s,i)=>`<i class="${i<stepIdx?'done':i===stepIdx?'now':''}"></i>`).join("");
+}
+
+function showExpired(msg){
+  $("progress").style.display="none";
+  $("card").innerHTML=`<div class="center-state"><div class="glyph">◇</div><h1 style="text-align:center">This link has expired</h1><p class="sub" style="text-align:center">${esc(msg||"Ask Sailz for a new setup link.")}</p></div>`;
+}
+
+async function boot(){
+  try{
+    state=await api(`/api/onboarding/${token}`);
+  }catch(e){
+    if(e.status===404||e.status===410) return showExpired(e.message);
+    $("card").innerHTML=`<div class="center-state"><div class="glyph">!</div><p class="sub">Couldn't load this link right now. Try refreshing.</p></div>`;
+    return;
+  }
+  $("brandSub").textContent=`Setting up ${state.clientName}`;
+  stepIdx=Math.max(0,STEPS.indexOf(state.currentStep||"basics"));
+  renderStep(stepIdx);
+}
+
+async function goTo(i){
+  stepIdx=Math.max(0,Math.min(STEPS.length-1,i));
+  renderStep(stepIdx);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function renderStep(i){
+  renderProgress();
+  const step=STEPS[i];
+  const renderers={basics:renderBasics,hours:renderHours,services:renderServices,policies:renderPolicies,brainDump:renderBrainDump,voice:renderVoice,interview:renderInterview,done:renderDone};
+  renderers[step]();
+}
+
+function nav(html,{back=true}={}){
+  return `${html}<div class="btnbar">${back?`<button class="btn-ghost" onclick="goTo(stepIdx-1)">Back</button>`:""}<button class="btn-primary" id="nextBtn">Continue</button></div>`;
+}
+
+/* ---------------- Step 1: basics ---------------- */
+function renderBasics(){
+  const d=state.data.basics||{};
+  $("card").innerHTML=nav(`
+    <h1>The basics</h1>
+    <p class="sub">Tell us about the business — this becomes your AI receptionist's home base.</p>
+    <label>Business name</label><input type="text" id="f_name" value="${esc(d.businessName||"")}" placeholder="Shine Dental Clinic">
+    <label>What kind of business?</label><input type="text" id="f_type" value="${esc(d.businessType||"")}" placeholder="dental, restaurant, salon…">
+    <div class="row2">
+      <div><label>Phone</label><input type="tel" id="f_phone" value="${esc(d.phone||"")}" placeholder="(555) 123-4567"></div>
+      <div><label>Timezone</label><input type="text" id="f_tz" value="${esc(d.timezone||"America/New_York")}" placeholder="America/New_York"></div>
+    </div>
+    <label>Address</label><input type="text" id="f_addr" value="${esc(d.address||"")}" placeholder="1 Main St, Richmond, VA">
+  `,{back:false});
+  $("nextBtn").onclick=async()=>{
+    const data={businessName:$("f_name").value.trim(),businessType:$("f_type").value.trim(),phone:$("f_phone").value.trim(),timezone:$("f_tz").value.trim()||"America/New_York",address:$("f_addr").value.trim()};
+    if(!data.businessName){alert("Business name is required.");return}
+    await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"basics",data})});
+    state.data.basics=data; goTo(stepIdx+1);
+  };
+}
+
+/* ---------------- Step 2: hours ---------------- */
+function renderHours(){
+  const d=state.data.hours||{};
+  const rows=d.rows&&d.rows.length?d.rows:[{days:"Mon–Fri",open:"9:00 AM",close:"5:00 PM"},{days:"Sat",open:"",close:""},{days:"Sun",open:"",close:""}];
+  $("card").innerHTML=nav(`
+    <h1>Hours</h1>
+    <p class="sub">When are you open? Leave open/close blank for closed days.</p>
+    <div id="hoursGrid">${rows.map((r,i)=>`
+      <div class="hrow">
+        <span class="hd">${esc(r.days)}</span>
+        <input type="text" data-open="${i}" value="${esc(r.open||"")}" placeholder="9:00 AM">
+        <input type="text" data-close="${i}" value="${esc(r.close||"")}" placeholder="5:00 PM">
+      </div>`).join("")}
+    </div>
+    <label>Holiday notes</label>
+    <textarea id="f_holidays" placeholder="Closed major holidays; half day before Thanksgiving…">${esc(d.holidaysNote||"")}</textarea>
+  `);
+  $("nextBtn").onclick=async()=>{
+    const newRows=rows.map((r,i)=>({days:r.days,open:document.querySelector(`[data-open="${i}"]`).value.trim()||null,close:document.querySelector(`[data-close="${i}"]`).value.trim()||null}));
+    const data={rows:newRows,holidaysNote:$("f_holidays").value.trim()};
+    await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"hours",data})});
+    state.data.hours=data; goTo(stepIdx+1);
+  };
+}
+
+/* ---------------- Step 3: services ---------------- */
+let svcRows=[];
+function renderServices(){
+  svcRows=(state.data.services&&state.data.services.length?state.data.services:[{name:"",priceRange:"",duration:""}]).map(s=>({...s}));
+  paintServices();
+}
+function paintServices(){
+  $("card").innerHTML=nav(`
+    <h1>Services</h1>
+    <p class="sub">What do you offer? Add as many as you like.</p>
+    <div id="svcList">${svcRows.map((s,i)=>`
+      <div class="svc">
+        ${svcRows.length>1?`<span class="rm" onclick="removeSvc(${i})">✕</span>`:""}
+        <label>Service name</label><input type="text" data-svc-name="${i}" value="${esc(s.name)}" placeholder="Cleaning &amp; exam">
+        <div class="row2">
+          <div><label>Price range</label><input type="text" data-svc-price="${i}" value="${esc(s.priceRange)}" placeholder="$100–$150"></div>
+          <div><label>Duration</label><input type="text" data-svc-dur="${i}" value="${esc(s.duration)}" placeholder="45 min"></div>
+        </div>
+      </div>`).join("")}</div>
+    <div class="add-row" onclick="addSvc()">Add another service</div>
+  `);
+  wireSvcInputs();
+  $("nextBtn").onclick=async()=>{
+    syncSvcFromInputs();
+    const data=svcRows.filter(s=>s.name.trim());
+    if(!data.length){alert("Add at least one service.");return}
+    await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"services",data})});
+    state.data.services=data; goTo(stepIdx+1);
+  };
+}
+function wireSvcInputs(){
+  document.querySelectorAll("[data-svc-name],[data-svc-price],[data-svc-dur]").forEach(el=>{
+    el.addEventListener("input",syncSvcFromInputs);
+  });
+}
+function syncSvcFromInputs(){
+  svcRows.forEach((s,i)=>{
+    s.name=document.querySelector(`[data-svc-name="${i}"]`).value;
+    s.priceRange=document.querySelector(`[data-svc-price="${i}"]`).value;
+    s.duration=document.querySelector(`[data-svc-dur="${i}"]`).value;
+  });
+}
+function addSvc(){ syncSvcFromInputs(); svcRows.push({name:"",priceRange:"",duration:""}); paintServices(); }
+function removeSvc(i){ syncSvcFromInputs(); svcRows.splice(i,1); paintServices(); }
+
+/* ---------------- Step 4: policies ---------------- */
+function renderPolicies(){
+  const d=state.data.policies||{};
+  $("card").innerHTML=nav(`
+    <h1>Policies &amp; insurance</h1>
+    <p class="sub">The stuff your front desk gets asked every day.</p>
+    <label>Insurance accepted <span style="text-transform:none;font-weight:400">(comma-separated, leave blank if none)</span></label>
+    <input type="text" id="f_ins" value="${esc((d.insuranceAccepted||[]).join(', '))}" placeholder="Delta Dental, Cigna, Aetna">
+    <label>Cancellation / rescheduling policy</label>
+    <textarea id="f_cancel" placeholder="24-hour notice required for cancellations…">${esc(d.cancellationPolicy||"")}</textarea>
+    <label>Payment options / self-pay</label>
+    <textarea id="f_pay" placeholder="Cash, card, financing available…">${esc(d.paymentOptions||"")}</textarea>
+  `);
+  $("nextBtn").onclick=async()=>{
+    const data={insuranceAccepted:$("f_ins").value.split(",").map(s=>s.trim()).filter(Boolean),cancellationPolicy:$("f_cancel").value.trim(),paymentOptions:$("f_pay").value.trim()};
+    await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"policies",data})});
+    state.data.policies=data; goTo(stepIdx+1);
+  };
+}
+
+/* ---------------- Step 5: brain dump ---------------- */
+let pendingFiles=[];
+function renderBrainDump(){
+  const d=state.data.brainDump||{};
+  pendingFiles=[];
+  $("card").innerHTML=`
+    <h1>The brain dump</h1>
+    <p class="sub">Paste ANYTHING — your price list, your FAQ doc, your training manual. Our brain will read it and figure out the rest.</p>
+    <textarea class="mono" id="f_dump" placeholder="Paste anything here — pricing, FAQs, policies, how you talk to patients…">${esc(d.text||"")}</textarea>
+    <div class="filepick" id="filepick">
+      <input type="file" id="f_files" multiple accept=".txt,.pdf,.docx">
+      <div class="fp-t">Tap to attach files</div>
+      <div class="fp-s">.txt, .pdf, or .docx — up to 5 files</div>
+    </div>
+    <div class="filelist" id="fileList"></div>
+    <div id="extractResult"></div>
+    <div class="btnbar">
+      <button class="btn-ghost" onclick="goTo(stepIdx-1)">Back</button>
+      <button class="btn-primary" id="readBtn">Let the brain read this</button>
+    </div>
+    <div style="text-align:center"><button class="btn-link" id="skipDumpBtn">Skip this step</button></div>
+  `;
+  $("filepick").onclick=()=>$("f_files").click();
+  $("f_files").onchange=()=>{
+    pendingFiles=Array.from($("f_files").files).slice(0,5);
+    $("fileList").innerHTML=pendingFiles.map((f,i)=>`<div class="filechip"><span>${esc(f.name)}</span><span class="x" onclick="removeFile(${i})">✕</span></div>`).join("");
+  };
+  $("skipDumpBtn").onclick=()=>goTo(stepIdx+1);
+  $("readBtn").onclick=readBrainDump;
+  if(d.extractedProfile) paintExtraction(d.extractedProfile,d.proposedFacts||[]);
+}
+function removeFile(i){
+  pendingFiles.splice(i,1);
+  $("fileList").innerHTML=pendingFiles.map((f,j)=>`<div class="filechip"><span>${esc(f.name)}</span><span class="x" onclick="removeFile(${j})">✕</span></div>`).join("");
+}
+async function readBrainDump(){
+  const btn=$("readBtn"); btn.disabled=true; btn.innerHTML=`<span class="spinner"></span>Reading…`;
+  const fd=new FormData();
+  fd.append("text",$("f_dump").value);
+  pendingFiles.forEach(f=>fd.append("files",f));
+  try{
+    const result=await api(`/api/onboarding/${token}/brain-dump`,{method:"POST",body:fd});
+    state.data.brainDump=result.data.brainDump;
+    paintExtraction(result.data.brainDump.extractedProfile,result.data.brainDump.proposedFacts);
+  }catch(e){
+    $("extractResult").innerHTML=`<div class="err">${esc(e.message)}</div>`;
+  }finally{
+    btn.disabled=false; btn.textContent="Let the brain read this";
+  }
+}
+function paintExtraction(profile,facts){
+  const parts=[];
+  parts.push(`<div class="extract-sec"><h1 style="font-size:18px;margin-bottom:4px">Here's what the brain understood</h1><p class="sub" style="margin-bottom:0">Review below — we'll fold this into your profile.</p></div>`);
+  if(profile.services&&profile.services.length){
+    parts.push(`<div class="k">Services found</div><div class="chip-list">${profile.services.map(s=>`<span class="chip">${esc(s.name)}${s.priceRange?" · "+esc(s.priceRange):""}</span>`).join("")}</div>`);
+  }
+  if(profile.policies&&profile.policies.length){
+    parts.push(`<div class="k">Policies found</div>${profile.policies.map(p=>`<div class="fact-item">${esc(p)}</div>`).join("")}`);
+  }
+  if(profile.insuranceAccepted&&profile.insuranceAccepted.length){
+    parts.push(`<div class="k">Insurance</div><div class="chip-list">${profile.insuranceAccepted.map(i=>`<span class="chip">${esc(i)}</span>`).join("")}</div>`);
+  }
+  if(facts&&facts.length){
+    parts.push(`<div class="k">Other things it learned</div>${facts.map(f=>`<div class="fact-item">${esc(f.fact)}<span class="src">${esc(f.source||"brain dump")}</span></div>`).join("")}`);
+  }
+  if(profile.unstructuredNote){
+    parts.push(`<div class="fact-item" style="color:var(--dim)">${esc(profile.unstructuredNote)}</div>`);
+  }
+  if(!(profile.services&&profile.services.length)&&!(profile.policies&&profile.policies.length)&&!(facts&&facts.length)){
+    parts.push(`<div class="fact-item" style="color:var(--dim)">Nothing structured came out of that — no problem, you can fill in details manually in other steps.</div>`);
+  }
+  $("extractResult").innerHTML=parts.join("");
+  $("readBtn").textContent="Read again";
+  if(!document.getElementById("dumpNextBtn")){
+    const bar=document.createElement("div");
+    bar.className="btnbar";
+    bar.innerHTML=`<button class="btn-primary" id="dumpNextBtn" style="flex:1">Looks good, continue</button>`;
+    $("extractResult").after(bar);
+  }
+  document.getElementById("dumpNextBtn").onclick=async()=>{
+    const data={text:$("f_dump").value,files:(state.data.brainDump&&state.data.brainDump.files)||[],extractedProfile:profile,proposedFacts:facts};
+    await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"brainDump",data})});
+    state.data.brainDump=data; goTo(stepIdx+1);
+  };
+}
+
+/* ---------------- Step 6: voice & tone ---------------- */
+function renderVoice(){
+  const d=state.data.voice||{};
+  $("card").innerHTML=nav(`
+    <h1>Voice &amp; tone</h1>
+    <p class="sub">How should your AI receptionist sound on the phone?</p>
+    <label>How formal?</label>
+    <select id="f_formality">
+      ${["casual and warm","friendly and professional","formal and precise"].map(o=>`<option ${d.formality===o?"selected":""}>${o}</option>`).join("")}
+    </select>
+    <label>Greeting phrasing</label>
+    <input type="text" id="f_greet" value="${esc(d.greetingPhrasing||"")}" placeholder="Thanks for calling Shine Dental, how can I help?">
+    <label>Things it should never say</label>
+    <textarea id="f_never" placeholder="Never guarantee insurance coverage, never diagnose over the phone…">${esc(d.neverSay||"")}</textarea>
+  `);
+  $("nextBtn").onclick=async()=>{
+    const data={formality:$("f_formality").value,greetingPhrasing:$("f_greet").value.trim(),neverSay:$("f_never").value.trim()};
+    await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"voice",data})});
+    state.data.voice=data; goTo(stepIdx+1);
+  };
+}
+
+/* ---------------- Step 7: interview ---------------- */
+let interviewQas=[];
+function renderInterview(){
+  interviewQas=(state.data.interview&&state.data.interview.qas||[]).slice();
+  paintInterview(true);
+  fetchNextQuestion();
+}
+function paintInterview(loading){
+  const bubbles=interviewQas.map(qa=>`<div class="bubble q">${esc(qa.q)}</div><div class="bubble a">${esc(qa.a)}</div>`).join("");
+  $("card").innerHTML=`
+    <h1>A few quick questions</h1>
+    <p class="sub">Our brain noticed a few gaps — answer what you can, skip the rest.</p>
+    <div class="qcount">${interviewQas.length} of up to 8</div>
+    <div class="chat" id="chat">${bubbles}</div>
+    <div id="qArea">${loading?`<div class="center-state" style="padding:20px"><span class="spinner"></span>Thinking of a question…</div>`:""}</div>
+  `;
+}
+async function fetchNextQuestion(){
+  let result;
+  try{
+    result=await api(`/api/onboarding/${token}/interview/next`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({answers:interviewQas})});
+  }catch(e){
+    $("qArea").innerHTML=`<div class="err">${esc(e.message)}</div><div class="btnbar"><button class="btn-primary" id="finishInterviewBtn" style="flex:1">Continue</button></div>`;
+    document.getElementById("finishInterviewBtn").onclick=()=>goTo(stepIdx+1);
+    return;
+  }
+  state.data.interview={qas:interviewQas};
+  if(result.done){ paintDoneWithInterview(); return; }
+  paintQuestion(result.question);
+}
+function paintQuestion(question){
+  $("qArea").innerHTML=`
+    <div class="bubble q">${esc(question)}</div>
+    <textarea id="f_answer" placeholder="Type your answer…" style="min-height:70px;margin-top:10px"></textarea>
+    <div class="btnbar">
+      <button class="btn-ghost" id="skipQBtn">Skip</button>
+      <button class="btn-primary" id="answerBtn">Send</button>
+    </div>
+  `;
+  $("skipQBtn").onclick=()=>goTo(stepIdx+1);
+  $("answerBtn").onclick=async()=>{
+    const a=$("f_answer").value.trim();
+    if(!a){goTo(stepIdx+1);return}
+    interviewQas.push({q:question,a});
+    paintInterview(true);
+    fetchNextQuestion();
+  };
+}
+function paintDoneWithInterview(){
+  $("qArea").innerHTML=`<p class="sub" style="text-align:center;margin-top:14px">That's everything we needed to ask.</p><div class="btnbar"><button class="btn-primary" id="finishInterviewBtn" style="flex:1">Continue</button></div>`;
+  document.getElementById("finishInterviewBtn").onclick=()=>goTo(stepIdx+1);
+}
+
+/* ---------------- Step 8: done ---------------- */
+async function renderDone(){
+  $("card").innerHTML=`<div class="center-state"><span class="spinner"></span>Preparing your brain…</div>`;
+  try{
+    await api(`/api/onboarding/${token}/complete`,{method:"POST"});
+  }catch(e){
+    if(e.status!==410){ $("card").innerHTML=`<div class="center-state"><div class="glyph">!</div><p class="sub">${esc(e.message)}</p></div>`; return; }
+    // 410 = already completed on a prior visit to this step — fine, fall through to the confirmation view
+  }
+  $("progress").innerHTML=STEPS.map(()=>`<i class="done"></i>`).join("");
+  $("card").innerHTML=`
+    <div class="center-state">
+      <div class="glyph">✦</div>
+      <h1>Your brain is being prepared</h1>
+      <p class="sub">Sailz is reviewing everything you shared. Once it's approved, your AI phone line goes live and starts answering calls with everything you just taught it.</p>
+      <ul class="done-list">
+        <li>— A Sailz team member reviews your setup for accuracy</li>
+        <li>— Your brain gets activated with everything you shared</li>
+        <li>— We'll reach out with your login and next steps</li>
+      </ul>
+    </div>
+  `;
+}
+
+boot();
+</script>
+</body>
+</html>

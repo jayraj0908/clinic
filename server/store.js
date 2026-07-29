@@ -24,6 +24,9 @@ function load() {
   if (!Array.isArray(db.memory)) { db.memory = []; migrated = true; }
   if (!Array.isArray(db.promptVersions)) { db.promptVersions = []; migrated = true; }
   if (!Array.isArray(db.orders)) { db.orders = []; migrated = true; }
+  if (!Array.isArray(db.onboardings)) { db.onboardings = []; migrated = true; }
+  if (!Array.isArray(db.passwordResets)) { db.passwordResets = []; migrated = true; }
+  if (!Array.isArray(db.magicLinks)) { db.magicLinks = []; migrated = true; }
   if (migrated) save();
   return db;
 }

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sailz — Onboarding review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#f0ead8;--dim:#77777c;--line:rgba(240,234,216,.09);--glass:rgba(13,13,15,.88);--accent:#c9a066}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;min-height:100%;background:#050506;font-family:'Inter',sans-serif;color:var(--ink)}
+  .wrap{max-width:980px;margin:0 auto;padding:34px 20px 80px}
+  .brand{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:10px}
+  .brand .t{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:22px;letter-spacing:.2em;text-transform:uppercase}
+  .brand .s{font:500 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+  a.back{color:var(--dim);font:500 10px 'Inter';letter-spacing:.14em;text-transform:uppercase;text-decoration:none;cursor:pointer}
+  a.back:hover{color:var(--ink)}
+  h1{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:26px;margin:0 0 4px}
+  .sub{font:500 11px 'Inter';color:var(--dim);margin:0 0 24px}
+  .card{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .list{display:flex;flex-direction:column;gap:10px}
+  .row{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--glass);border:1px solid var(--line);border-radius:12px;cursor:pointer;transition:border-color .2s}
+  .row:hover{border-color:rgba(240,234,216,.25)}
+  .row .name{font:600 13px 'Inter';flex:1}
+  .row .meta{font:500 10px 'Inter';color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  .status-chip{font:700 8.5px 'Inter';letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px}
+  .status-sent{background:rgba(120,120,130,.18);color:#a9a9ae}
+  .status-in_progress{background:rgba(160,130,60,.18);color:#d4af6a}
+  .status-completed{background:rgba(120,180,160,.18);color:#7fd6b0}
+  .status-activated{background:rgba(90,140,220,.18);color:#8fb4e8}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
+  @media (max-width:760px){.grid2{grid-template-columns:1fr}}
+  .panel{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .panel h2{font-family:'Cormorant Garamond',serif;font-size:16px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:0 0 14px}
+  label{display:block;font:600 9px 'Inter';letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:14px 0 6px}
+  label:first-of-type{margin-top:0}
+  input[type=text],textarea{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;
+    color:var(--ink);font:400 13px 'Inter';padding:10px 12px;outline:none}
+  textarea{resize:vertical;min-height:70px;line-height:1.5;font-family:'JetBrains Mono',monospace;font-size:12px}
+  textarea.tall{min-height:130px}
+  .template-note{font:400 11px 'Inter';color:var(--dim);line-height:1.6;background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:6px}
+  .fact-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px}
+  .fact-row textarea{flex:1;min-height:48px}
+  .fact-row .rm{color:var(--dim);cursor:pointer;padding:8px;flex:none}
+  button{appearance:none;border:0;cursor:pointer;font:600 10.5px 'Inter';letter-spacing:.12em;text-transform:uppercase;
+    border-radius:9px;padding:12px 18px;transition:opacity .2s,background .2s}
+  button:disabled{opacity:.4;cursor:default}
+  .btn-primary{background:var(--ink);color:#111}
+  .btn-primary:hover:not(:disabled){opacity:.88}
+  .btn-ghost{background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--line)}
+  .btn-ghost:hover{background:rgba(255,255,255,.1)}
+  .btn-danger{background:rgba(224,138,122,.14);color:#e08a7a;border:1px solid rgba(224,138,122,.3)}
+  .actionbar{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
+  .msg{font:500 12px 'Inter';margin-top:14px;padding:10px 14px;border-radius:8px}
+  .msg.ok{background:rgba(127,214,176,.1);color:#7fd6b0;border:1px solid rgba(127,214,176,.3)}
+  .msg.err{background:rgba(224,138,122,.1);color:#e08a7a;border:1px solid rgba(224,138,122,.3)}
+  .login{max-width:340px;margin:120px auto}
+  .spinner{width:14px;height:14px;border-radius:50%;border:2px solid rgba(240,234,216,.2);border-top-color:var(--ink);
+    animation:spin .8s linear infinite;display:inline-block;vertical-align:-2px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .empty{text-align:center;color:var(--dim);font:500 12px 'Inter';padding:40px 0}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="brand"><div><span class="t">Sailz</span> <span class="s">— Onboarding review</span></div><a class="back" id="logoutBtn">Sign out</a></div>
+  <div id="content"><div class="empty"><span class="spinner"></span>Loading…</div></div>
+</div>
+
+<script>
+const $=(id)=>document.getElementById(id);
+let token=sessionStorage.getItem("token");
+function esc(s){const d=document.createElement("div");d.textContent=s??"";return d.innerHTML}
+async function api(path,opts={}){
+  const res=await fetch(path,{...opts,headers:{"content-type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}});
+  if(res.status===401){sessionStorage.removeItem("token");renderLogin();throw new Error("auth")}
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.error||"Request failed");
+  return data;
+}
+$("logoutBtn").onclick=()=>{sessionStorage.removeItem("token");renderLogin()};
+
+function renderLogin(){
+  $("content").innerHTML=`
+    <div class="login card">
+      <label>Email</label><input type="text" id="lg_email">
+      <label>Password</label><input type="text" id="lg_pass" style="-webkit-text-security:disc">
+      <div class="actionbar"><button class="btn-primary" id="lg_btn" style="flex:1">Sign in</button></div>
+      <div id="lg_err" class="msg err" style="display:none"></div>
+    </div>`;
+  $("lg_btn").onclick=async()=>{
+    const res=await fetch("/api/auth/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:$("lg_email").value.trim(),password:$("lg_pass").value})});
+    const data=await res.json();
+    if(!res.ok){$("lg_err").style.display="block";$("lg_err").textContent=data.error||"Sign-in failed";return}
+    token=data.token; sessionStorage.setItem("token",token);
+    renderList();
+  };
+}
+
+function statusChip(s){return `<span class="status-chip status-${s}">${s.replace("_"," ")}</span>`}
+
+async function renderList(){
+  const id=new URLSearchParams(location.search).get("id");
+  if(id) return renderDetail(id);
+  $("content").innerHTML=`<div class="empty"><span class="spinner"></span>Loading…</div>`;
+  let data;
+  try{ data=await api("/api/onboarding/admin"); }catch(e){ return; }
+  if(!data.onboardings.length){ $("content").innerHTML=`<div class="empty">No onboarding links yet. Create one from the main dashboard.</div>`; return; }
+  $("content").innerHTML=`<div class="list">${data.onboardings.map(o=>`
+    <div class="row" onclick="location.search='?id=${o.id}'">
+      <div class="name">${esc(o.clientName)}</div>
+      <div class="meta">${esc(o.currentStep)}</div>
+      ${statusChip(o.status)}
+    </div>`).join("")}</div>`;
+}
+
+let draftState=null, currentId=null, factRows=[];
+async function renderDetail(id){
+  currentId=id;
+  $("content").innerHTML=`<div class="empty"><span class="spinner"></span>Loading…</div>`;
+  let o;
+  try{ o=await api(`/api/onboarding/admin/${id}`); }catch(e){ $("content").innerHTML=`<div class="empty">${esc(e.message)}</div>`; return; }
+
+  if(!o.draft){
+    $("content").innerHTML=`<a class="back" onclick="location.search=''">‹ All onboardings</a><div class="empty" style="margin-top:20px">${esc(o.clientName)} hasn't finished the wizard yet (currently on "${esc(o.currentStep)}").</div>`;
+    return;
+  }
+  draftState=JSON.parse(JSON.stringify(o.draft));
+  factRows=draftState.memoryFacts.map(f=>({...f}));
+
+  $("content").innerHTML=`
+    <a class="back" onclick="location.search=''">‹ All onboardings</a>
+    <h1 style="margin-top:16px">${esc(o.clientName)} ${statusChip(o.status)}</h1>
+    <p class="sub">Draft slug: <strong>${esc(draftState.instanceJson.id)}</strong> — created ${new Date(o.createdAt).toLocaleDateString()}</p>
+
+    <div class="grid2">
+      <div class="panel">
+        <h2>Template defaults</h2>
+        <div class="template-note">instances/_template/ — every new instance starts here. This is what the wizard's answers are overriding.</div>
+        <label>instance.json</label>
+        <textarea class="tall" readonly>${esc(JSON.stringify(o.template.instanceJson,null,2))}</textarea>
+        <label>clinic-profile.json</label>
+        <textarea class="tall" readonly>${esc(JSON.stringify(o.template.clinicProfileJson,null,2))}</textarea>
+      </div>
+
+      <div class="panel">
+        <h2>This client's draft</h2>
+        <label>Business name</label><input type="text" id="d_name" value="${esc(draftState.instanceJson.name)}">
+        <label>Vertical</label><input type="text" id="d_vertical" value="${esc(draftState.instanceJson.vertical)}">
+        <label>Timezone</label><input type="text" id="d_tz" value="${esc(draftState.instanceJson.timezone)}">
+        <label>Instance slug (folder name)</label><input type="text" id="d_slug" value="${esc(draftState.instanceJson.id)}">
+        <label>clinic-profile.json</label>
+        <textarea class="tall" id="d_profile">${esc(JSON.stringify(draftState.clinicProfileJson,null,2))}</textarea>
+        <label>messages.json</label>
+        <textarea class="tall" id="d_messages">${esc(JSON.stringify(draftState.messagesJson,null,2))}</textarea>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
+      <h2>Proposed memory facts (${factRows.length})</h2>
+      <div id="factList"></div>
+      <div class="actionbar"><button class="btn-ghost" onclick="addFact()">+ Add fact</button></div>
+    </div>
+
+    <div class="actionbar">
+      <button class="btn-ghost" id="saveBtn">Save changes</button>
+      ${o.status==="activated"
+        ? `<button class="btn-primary" disabled>Already activated as ${esc(draftState.instanceJson.id)}</button>`
+        : `<button class="btn-primary" id="activateBtn">Activate → write instances/${esc(draftState.instanceJson.id)}/</button>`}
+    </div>
+    <div id="reviewMsg"></div>
+  `;
+  paintFacts();
+  $("saveBtn").onclick=saveDraft;
+  if(o.status!=="activated") $("activateBtn").onclick=activate;
+}
+
+function paintFacts(){
+  $("factList").innerHTML=factRows.map((f,i)=>`
+    <div class="fact-row">
+      <textarea data-fact="${i}">${esc(f.fact)}</textarea>
+      <span class="rm" onclick="removeFact(${i})">✕</span>
+    </div>`).join("") || `<div class="template-note">No proposed facts.</div>`;
+}
+function addFact(){ factRows.push({type:"policy_correction",fact:"",source:"owner review"}); paintFacts(); }
+function removeFact(i){ syncFacts(); factRows.splice(i,1); paintFacts(); }
+function syncFacts(){
+  factRows.forEach((f,i)=>{ const el=document.querySelector(`[data-fact="${i}"]`); if(el) f.fact=el.value; });
+}
+
+function showMsg(text,ok){
+  $("reviewMsg").innerHTML=`<div class="msg ${ok?'ok':'err'}">${esc(text)}</div>`;
+}
+
+async function saveDraft(){
+  syncFacts();
+  let profileJson, messagesJson;
+  try{
+    profileJson=JSON.parse($("d_profile").value);
+    messagesJson=JSON.parse($("d_messages").value);
+  }catch(e){ showMsg("clinic-profile.json / messages.json must be valid JSON: "+e.message,false); return; }
+  const patch={
+    instanceJson:{ id:$("d_slug").value.trim(), name:$("d_name").value.trim(), vertical:$("d_vertical").value.trim(), timezone:$("d_tz").value.trim() },
+    clinicProfileJson:profileJson,
+    messagesJson,
+    memoryFacts:factRows.filter(f=>f.fact.trim()),
+  };
+  try{
+    await api(`/api/onboarding/admin/${currentId}/draft`,{method:"POST",body:JSON.stringify(patch)});
+    await renderDetail(currentId);
+    showMsg("Saved.",true);
+  }catch(e){ showMsg(e.message,false); }
+}
+
+async function activate(){
+  await saveDraft();
+  if(!confirm(`Write instances/${draftState.instanceJson.id}/ to disk and seed approved memory facts? This is the live activation step.`)) return;
+  const btn=$("activateBtn"); if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Activating…'; }
+  try{
+    const result=await api(`/api/onboarding/admin/${currentId}/activate`,{method:"POST"});
+    await renderDetail(currentId);
+    showMsg(`Activated — instances/${result.slug}/ written to disk.${result.promptPreview?" Prompt preview composed for review.":""}`,true);
+  }catch(e){ showMsg(e.message,false); if(btn){btn.disabled=false;btn.textContent="Activate";} }
+}
+
+if(token) renderList(); else renderLogin();
+</script>
+</body>
+</html>
