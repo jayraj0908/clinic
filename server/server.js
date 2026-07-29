@@ -167,6 +167,7 @@ app.get("/api/dashboard", auth, (req, res) => {
     settings: db.settings,
     vertical: instance.vertical || null,
     hasOrders: db.orders.length > 0,
+    demoMode: process.env.DEMO_MODE === "1",
     funnel: {
       leads: leadsToday.length || db.leads.length,
       calls: callsToday.length,
@@ -555,6 +556,25 @@ app.post("/api/orders/:id/cancel", auth, (req, res) => {
   save();
   log("system", `Order ${o.id} (${o.customer.name || "unknown"}) cancelled by ${req.user.id}`);
   res.json(o);
+});
+
+// ---------- demo mode ----------
+// Gated behind DEMO_MODE=1 even for owners — this is a destructive
+// clear-real-data endpoint by design ("so the pitch always starts clean"),
+// and the one thing that must never happen is someone fat-fingering this
+// on a real client's live deployment. Refusing outright when DEMO_MODE
+// isn't explicitly "1" is the safety rail for that.
+app.post("/api/demo/reset", auth, requireOwner, (req, res) => {
+  if (process.env.DEMO_MODE !== "1") {
+    return res.status(403).json({ error: "Demo reset is disabled — DEMO_MODE is not set to 1 on this deployment." });
+  }
+  const db = load();
+  db.orders = [];
+  db.calls = [];
+  db.leads = [];
+  save();
+  log("system", `${req.user.id} reset demo data (orders/calls/leads cleared)`);
+  res.json({ ok: true });
 });
 
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------

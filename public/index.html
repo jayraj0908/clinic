@@ -380,6 +380,10 @@
     background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:10px;padding:14px}
   .allergy-banner{margin:12px 0;padding:10px 14px;background:rgba(224,138,122,.12);border:1px solid rgba(224,138,122,.4);
     border-radius:8px;color:#e08a7a;font:600 11px 'Inter'}
+  /* ---------- demo mode banner ---------- */
+  #demoBanner{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:70;
+    background:#e0904a;color:#0b0c0a;font:700 9px 'Inter';letter-spacing:.2em;text-transform:uppercase;
+    padding:4px 16px;border-radius:0 0 8px 8px;pointer-events:none}
 
   /* ---------- mobile / narrow-viewport chrome ---------- */
   @media (max-width:640px){
@@ -421,6 +425,8 @@
 
 <div id="app" class="hidden">
 <div class="vignette"></div>
+
+<div id="demoBanner" style="display:none">DEMO</div>
 
 <div id="topbar">
   <div id="crumbBack">‹ All departments</div>
@@ -736,6 +742,7 @@ async function boot(){
   ]);
   $("clinicSub").textContent=dash.settings?.clinicName||"";
   if(dash.vertical==='restaurant'||dash.hasOrders)document.getElementById('ordersTabBtn').style.display='';
+  if(dash.demoMode)document.getElementById('demoBanner').style.display='block';
 
   const agentData={};
   hubDetails.forEach(h=>{agentData[h.id]=h});
