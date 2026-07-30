@@ -123,6 +123,64 @@ function todayStats(db, hubId) {
   return [];
 }
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+function inLastWeek(ts) {
+  return new Date(ts).getTime() >= Date.now() - SEVEN_DAYS_MS;
+}
+
+// The catalog agent panel's "Results this week" strip — one real,
+// per-agent-type metric set, computed here (not the frontend) so the same
+// numbers are trustworthy wherever they're shown. Every branch returns
+// [{label, value}], same shape as todayStats above, just windowed to 7
+// days and framed around what the OWNER cares about seeing happen, not
+// internal agent mechanics.
+function weekStats(db, hubId) {
+  if (hubId === "leads") {
+    const leadsWeek = db.leads.filter((l) => inLastWeek(l.createdAt));
+    const bySource = {};
+    leadsWeek.forEach((l) => { const s = l.source || "unknown"; bySource[s] = (bySource[s] || 0) + 1; });
+    const topSources = Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s, n]) => `${s} (${n})`).join(", ");
+    return [
+      { label: "Leads captured this week", value: leadsWeek.length },
+      { label: "By source", value: topSources || "none yet" },
+    ];
+  }
+  if (hubId === "receptionist") {
+    const inboundWeek = db.calls.filter((c) => c.dir === "inbound" && inLastWeek(c.ts));
+    return [
+      { label: "Calls answered this week", value: inboundWeek.length },
+      { label: "Booked this week", value: inboundWeek.filter((c) => c.outcome === "booked").length },
+    ];
+  }
+  if (hubId === "calling") {
+    const outboundWeek = db.calls.filter((c) => c.dir === "outbound" && inLastWeek(c.ts));
+    return [
+      { label: "Calls made this week", value: outboundWeek.length },
+      { label: "Booked this week", value: outboundWeek.filter((c) => c.outcome === "booked").length },
+    ];
+  }
+  if (hubId === "audit") {
+    const visitsWeek = db.visits.filter((v) => inLastWeek(v.ts));
+    return [
+      { label: "Notes structured this week", value: visitsWeek.filter((v) => v.auditComplete).length },
+    ];
+  }
+  if (hubId === "billing") {
+    const claimsWeek = db.claims.filter((c) => inLastWeek(c.ts));
+    return [
+      { label: "Claims drafted this week", value: claimsWeek.length },
+      { label: "$ drafted this week", value: "$" + claimsWeek.reduce((s, c) => s + (c.amount || 0), 0).toLocaleString() },
+    ];
+  }
+  if (hubId === "librarian") {
+    const approvedWeek = db.memory.filter((m) => m.status === "approved" && inLastWeek(m.approvedAt || m.ts));
+    return [
+      { label: "Facts approved this week", value: approvedWeek.length },
+    ];
+  }
+  return [];
+}
+
 function buildGraph(db) {
   const nodes = [];
   const links = [];
@@ -213,6 +271,7 @@ function buildAgentDetail(db, hubId) {
     tools: hub.tools.map((tid) => db.integrations.find((i) => i.id === tid)).filter(Boolean)
       .map((i) => ({ name: i.name, connected: !!process.env[i.envKey] || i.status === "connected" })),
     todayStats: todayStats(db, hub.id),
+    weekStats: weekStats(db, hub.id),
     recentActivity: recentActivity(db, hub.id),
   };
   // The librarian/vapiSync pipeline only ever affects the receptionist's
@@ -230,4 +289,4 @@ function buildAgentDetail(db, hubId) {
   return detail;
 }
 
-module.exports = { buildGraph, buildAgentDetail, activeHubs, CATALOG_HUBS };
+module.exports = { buildGraph, buildAgentDetail, activeHubs, CATALOG_HUBS, weekStats };

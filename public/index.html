@@ -1728,6 +1728,23 @@ async function boot(){
     </div>`;
   }
 
+  // Shown instead of the (empty, meaningless) weekly numbers for an agent
+  // that's never been turned on — "activate to start seeing this" sells the
+  // outcome; a bare "no data" row reads like something's broken.
+  const EMPTY_RESULTS_PITCH={
+    leads:"Activate to start capturing every lead automatically — nothing falls through a spreadsheet again.",
+    receptionist:"Activate to start answering every after-hours call — no more missed new patients.",
+    calling:"Activate to start calling qualified leads within minutes of them coming in.",
+    audit:"Activate to start turning raw visit notes into clean SOAP records automatically.",
+    billing:"Activate to start drafting claim codes from your own audited notes every morning.",
+    librarian:"Activate to start turning real call patterns into durable knowledge, automatically.",
+  };
+  function weekStatsHTML(h){
+    const stats=(h&&h.weekStats)||[];
+    if(!stats.length)return '<div class="sb-desc" style="margin-bottom:0">No weekly breakdown for this agent.</div>';
+    return `<div class="sb-stats">${stats.map(s=>`<div class="sb-stat"><div class="n">${esc(String(s.value))}</div><div class="l">${esc(s.label)}</div></div>`).join('')}</div>`;
+  }
+
   function openCatalogPanel(agentId){
     const c=catalogData.find(x=>x.id===agentId);
     if(!c)return;
@@ -1748,20 +1765,15 @@ async function boot(){
         <div class="eyebrow">REQUIREMENTS</div>
         <div id="reqList">${(c.requires||[]).map(r=>reqRowHTML(agentId,r,!c.missing.includes(r))).join('')||'<div class="sb-desc" style="margin-bottom:0">None — this agent has no connector requirements.</div>'}</div>
       </div>
-      ${isOnOrPaused?`
       <div class="sb-section">
         <div class="eyebrow">RESULTS THIS WEEK</div>
-        <div class="sb-stats">
-          <div class="sb-stat"><div class="n">${esc(String(c.runsThisWeek||0))}</div><div class="l">Runs this week</div></div>
-          <div class="sb-stat"><div class="n">${c.lastRun?esc(fmtRelative(c.lastRun)):'—'}</div><div class="l">Last run</div></div>
-        </div>
+        ${isOnOrPaused?weekStatsHTML(h):`<div class="sb-desc" style="margin-bottom:0">${esc(EMPTY_RESULTS_PITCH[agentId]||'Activate to start seeing real results here.')}</div>`}
       </div>
-      ${h&&h.recentActivity&&h.recentActivity.length?`
+      ${isOnOrPaused&&h&&h.recentActivity&&h.recentActivity.length?`
       <div class="sb-section">
         <div class="eyebrow">LATEST ACTIVITY</div>
         <div id="sbList">${sbActsHTML(realAgentInfo(h))}</div>
       </div>`:''}
-      `:''}
       <div id="catalogToggleWrap">${catalogToggleHTML(c)}</div>
       <div id="catalogMsg"></div>
     `);
