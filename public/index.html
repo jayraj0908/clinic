@@ -1021,7 +1021,8 @@ async function boot(){
     app.renderer.background.color=p.bg;
     layerStars.alpha=p.starAlpha;
     for(const D of depts){
-      D.nm.style.fill=D.def.active?p.ink:p.dim;
+      const dormantOnly=!D.def.active&&(D.def.dormant&&D.def.dormant.length>0);
+      D.nm.style.fill=D.def.active?p.ink:(dormantOnly?p.leafDim:p.dim);
       D.sb.style.fill=p.dim;
       D.ghost.style.fill=p.ghost;
       redrawHubFill(D.hFill);
@@ -1051,15 +1052,20 @@ async function boot(){
   function paintHub(D){
     const def=D.def;
     const dormantOnly=!def.active&&(def.dormant&&def.dormant.length>0);
-    const hubColor=def.active?def.color:blendGray(def.color,0.65);
+    // Dormant keeps much more of the department's real color than a purely
+    // decorative hub (0.65 grayed) — it should whisper "click me," not
+    // disappear next to genuinely-empty departments like MARKETING.
+    const hubColor=def.active?def.color:blendGray(def.color,dormantOnly?0.32:0.65);
     D.hubGlow.tint=hubColor;
+    D.hubGlow.alpha=def.active?.5:(dormantOnly?.42:.28);
     D.hRing.clear();
-    D.hRing.lineStyle(1.4,hubColor,def.active?.9:(dormantOnly?.55:.4)).drawCircle(0,0,16);
-    D.hRing.lineStyle(1,hubColor,def.active?.25:(dormantOnly?.16:.1)).drawCircle(0,0,22);
+    D.hRing.lineStyle(1.4,hubColor,def.active?.9:(dormantOnly?.8:.4)).drawCircle(0,0,16);
+    D.hRing.lineStyle(1,hubColor,def.active?.25:(dormantOnly?.32:.1)).drawCircle(0,0,22);
     D.hGlyph.text=dormantOnly?'+':def.glyph;
     D.hGlyph.style.fill=hubColor;
-    D.nm.style.fill=def.active?PAL[theme].ink:PAL[theme].dim;
-    D.ghostBase=def.active?.02:.008;
+    D.hGlyph.alpha=def.active?1:(dormantOnly?1:.7);
+    D.nm.style.fill=def.active?PAL[theme].ink:(dormantOnly?PAL[theme].leafDim:PAL[theme].dim);
+    D.ghostBase=def.active?.02:(dormantOnly?.013:.008);
     D.ghost.alpha=D.ghostBase;
   }
 

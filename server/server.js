@@ -79,6 +79,12 @@ app.use(
 // check Meta's X-Hub-Signature-256 HMAC, which is computed over the exact
 // bytes Meta sent, not a re-serialization of the parsed JSON.
 app.use(express.json({ limit: "2mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
+// public/brain.html is the earlier WebGL brain-map prototype — index.html
+// replaced it as the primary UI. Redirect rather than 404/serve-stale, so
+// anyone with the old URL bookmarked lands on the real product instead of
+// a frozen old screen. Registered before the static middleware so it wins
+// over the file that's still sitting in public/ for reference.
+app.get("/brain.html", (req, res) => res.redirect(301, "/"));
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 if (!process.env.JWT_SECRET) {
