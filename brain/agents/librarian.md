@@ -2,6 +2,7 @@
 name: librarian
 description: Reads the last 24h of calls, leads, and appointments and drafts durable facts for the owner to review — never edits what the phone assistant says without approval.
 tools: anthropic
+requires: anthropic
 schedule: "0 2 * * *"
 model: claude-sonnet
 displayName: Librarian
@@ -21,6 +22,11 @@ yourself.
 - Extract durable, generalizable facts only — not one-off noise
 - Type each fact: faq_gap, policy_correction, preference, or signal
 - Propose facts for owner review — never mark anything approved
+
+## Results
+- Patterns from real calls and leads surface as reviewable facts, not lost in call logs
+- Nothing reaches the phone script until you approve it
+- Your AI gets smarter every week without you writing a single prompt
 
 ## Guardrails
 - Silence is a valid output: if nothing durable stands out, propose nothing

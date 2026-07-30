@@ -59,6 +59,12 @@ function loadAgentFile(filePath) {
     id,
     description: data.description || "",
     tools: splitList(data.tools),
+    // Catalog activation requirements — integration ids (matching
+    // server/store.js's db.integrations ids) this agent needs BOTH an env
+    // var AND/or a db-stored key for before it can be activated. Distinct
+    // from `tools` (which also drives the brain-map's decorative tool
+    // nodes) so the two can diverge later without semantic overload.
+    requires: splitList(data.requires),
     schedule: data.schedule ?? null, // null = event-driven, never cron-scheduled
     model: data.model || null,
     // presentation/graph-mapping — optional, defaults keep a new agent
@@ -79,6 +85,9 @@ function loadAgentFile(filePath) {
     handoff: splitList(data.handoff),
     body,
     workflows: extractSection(body, "Workflows"),
+    // Client-facing "what you'll see" bullets for the catalog/agent panel —
+    // honest outcome copy, not implementation detail (that's Workflows).
+    results: extractSection(body, "Results"),
   };
 }
 
