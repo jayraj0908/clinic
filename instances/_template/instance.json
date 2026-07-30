@@ -4,5 +4,7 @@
   "name": "Client Business Name",
   "vertical": "dental",
   "brandColor": "#c9a066",
-  "timezone": "America/New_York"
+  "timezone": "America/New_York",
+  "_recommendedAgentsNote": "recommendedAgents is what the onboarding wizard's review screen (server/onboarding.js's VERTICAL_RECOMMENDED_AGENTS) pre-checks for a given vertical before the owner activates a client — copy the list it picked here for your records, or set it by hand when hand-provisioning without the wizard. It becomes this file's own 'agents' field (server/brain.js's activation-set fallback — see server/catalog.js) once you decide the real starting roster; leave 'agents' out entirely for 'everything active', the original default.",
+  "recommendedAgents": ["receptionist", "leads", "calling", "audit", "billing", "librarian"]
 }

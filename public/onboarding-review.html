@@ -44,6 +44,11 @@
   .fact-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px}
   .fact-row textarea{flex:1;min-height:48px}
   .fact-row .rm{color:var(--dim);cursor:pointer;padding:8px;flex:none}
+  .agent-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .agent-row:last-child{border-bottom:0}
+  .agent-row input[type=checkbox]{width:16px;height:16px;flex:none;accent-color:var(--ink)}
+  .agent-row .an{font:600 12px 'Inter';color:var(--ink)}
+  .agent-row .at{font:400 11px 'Inter';color:var(--dim);margin-top:2px}
   button{appearance:none;border:0;cursor:pointer;font:600 10.5px 'Inter';letter-spacing:.12em;text-transform:uppercase;
     border-radius:9px;padding:12px 18px;transition:opacity .2s,background .2s}
   button:disabled{opacity:.4;cursor:default}
@@ -195,6 +200,12 @@ async function renderDetail(id){
     </div>
 
     <div class="panel" style="margin-top:20px">
+      <h2>Agents to activate</h2>
+      <div class="template-note">Pre-checked from ${esc(draftState.instanceJson.vertical)}'s recommended set — adjust before activating. Everything unchecked still shows up in the client's catalog as dormant, one click away.</div>
+      <div id="agentPicker">${agentPickerHTML(o.engineCatalog||[],draftState.instanceJson.agents||[])}</div>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
       <h2>Proposed memory facts (${factRows.length})</h2>
       <div id="factList"></div>
       <div class="actionbar"><button class="btn-ghost" onclick="addFact()">+ Add fact</button></div>
@@ -211,6 +222,19 @@ async function renderDetail(id){
   paintFacts();
   $("saveBtn").onclick=saveDraft;
   if(o.status!=="activated") $("activateBtn").onclick=activate;
+}
+
+function agentPickerHTML(engineCatalog,checkedIds){
+  const checked=new Set(checkedIds);
+  if(!engineCatalog.length)return `<div class="template-note">No engine agents found.</div>`;
+  return engineCatalog.map(a=>`
+    <label class="agent-row">
+      <input type="checkbox" data-agent-id="${esc(a.id)}" ${checked.has(a.id)?"checked":""}>
+      <div><div class="an">${esc(a.name)}</div><div class="at">${esc(a.tagline||"")}${a.requires&&a.requires.length?" · needs "+esc(a.requires.join(", ")):""}</div></div>
+    </label>`).join("");
+}
+function checkedAgentIds(){
+  return Array.from(document.querySelectorAll('[data-agent-id]:checked')).map(el=>el.dataset.agentId);
 }
 
 function paintFacts(){
@@ -238,7 +262,7 @@ async function saveDraft(){
     messagesJson=JSON.parse($("d_messages").value);
   }catch(e){ showMsg("clinic-profile.json / messages.json must be valid JSON: "+e.message,false); return; }
   const patch={
-    instanceJson:{ id:$("d_slug").value.trim(), name:$("d_name").value.trim(), vertical:$("d_vertical").value.trim(), timezone:$("d_tz").value.trim() },
+    instanceJson:{ id:$("d_slug").value.trim(), name:$("d_name").value.trim(), vertical:$("d_vertical").value.trim(), timezone:$("d_tz").value.trim(), agents:checkedAgentIds() },
     clinicProfileJson:profileJson,
     messagesJson,
     memoryFacts:factRows.filter(f=>f.fact.trim()),

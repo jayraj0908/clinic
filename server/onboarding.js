@@ -11,7 +11,7 @@ const crypto = require("crypto");
 const { nanoid } = require("nanoid");
 const { load, save, log } = require("./store");
 const notify = require("./notify");
-const { parseFrontmatter } = require("./brain");
+const { parseFrontmatter, AGENTS } = require("./brain");
 
 const hasKey = (k) => !!process.env[k];
 
@@ -19,6 +19,22 @@ const STEP_ORDER = ["basics", "hours", "services", "policies", "brainDump", "voi
 const MAX_INTERVIEW_QUESTIONS = 8;
 const INSTANCES_DIR = path.join(__dirname, "..", "instances");
 const ENGINE_RECEPTIONIST_MD = path.join(__dirname, "..", "brain", "agents", "receptionist.md");
+
+// The review screen's starting checkbox state, per vertical — matches
+// instances/_template/instance.json's own recommendedAgents convention.
+// The owner can add/remove before activating; whatever's left checked
+// becomes the new instance's instance.json "agents" field (server/
+// catalog.js's fallback active set — see server/brain.js's loadAgents()).
+const VERTICAL_RECOMMENDED_AGENTS = {
+  dental: ["receptionist", "leads", "calling", "audit", "billing", "librarian"],
+  restaurant: ["receptionist", "librarian"],
+};
+const DEFAULT_RECOMMENDED_AGENTS = ["receptionist", "leads", "librarian"];
+
+function recommendedAgentsFor(vertical) {
+  const list = VERTICAL_RECOMMENDED_AGENTS[vertical] || DEFAULT_RECOMMENDED_AGENTS;
+  return list.filter((id) => AGENTS[id]); // only ids the engine's catalog actually has
+}
 
 function emptyStepData() {
   return {
@@ -290,12 +306,17 @@ function buildDraftFromOnboarding(onboarding) {
     ...(bd.policies || []),
   ].filter(Boolean);
 
+  const vertical = (basics.businessType || "dental").toLowerCase();
   const instanceJson = {
     id: slug,
     name: basics.businessName || onboarding.clientName,
-    vertical: (basics.businessType || "dental").toLowerCase(),
+    vertical,
     brandColor: "#c9a066",
     timezone: basics.timezone || "America/New_York",
+    // Pre-checked per vertical on the review screen; the owner adjusts
+    // there before activating. See server/catalog.js's getActiveAgentIds —
+    // this becomes the new instance's default active set on first boot.
+    agents: recommendedAgentsFor(vertical),
   };
 
   const clinicProfileJson = {
@@ -383,10 +404,21 @@ function templateReference() {
   return { instanceJson: read("instance.json"), clinicProfileJson: read("clinic-profile.json"), messagesJson: read("messages.json") };
 }
 
+// The full engine catalog (every agent that could ever be offered — this
+// new instance has no overrides of its own yet), for the review screen's
+// agent-picker checkboxes. Deliberately just id/name/tagline/requires —
+// the review screen isn't the live catalog UI, it doesn't need state/
+// activation machinery, just enough to label a checkbox honestly.
+function engineCatalogSummary() {
+  return Object.values(AGENTS)
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .map((a) => ({ id: a.id, name: a.displayName, tagline: a.tagline, requires: a.requires }));
+}
+
 function getForReview(id) {
   const o = getById(id);
   if (!o) return null;
-  return { ...o, template: templateReference() };
+  return { ...o, template: templateReference(), engineCatalog: engineCatalogSummary() };
 }
 
 function updateDraft(id, patch) {
