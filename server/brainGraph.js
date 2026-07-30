@@ -2,9 +2,16 @@
 // from real data — no fake/padded entities. Hubs come from brain/agents/*.md
 // (Stage 2 of the engine/instance refactor) instead of a hardcoded array, so
 // a new agent file is all it takes for a new node to appear on the map.
+//
+// CATALOG_HUBS is the FULL set (every agent that exists for this instance,
+// active or not) — buildAgentDetail works against it so the panel opens for
+// a dormant agent too. buildGraph only turns ACTIVE+PAUSED ones (server/
+// catalog.js's getActiveAgentIds) into real map nodes; the frontend layers
+// in dormant hubs itself from GET /api/catalog (Stage 3).
 const { load } = require("./store");
 const { AGENTS } = require("./brain");
 const { instance } = require("./instance");
+const catalog = require("./catalog");
 
 function buildHubs() {
   return Object.values(AGENTS)
@@ -22,20 +29,22 @@ function buildHubs() {
     }));
 }
 
-const HUBS = buildHubs();
+const CATALOG_HUBS = buildHubs();
+
+function activeHubs(db) {
+  const activeIds = new Set(catalog.getActiveAgentIds(db));
+  return CATALOG_HUBS.filter((h) => activeIds.has(h.id));
+}
 
 function isToday(ts) {
   return new Date(ts).toDateString() === new Date().toDateString();
 }
 
 function agentStatus(db, hub) {
-  if (hub.id === "receptionist") {
-    const connected = db.integrations.find((i) => i.id === "vapi" && (process.env[i.envKey] || i.status === "connected"));
-    return connected ? "active" : "offline";
-  }
-  const a = db.agents.find((x) => x.id === hub.agentId);
-  if (!a) return "offline";
-  if (!a.on) return "idle";
+  const agent = AGENTS[hub.id];
+  const { state } = catalog.getAgentState(db, agent);
+  if (state === "paused") return "idle";
+  if (state !== "active") return "offline"; // available/needs_setup — shouldn't normally reach here (dormant hubs aren't in buildGraph's node list), kept as a safe fallback
   if (hub.id === "billing" && db.claims.some((c) => c.status === "awaiting_approval")) return "needs_review";
   if (hub.id === "audit" && db.visits.some((v) => !v.auditComplete)) return "needs_review";
   return "active";
@@ -117,10 +126,11 @@ function todayStats(db, hubId) {
 function buildGraph(db) {
   const nodes = [];
   const links = [];
+  const hubs = activeHubs(db);
 
   nodes.push({ id: "clinic", type: "clinic", name: db.settings.clinicName || instance.name });
 
-  HUBS.forEach((hub) => {
+  hubs.forEach((hub) => {
     const status = agentStatus(db, hub);
     nodes.push({ id: hub.id, type: "agent", name: hub.name, color: hub.color, glyph: hub.glyph, tagline: hub.tagline, status });
     links.push({ source: "clinic", target: hub.id, kind: "spoke" });
@@ -150,34 +160,39 @@ function buildGraph(db) {
   });
 
   // patient dust — names in db.leads are already first-name + last-initial,
-  // no phone/PHI rendered on canvas
+  // no phone/PHI rendered on canvas. Only wired to hubs that are actually
+  // on the map — an inactive leads/calling agent just means no dust nodes,
+  // never a dangling link to a hub that doesn't exist this request.
+  const hubIds = new Set(hubs.map((h) => h.id));
   db.leads.slice(0, 12).forEach((l) => {
+    const owner = l.status === "booked" || l.status === "seen" ? "calling" : "leads";
+    if (!hubIds.has(owner)) return;
     const pid = "patient_" + l.id;
     nodes.push({ id: pid, type: "patient", name: l.name });
-    const owner = l.status === "booked" || l.status === "seen" ? "calling" : "leads";
     links.push({ source: owner, target: pid, kind: "orbit" });
   });
 
   // hand-off chain: explicit handoff: frontmatter wins per-hub; if no hub
   // declares one at all, fall back to the original implicit linear chain
-  // (in declared order) so existing deployments render unchanged.
-  const anyExplicitHandoff = HUBS.some((h) => h.handoff && h.handoff.length);
+  // (in declared order) so existing deployments render unchanged. Only
+  // ever links between hubs that are actually active this request.
+  const anyExplicitHandoff = hubs.some((h) => h.handoff && h.handoff.length);
   if (anyExplicitHandoff) {
-    HUBS.forEach((hub) => {
+    hubs.forEach((hub) => {
       (hub.handoff || []).forEach((targetId) => {
-        if (HUBS.find((h) => h.id === targetId)) links.push({ source: hub.id, target: targetId, kind: "handoff" });
+        if (hubIds.has(targetId)) links.push({ source: hub.id, target: targetId, kind: "handoff" });
       });
     });
   } else {
-    for (let i = 0; i < HUBS.length - 1; i++) {
-      links.push({ source: HUBS[i].id, target: HUBS[i + 1].id, kind: "handoff" });
+    for (let i = 0; i < hubs.length - 1; i++) {
+      links.push({ source: hubs[i].id, target: hubs[i + 1].id, kind: "handoff" });
     }
   }
 
   return {
     nodes, links,
     stats: {
-      agents: HUBS.length,
+      agents: hubs.length,
       actionsThisWeek: db.calls.length + db.leads.length + db.claims.length + db.visits.length,
       connections: links.length,
     },
@@ -185,7 +200,7 @@ function buildGraph(db) {
 }
 
 function buildAgentDetail(db, hubId) {
-  const hub = HUBS.find((h) => h.id === hubId);
+  const hub = CATALOG_HUBS.find((h) => h.id === hubId);
   if (!hub) return null;
   const a = hub.agentId ? db.agents.find((x) => x.id === hub.agentId) : null;
   const detail = {
@@ -215,4 +230,4 @@ function buildAgentDetail(db, hubId) {
   return detail;
 }
 
-module.exports = { buildGraph, buildAgentDetail, HUBS };
+module.exports = { buildGraph, buildAgentDetail, activeHubs, CATALOG_HUBS };

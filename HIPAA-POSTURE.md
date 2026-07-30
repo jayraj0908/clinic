@@ -100,6 +100,21 @@ today (all implemented and verified in this session — see
 
 ## What's still open (tracked, not fixed in this pass)
 
+- **DB-stored integration keys (agent catalog, server/catalog.js)**: the
+  self-serve "activate an agent" flow lets an owner paste a connector API
+  key (Anthropic, Twilio, Resend, Claim.MD, Meta, Google Ads) directly in
+  the dashboard instead of setting a Railway env var. That key is stored in
+  `db.settings.integrationKeys` — i.e. on the same JSON-file volume as
+  everything else, not a secrets manager, and readable by anything with
+  filesystem/backup access. This is a deliberate convenience trade-off
+  (zero-deploy activation vs. env-var-grade secret hygiene): the UI never
+  echoes a stored key back (write-only, masked to last 4 on read), and env
+  vars always win when both exist, but a compromised `db.json`/backup now
+  also exposes any connector keys entered this way, not just PHI. Treat DB-
+  stored keys as acceptable for low-blast-radius connectors (Meta/Google Ads
+  tokens, Resend) and prefer real env vars for anything touching PHI-
+  adjacent systems (Anthropic, Twilio, Claim.MD) until this gets a proper
+  secrets-manager pass.
 - No read-access audit logging — the activity log captures *mutations*
   (booked, confirmed, cancelled, claim approved) but not *views*. A stricter
   HIPAA posture logs every PHI read, not just writes.

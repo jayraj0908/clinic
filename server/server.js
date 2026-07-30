@@ -21,6 +21,8 @@ const { instance, profile } = require("./instance");
 const orders = require("./orders");
 const onboarding = require("./onboarding");
 const multer = require("multer");
+const catalog = require("./catalog");
+const { AGENTS } = require("./brain");
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -313,6 +315,66 @@ app.post("/api/agents/:id/schedule", auth, (req, res) => {
   a.scheduleLabel = req.body.scheduleLabel || req.body.schedule;
   save(); bootSchedules();
   res.json(a);
+});
+
+// ---------- agent catalog (self-service activation — the client's own
+// "store" of what their brain can do; server/catalog.js has the state
+// machine, this is just the thin HTTP wrapper) ----------
+app.get("/api/catalog", auth, (req, res) => {
+  res.json({ agents: catalog.getCatalog(load()) });
+});
+
+app.post("/api/catalog/:id/activate", auth, requireOwner, (req, res) => {
+  const db = load();
+  const result = catalog.activate(db, req.params.id);
+  if (!result.ok) return res.status(result.status).json({ error: result.error, missing: result.missing });
+  save();
+  bootSchedules();
+  log("system", `${req.user.id} activated ${result.agent.name}`);
+  res.json(result.agent);
+});
+
+app.post("/api/catalog/:id/deactivate", auth, requireOwner, (req, res) => {
+  const db = load();
+  const result = catalog.deactivate(db, req.params.id);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  save();
+  bootSchedules();
+  log("system", `${req.user.id} paused ${result.agent.name}`);
+  res.json(result.agent);
+});
+
+// ---------- integrations (connector keys — env always wins; a db-stored
+// key is a no-deploy convenience fallback, never echoed back in full) ----------
+app.get("/api/integrations", auth, (req, res) => {
+  const db = load();
+  const keys = db.settings.integrationKeys || {};
+  res.json({
+    integrations: db.integrations.map((i) => {
+      const hasEnv = !!(i.envKey && process.env[i.envKey]);
+      const dbKey = keys[i.id];
+      return {
+        id: i.id, name: i.name, role: i.role,
+        connected: hasEnv || !!dbKey,
+        source: hasEnv ? "env" : dbKey ? "db" : null,
+        maskedKey: dbKey ? "••••" + dbKey.slice(-4) : null,
+      };
+    }),
+  });
+});
+
+app.post("/api/integrations/keys", auth, requireOwner, (req, res) => {
+  const { id, key } = req.body || {};
+  const db = load();
+  const integ = db.integrations.find((i) => i.id === id);
+  if (!integ) return res.status(400).json({ error: "Unknown integration id" });
+  const trimmed = (key || "").trim();
+  if (!trimmed) return res.status(400).json({ error: "key is required" });
+  db.settings.integrationKeys = db.settings.integrationKeys || {};
+  db.settings.integrationKeys[id] = trimmed;
+  save();
+  log("system", `${req.user.id} added a key for ${integ.name}`);
+  res.json({ id, connected: true, maskedKey: "••••" + trimmed.slice(-4) });
 });
 
 // ---------- claims approval (human gate) ----------
@@ -1103,14 +1165,21 @@ let jobs = [];
 function bootSchedules() {
   jobs.forEach((j) => j.stop());
   jobs = [];
-  // db.agents is a generic fixture seeded the same way for every instance;
-  // brainGraph.HUBS is what actually loaded for THIS instance (after any
-  // disabled: true override or instance.json agents allowlist). Only arm a
-  // cron job for a db.agents row if its id is still a live hub's runner —
-  // an agent dropped for this instance gets nothing scheduled, ever.
-  const activeRunnerIds = new Set(brainGraph.HUBS.map((h) => h.agentId).filter(Boolean));
-  for (const a of load().agents) {
-    if (!activeRunnerIds.has(a.id)) continue;
+  const db = load();
+  // db.agents is a generic fixture row-per-runner; which of those runners
+  // are actually schedulable now is the catalog's DB-backed active set
+  // (server/catalog.js), not a static instance-boot-time list — this needs
+  // to be re-derived on every call since activate/deactivate call this at
+  // runtime, no redeploy. Only an agent that's both in the active set AND
+  // currently toggled on gets a cron armed at all — a paused or
+  // never-activated agent gets nothing scheduled, not even a no-op tick.
+  const activeIds = new Set(catalog.getActiveAgentIds(db));
+  const schedulableRunnerIds = new Set(
+    Object.values(AGENTS).filter((a) => activeIds.has(a.id)).map((a) => catalog.runnerRowId(a))
+  );
+  for (const a of db.agents) {
+    if (!schedulableRunnerIds.has(a.id)) continue;
+    if (!a.on) continue;
     if (!cron.validate(a.schedule)) continue;
     jobs.push(
       cron.schedule(a.schedule, async () => {

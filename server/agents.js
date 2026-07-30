@@ -4,6 +4,7 @@
 const { load, save, log } = require("./store");
 const { AGENTS } = require("./brain");
 const { profile, instance } = require("./instance");
+const catalog = require("./catalog");
 
 const hasKey = (k) => !!process.env[k];
 
@@ -83,13 +84,17 @@ function systemPromptFor(agentId, extra) {
     .trim();
 }
 
-// Claude API helper (used by audit + billing agents)
-async function claude(prompt, system) {
-  if (!hasKey("ANTHROPIC_API_KEY")) return null;
+// Claude API helper (used by audit + billing + librarian). Takes db so it
+// can fall back to a db-stored key (server/catalog.js's resolveKey) when
+// ANTHROPIC_API_KEY isn't set in the environment — env still wins if both
+// exist.
+async function claude(db, prompt, system) {
+  const apiKey = catalog.resolveKey(db, "anthropic");
+  if (!apiKey) return null;
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
+      "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
@@ -133,7 +138,8 @@ const agents = {
       .sort((a, b) => (b.priorityCall ? 1 : 0) - (a.priorityCall ? 1 : 0));
     if (!queue.length) { log("agent", "Appointment Setter: queue empty"); return "queue empty"; }
 
-    if (!hasKey("VAPI_API_KEY")) {
+    const vapiKey = catalog.resolveKey(db, "vapi");
+    if (!vapiKey) {
       log("agent", `Appointment Setter: ${queue.length} lead(s) ready — connect Vapi to start calling`);
       return `${queue.length} waiting on Vapi`;
     }
@@ -141,7 +147,7 @@ const agents = {
     for (const lead of queue.slice(0, 5)) {
       const res = await fetch("https://api.vapi.ai/call", {
         method: "POST",
-        headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}`, "content-type": "application/json" },
+        headers: { Authorization: `Bearer ${vapiKey}`, "content-type": "application/json" },
         body: JSON.stringify({
           assistantId: process.env.VAPI_OUTBOUND_ASSISTANT_ID,
           phoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
@@ -163,6 +169,7 @@ const agents = {
     if (!pending.length) { log("agent", "Visit Audit: nothing pending"); return "nothing pending"; }
     for (const v of pending) {
       const out = await claude(
+        db,
         `Structure these provider notes into SOAP JSON. Reorganize only — never add clinical content not present in the source.\n\n${v.rawNotes || ""}`,
         systemPromptFor("audit", "Output strict JSON: {subjective, objective, assessment, plan, procedures_documented[], diagnoses_documented[], missing[]}.")
       );
@@ -179,6 +186,7 @@ const agents = {
     const ready = db.visits.filter((v) => v.billingReady && !db.claims.find((c) => c.visitId === v.id));
     for (const v of ready) {
       const out = await claude(
+        db,
         `From this audited visit note, suggest CPT/CDT + ICD-10 codes with one-line justification each, citing the supporting line. JSON: {codes:[{code, justification}]}. Code only what documentation supports.\n\n${JSON.stringify(v.soap || {})}`,
         systemPromptFor("billing")
       );
@@ -207,12 +215,13 @@ const agents = {
       recentLeads.length ? "LEADS:\n" + recentLeads.map((l) => `- ${l.name} · service: ${l.service || "unspecified"} · source: ${l.source} · status: ${l.status}`).join("\n") : "",
     ].filter(Boolean).join("\n\n");
 
-    if (!hasKey("ANTHROPIC_API_KEY")) {
-      log("agent", "Librarian: reviewed activity, but ANTHROPIC_API_KEY isn't set — nothing extracted");
+    if (!catalog.resolveKey(db, "anthropic")) {
+      log("agent", "Librarian: reviewed activity, but no Anthropic key is configured — nothing extracted");
       return "no API key";
     }
 
     const out = await claude(
+      db,
       `Review this clinic's last 24h of call/lead activity. Extract ONLY durable, generalizable facts worth remembering long-term — not one-off noise or anything already obvious from the clinic profile.\n\n` +
         `Type each fact exactly one of:\n` +
         `- faq_gap: callers keep asking something the assistant couldn't answer\n` +

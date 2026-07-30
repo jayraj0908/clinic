@@ -60,6 +60,7 @@ db.integrations = [
   { id: "claimmd", name: "Claim.MD", role: "Eligibility checks & 837P claims", envKey: "CLAIMMD_API_KEY", status: "off" },
   { id: "twilio", name: "Twilio SMS", role: "Confirmations, reminders, review asks", envKey: "TWILIO_AUTH", status: "off" },
   { id: "anthropic", name: "Claude API", role: "Agent reasoning, note structuring, coding", envKey: "ANTHROPIC_API_KEY", status: "off" },
+  { id: "resend", name: "Resend Email", role: "Booking confirmations & reminders", envKey: "RESEND_API_KEY", status: "off" },
 ];
 
 // mark connected if env key present

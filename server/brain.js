@@ -7,7 +7,7 @@
 // over brain/agents/*.md for any file sharing the same `name`.
 const fs = require("fs");
 const path = require("path");
-const { instanceAgentsDir, instance } = require("./instance");
+const { instanceAgentsDir } = require("./instance");
 
 const ENGINE_AGENTS_DIR = path.join(__dirname, "..", "brain", "agents");
 
@@ -107,23 +107,21 @@ function loadAgents() {
   }
 
   // An instance override with disabled: true drops that agent entirely —
-  // not just hidden, gone from the graph/scheduler/prompt pipeline, as if
-  // the file were never loaded.
+  // not just hidden, gone from the catalog/graph/scheduler/prompt
+  // pipeline, as if the file were never loaded. This is the one remaining
+  // hard removal: "this isn't a capability we offer this vertical at all",
+  // as opposed to "offered but not activated yet" (see server/catalog.js).
   for (const id of Object.keys(byId)) {
     if (byId[id].disabled) delete byId[id];
   }
 
-  // Optional instance.json "agents" allowlist: if present, only those
-  // named agents load for this instance at all (everything else engine
-  // defaults would normally provide is dropped). Absent = every agent
-  // loads, unchanged from today.
-  if (Array.isArray(instance.agents)) {
-    const allowed = new Set(instance.agents);
-    for (const id of Object.keys(byId)) {
-      if (!allowed.has(id)) delete byId[id];
-    }
-  }
-
+  // instance.json's "agents" allowlist used to also filter this list down
+  // — it no longer does. AGENTS is now the FULL catalog every client can
+  // see (brain/agents/*.md is "every agent that could exist for anyone");
+  // which of them are actually running is a separate, DB-backed layer
+  // (server/catalog.js's getActiveAgentIds, which still reads this same
+  // instance.agents field — just as a fallback default for what's ACTIVE,
+  // not as a filter on what EXISTS).
   return byId;
 }
 

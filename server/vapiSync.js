@@ -11,6 +11,7 @@
 const crypto = require("crypto");
 const { load, save, log } = require("./store");
 const { systemPromptFor } = require("./agents");
+const catalog = require("./catalog");
 
 // (a) engine base brain/agents/receptionist.md body, (b) instance profile
 // rendered to prose, (c) approved faq_gap/policy_correction facts in a
@@ -30,8 +31,14 @@ function isDryRun() {
   return process.env.VAPI_SYNC_DRY_RUN !== "0";
 }
 
-function hasVapiConfig() {
-  return !!(process.env.VAPI_API_KEY && process.env.VAPI_INBOUND_ASSISTANT_ID);
+// VAPI_INBOUND_ASSISTANT_ID is an identifier, not a secret — it stays
+// env-only (no clean single-string-key UI fits "which assistant"). The API
+// key itself falls back to a db-stored key when db is passed (real use,
+// inside syncToVapi); omitted db (server.js's boot-time warning, before any
+// request/db-key context exists) checks env only, same as before.
+function hasVapiConfig(db) {
+  const apiKey = db ? catalog.resolveKey(db, "vapi") : process.env.VAPI_API_KEY;
+  return !!(apiKey && process.env.VAPI_INBOUND_ASSISTANT_ID);
 }
 
 // Never include the actual key value in any log line, console output, or
@@ -56,7 +63,7 @@ async function syncToVapi(pushedBy) {
     return { dryRun: true, version: versionNum, hash };
   }
 
-  if (!hasVapiConfig()) {
+  if (!hasVapiConfig(db)) {
     log("system", "Vapi sync skipped — VAPI_API_KEY or VAPI_INBOUND_ASSISTANT_ID is not set.");
     return { skipped: true, reason: "not configured" };
   }
@@ -79,7 +86,7 @@ async function syncToVapi(pushedBy) {
     // extraction is a distinct step that needs its own schema entry.
     const res = await fetch(`https://api.vapi.ai/assistant/${process.env.VAPI_INBOUND_ASSISTANT_ID}`, {
       method: "PATCH",
-      headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}`, "content-type": "application/json" },
+      headers: { Authorization: `Bearer ${catalog.resolveKey(db, "vapi")}`, "content-type": "application/json" },
       body: JSON.stringify({ model: { messages: [{ role: "system", content: prompt }] } }),
     });
     if (!res.ok) {
