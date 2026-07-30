@@ -821,6 +821,16 @@ function truncateLabel(s,maxLen){
   return s.length>maxLen ? s.slice(0,maxLen-1).trimEnd()+'…' : s;
 }
 
+// Branch leaf values come from two sources with different shapes: the
+// hand-authored decorative DEPT_DEFS_BASE branches are plain strings
+// (name doubles as detail — there's nothing more to say about a fake
+// branch), while real agent workflows are {label, detail} pairs from
+// server/brain.js's "**Label** — detail" parsing (the map renders the
+// short label; a fuller sentence is available wherever there's room for
+// it). Normalizing at the point of use means DEPT_DEFS_BASE never needs
+// touching.
+function normLeaf(x){ return typeof x==='string' ? {label:x, detail:x} : x; }
+
 /* agentData: hubId -> live detail object, mutated in place on refresh so
    every reference to it (dept.realDetails, dashboard, workforce, sidebar)
    stays in sync without rebuilding the map. */
@@ -849,12 +859,12 @@ function buildDeptDefs(agentData,catalogData){
     const reals=byDept[base.name]||[];
     const active=reals.some(h=>h.status==='active'||h.status==='needs_review');
     const dormant=dormantByDept[base.name]||[];
-    const realSkillMap={},toolConnected={},realDetails={};
+    const realSkillMap={},realSkillDetail={},toolConnected={},realDetails={};
     const extraBranches=[];
     reals.forEach(h=>{
       realDetails[h.id]=h;
       const wf=h.workflows||[];
-      wf.forEach(w=>{realSkillMap[w]=h.id});
+      wf.forEach(w=>{realSkillMap[w.label]=h.id;realSkillDetail[w.label]=w.detail});
       // tools are shown in the sidebar's "what it covers" info, not as
       // separate canvas nodes — keeps node count per department tight.
       (h.tools||[]).forEach(t=>{toolConnected[t.name]=t.connected});
@@ -863,7 +873,7 @@ function buildDeptDefs(agentData,catalogData){
     return{
       ...base,
       branches:[...base.branches,...extraBranches],
-      active, realSkillMap, toolConnected, realDetails, dormant,
+      active, realSkillMap, realSkillDetail, toolConnected, realDetails, dormant,
     };
   });
 }
@@ -991,9 +1001,9 @@ async function boot(){
   // colors themselves stay constant across themes, only the grays/blacks/
   // whites that read as "ink" flip.
   const PAL={
-    dark:{bg:0x0a0a0d,ink:0xe9e2cd,dim:0x9c9790,ghost:0xe8e6e0,leafDim:0xc9c3b3,
+    dark:{bg:0x0a0a0d,ink:0xfaf6ea,dim:0xc4beac,ghost:0xe8e6e0,leafDim:0xe4ddc8,
       hubFill:0x0c0c0e,coreDot:0xfdf9ee,shadowDot:0xa8a398,iconDiscFill:0x0b0b0d,
-      chipFill:0x08080a,chipAlpha:.62,starAlpha:1},
+      chipFill:0x08080a,chipAlpha:.72,starAlpha:1},
     light:{bg:0xffffff,ink:0x18150f,dim:0x4a4638,ghost:0x141210,leafDim:0x3a362a,
       hubFill:0xf3f1ea,coreDot:0x18150f,shadowDot:0x4a463c,iconDiscFill:0xf3f1ea,
       chipFill:0xf3f1ea,chipAlpha:.72,starAlpha:.22},
@@ -1053,17 +1063,24 @@ async function boot(){
     const def=D.def;
     const dormantOnly=!def.active&&(def.dormant&&def.dormant.length>0);
     // Dormant keeps much more of the department's real color than a purely
-    // decorative hub (0.65 grayed) — it should whisper "click me," not
-    // disappear next to genuinely-empty departments like MARKETING.
-    const hubColor=def.active?def.color:blendGray(def.color,dormantOnly?0.32:0.65);
+    // decorative hub (0.45 grayed) — it should whisper "click me," not
+    // disappear next to genuinely-empty departments like MARKETING. Even a
+    // fully decorative hub stays as visible as its own name text (PAL dim) —
+    // faint is fine, invisible is not.
+    const hubColor=def.active?def.color:blendGray(def.color,dormantOnly?0.32:0.45);
     D.hubGlow.tint=hubColor;
-    D.hubGlow.alpha=def.active?.5:(dormantOnly?.42:.28);
+    // Glow kept tight and modest (small scale, lower alpha) so it reads as
+    // a light SOURCE, not a haze that washes the node out — the node's own
+    // ring/core carries visibility, the glow just accents it.
+    D.hubGlow.alpha=def.active?.32:(dormantOnly?.26:.2);
+    D.hCore.clear();
+    D.hCore.beginFill(hubColor,def.active?.95:(dormantOnly?.7:.55)).drawCircle(0,0,7).endFill();
     D.hRing.clear();
-    D.hRing.lineStyle(1.4,hubColor,def.active?.9:(dormantOnly?.8:.4)).drawCircle(0,0,16);
-    D.hRing.lineStyle(1,hubColor,def.active?.25:(dormantOnly?.32:.1)).drawCircle(0,0,22);
+    D.hRing.lineStyle(2,hubColor,def.active?1:(dormantOnly?.85:.6)).drawCircle(0,0,16);
+    D.hRing.lineStyle(1.2,hubColor,def.active?.4:(dormantOnly?.4:.22)).drawCircle(0,0,22);
     D.hGlyph.text=dormantOnly?'+':def.glyph;
-    D.hGlyph.style.fill=hubColor;
-    D.hGlyph.alpha=def.active?1:(dormantOnly?1:.7);
+    D.hGlyph.style.fill=def.active?0xffffff:hubColor;
+    D.hGlyph.alpha=def.active?1:(dormantOnly?1:.85);
     D.nm.style.fill=def.active?PAL[theme].ink:(dormantOnly?PAL[theme].leafDim:PAL[theme].dim);
     D.ghostBase=def.active?.02:(dormantOnly?.013:.008);
     D.ghost.alpha=D.ghostBase;
@@ -1078,7 +1095,8 @@ async function boot(){
     const def=D.def,di=D.di,hub=D.hub;
     const nB=def.branches.length||1;
 
-    function makeSkillNode(skill,branchFrac,forkOffset,dist,parentNode){
+    function makeSkillNode(skillRaw,branchFrac,forkOffset,dist,parentNode){
+      const skill=normLeaf(skillRaw).label; // canvas identity/label is always the short string from here down
       const realHubId=def.realSkillMap&&def.realSkillMap[skill];
       const isReal=!!realHubId;
       const isDisconnected=isReal&&def.toolConnected&&Object.prototype.hasOwnProperty.call(def.toolConnected,skill)&&def.toolConnected[skill]===false;
@@ -1091,9 +1109,9 @@ async function boot(){
       const node=new PIXI.Container();
       const g=new PIXI.Sprite(GLOW);g.anchor.set(.5);g.tint=nodeColor;
       const rad=7;
-      g.scale.set(rad/16);g.alpha=(.75+.15*(isReal&&runningNow?1:0))*nodeDim;
+      g.scale.set(rad/24);g.alpha=(.5+.12*(isReal&&runningNow?1:0))*nodeDim;
       const core=new PIXI.Sprite(DOT);core.anchor.set(.5);
-      core.scale.set(rad/22);core.tint=shadowed?PAL[theme].shadowDot:PAL[theme].coreDot;
+      core.scale.set(rad/16);core.tint=shadowed?PAL[theme].shadowDot:PAL[theme].coreDot;core.alpha=nodeDim;
       const iconC=new PIXI.Container();
       const idisc=new PIXI.Graphics();
       redrawIdisc(idisc,def.color);
@@ -1109,7 +1127,7 @@ async function boot(){
       // raw text sitting on top of busy branch lines. Hidden by default,
       // revealed only on hover — the map stays clean at rest.
       const shortSkill=truncateLabel(skill.toUpperCase(),22);
-      const lb=new PIXI.Text(shortSkill,{fontFamily:'Inter',fontWeight:'500',fontSize:6.5,
+      const lb=new PIXI.Text(shortSkill,{fontFamily:'Inter',fontWeight:'600',fontSize:6.5,
         fill:PAL[theme].leafDim,letterSpacing:1.3});
       lb.anchor.set(.5,0);
       const lblChip=new PIXI.Graphics();
@@ -1177,14 +1195,18 @@ async function boot(){
     const hubColor=def.active?def.color:blendGray(def.color,0.65);
     const hub=new PIXI.Container();
     const hGlow=new PIXI.Sprite(GLOW);hGlow.anchor.set(.5);hGlow.tint=hubColor;
-    hGlow.scale.set(1.1);hGlow.alpha=.5;
+    hGlow.scale.set(.62);hGlow.alpha=.32;
     const hFill=new PIXI.Graphics();redrawHubFill(hFill);
+    // solid lit core dot on top of the dark fill — this, not the glow, is
+    // what makes an active hub read as clearly as its name text does.
+    const hCore=new PIXI.Graphics();
+    hCore.beginFill(hubColor,def.active?.95:.35).drawCircle(0,0,7).endFill();
     const hRing=new PIXI.Graphics();
-    hRing.lineStyle(1.4,hubColor,def.active?.9:.4).drawCircle(0,0,16);
-    hRing.lineStyle(1,hubColor,def.active?.25:.1).drawCircle(0,0,22);
-    const hGlyph=new PIXI.Text(def.glyph,{fontFamily:'Inter',fontSize:13,fill:hubColor});
+    hRing.lineStyle(2,hubColor,def.active?1:.45).drawCircle(0,0,16);
+    hRing.lineStyle(1.2,hubColor,def.active?.4:.14).drawCircle(0,0,22);
+    const hGlyph=new PIXI.Text(def.glyph,{fontFamily:'Inter',fontSize:13,fill:def.active?0xffffff:hubColor});
     hGlyph.anchor.set(.5,.52);
-    hub.addChild(hGlow,hFill,hRing,hGlyph);
+    hub.addChild(hGlow,hFill,hCore,hRing,hGlyph);
     hub.eventMode='static';hub.cursor='pointer';hub.hitArea=new PIXI.Circle(0,0,30);
     hub.on('pointertap',()=>{
       if(dragDist>=6)return;
@@ -1202,7 +1224,7 @@ async function boot(){
     hub.on('pointerover',()=>{setHoverTarget(di);showTip(def.name,def.sub,hub)});
     hub.on('pointerout',()=>{setHoverTarget(-1);hideTip()});
     layerNodes.addChild(hub);
-    D.hub=hub;D.hubGlow=hGlow;D.hubPh=di*1.7;D.hFill=hFill;D.hRing=hRing;D.hGlyph=hGlyph;
+    D.hub=hub;D.hubGlow=hGlow;D.hubPh=di*1.7;D.hFill=hFill;D.hCore=hCore;D.hRing=hRing;D.hGlyph=hGlyph;
 
     D.nm=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontWeight:'600',fontSize:16,
       fill:def.active?PAL[theme].ink:PAL[theme].dim,letterSpacing:6});
@@ -1349,6 +1371,33 @@ async function boot(){
     lx=e.clientX;ly=e.clientY;
   });
   window.addEventListener('pointerup',()=>{dragging=false});
+
+  // Whole-wedge hover: in the ring overview, the entire pie-slice around a
+  // department should light up the instant the pointer enters it — not
+  // only once the pointer lands on the hub's small hit circle. This runs
+  // independently of Pixi's per-node hit-testing (hub/node pointerover
+  // still handle direct hover for tooltips once zoomed into a department).
+  app.view.addEventListener('pointermove',e=>{
+    if(focused>=0||morph>0.3)return; // wedge geometry only exists in the ring overview
+    const rect=app.view.getBoundingClientRect();
+    const sx=(e.clientX-rect.left)*(app.screen.width/rect.width);
+    const sy=(e.clientY-rect.top)*(app.screen.height/rect.height);
+    const p=world.toLocal(new PIXI.Point(sx,sy));
+    const dx=p.x-CORE.x,dy=p.y-CORE.y;
+    const r=Math.hypot(dx,dy);
+    if(r<44||r>RING_R+170){ if(hoverDept>=0)setHoverTarget(-1); return; }
+    const ang=Math.atan2(dy,dx);
+    const step=2*Math.PI/N_DEPT;
+    let best=-1,bestDiff=Infinity;
+    for(let di=0;di<N_DEPT;di++){
+      const a=-Math.PI/2+di*step;
+      const diff=Math.abs(((ang-a+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI);
+      if(diff<bestDiff){bestDiff=diff;best=di;}
+    }
+    const target=bestDiff<=step/2?best:-1;
+    if(hoverDept!==target)setHoverTarget(target);
+  });
+  app.view.addEventListener('pointerleave',()=>{ if(focused<0)setHoverTarget(-1); });
   app.view.addEventListener('dblclick',()=>backOut());
   window.addEventListener('keydown',e=>{
     if(e.key==='Escape')backOut();
@@ -1511,17 +1560,18 @@ async function boot(){
     setNodeHalo(null,null);
     const reals=Object.values(def.realDetails);
     const liveReals=reals.filter(h=>h.status==='active'||h.status==='needs_review');
-    // def.branches is [{root, forks:[...]}], not plain strings — flatten to
-    // real skill-name strings (this was silently rendering "[object Object]"
-    // and empty pills before).
-    const allSkills=def.branches.flatMap(b=>[b.root,...(b.forks||[])]);
+    // def.branches is [{root, forks:[...]}] where root/each fork is either
+    // a plain string (decorative) or a real {label,detail} pair — normalize
+    // to {label,detail} uniformly so nothing here ever renders
+    // "[object Object]" or a raw un-normalized value.
+    const allSkills=def.branches.flatMap(b=>[b.root,...(b.forks||[])]).map(normLeaf);
     const desc=reals.length
       ? `${esc(def.name)} runs ${reals.map(h=>esc(h.name)).join(' and ')} — ${liveReals.length?'live right now.':'currently paused.'}`
       : (def.dormant&&def.dormant.length
         ? `${esc(def.name)} has ${def.dormant.length>1?'agents':'an agent'} ready — ${def.dormant.map(c=>esc(c.name)).join(' and ')} just ${def.dormant.length>1?"aren't":"isn't"} activated yet.`
         : `${esc(def.name)} has no agent built yet. It's mapped and ready — an empty seat waiting for its first Sailz agent.`);
-    const covers=def.branches.slice(0,6).map(b=>b.root);
-    const startHere=reals.length?(reals[0].workflows||[])[0]:allSkills[0];
+    const covers=def.branches.slice(0,6).map(b=>normLeaf(b.root).label);
+    const startHere=(reals.length?(reals[0].workflows||[])[0]:allSkills[0])||{label:'—'};
     const totalToday=reals.reduce((s,h)=>s+Number((h.todayStats||[])[0]?.value||0),0);
     swapSidebar(`
       <div class="eyebrow">DEPARTMENT</div>
@@ -1542,7 +1592,7 @@ async function boot(){
       </div>
       <div class="sb-section">
         <div class="eyebrow">THE FUNCTIONS</div>
-        ${allSkills.map(s=>{const isReal=!!def.realSkillMap[s];return `<div class="func-row"><span class="fdot${isReal?' on':''}"></span>${esc(s)}</div>`}).join('')}
+        ${allSkills.map(s=>{const isReal=!!def.realSkillMap[s.label];return `<div class="func-row"><span class="fdot${isReal?' on':''}"></span>${esc(s.label)}</div>`}).join('')}
       </div>
       ${reals.length?`
       <div class="sb-section">
@@ -1551,7 +1601,7 @@ async function boot(){
       </div>`:''}
       <div class="sb-section">
         <div class="eyebrow accent">START HERE</div>
-        <div class="sb-desc" style="margin-bottom:0">${reals.length?`Begin with <b style="color:var(--ink)">${esc(startHere)}</b> — already live.`:`Begin with <b style="color:var(--ink)">${esc(startHere)}</b> once this department is built out.`}</div>
+        <div class="sb-desc" style="margin-bottom:0">${reals.length?`Begin with <b style="color:var(--ink)">${esc(startHere.label)}</b> — already live.`:`Begin with <b style="color:var(--ink)">${esc(startHere.label)}</b> once this department is built out.`}</div>
       </div>
       <div class="sb-section">
         <div class="eyebrow">THE NUMBERS</div>
@@ -1635,6 +1685,7 @@ async function boot(){
       <div class="eyebrow accent" style="color:${tagCol}">${esc(tag.toUpperCase())}</div>
       <div id="sbName" style="color:${col};font-size:${sbNameSize(skill)}">${esc(skill)}</div>
       <div id="sbSub">${esc(def.name)} · ${esc(h.name)}</div>
+      ${def.realSkillDetail&&def.realSkillDetail[skill]&&def.realSkillDetail[skill]!==skill?`<div class="sb-desc">${esc(def.realSkillDetail[skill])}</div>`:''}
       <div class="sb-section"><div class="sb-stats" id="sbStats">${info.stats.map(s=>
         `<div class="sb-stat"><div class="n">${esc(String(s.n))}</div><div class="l">${esc(s.l)}</div></div>`).join('')}</div></div>
       ${LEAD_AGENTS.has(hubId)?`
