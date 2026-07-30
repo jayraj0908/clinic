@@ -147,6 +147,41 @@
   .approve-btn{margin-top:6px;padding:5px 12px;border-radius:999px;border:1px solid var(--ink);
     background:transparent;color:var(--ink);font:600 8.5px 'Inter';letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
   .approve-btn:hover{background:var(--ink);color:var(--bg)}
+
+  /* ---------- catalog: state chips, results, requirements, toggle (agent panel + Workforce cards) ---------- */
+  .state-chip{display:inline-flex;align-items:center;gap:6px;font:700 8.5px 'Inter';letter-spacing:.16em;text-transform:uppercase;padding:4px 10px;border-radius:999px}
+  .state-chip .dot{width:6px;height:6px;border-radius:50%}
+  .results-list{list-style:none;margin:0;padding:0}
+  .results-list li{position:relative;padding:7px 0 7px 18px;font:400 12.5px 'Inter';color:#c9c4b6;line-height:1.6}
+  .results-list li:before{content:'✓';position:absolute;left:0;color:#7fd6b0;font-size:11px}
+  .req-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(232,230,224,.05)}
+  .req-row:last-child{border-bottom:0}
+  .req-row .rq-mark{width:16px;flex:none;font-size:12px;text-align:center}
+  .req-row .rq-mark.ok{color:#7fd6b0}
+  .req-row .rq-mark.no{color:#e08a7a}
+  .req-row .rq-name{flex:1;font:500 12px 'Inter';color:var(--ink);text-transform:uppercase;letter-spacing:.06em}
+  .req-key-form{display:flex;gap:6px;flex:1}
+  .req-key-form input{flex:1;min-width:0;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:7px;
+    color:var(--ink);font:400 11px 'Inter';padding:6px 9px}
+  .req-key-btn{appearance:none;border:1px solid var(--ink);background:transparent;color:var(--ink);
+    font:600 8.5px 'Inter';letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-radius:7px;cursor:pointer;flex:none}
+  .req-key-btn:hover{background:var(--ink);color:var(--bg)}
+  .toggle-btn{width:100%;padding:13px;border-radius:999px;border:1px solid;font:700 10.5px 'Inter';
+    letter-spacing:.16em;text-transform:uppercase;cursor:pointer;transition:opacity .2s;margin-top:4px}
+  .toggle-btn:disabled{opacity:.5;cursor:default}
+  .toggle-btn.activate{background:#7fd6b0;border-color:#7fd6b0;color:#0b1a12}
+  .toggle-btn.pause{background:transparent;border-color:var(--line);color:var(--dim)}
+  .toggle-btn.locked{background:transparent;border-color:var(--line);color:var(--dim)}
+  .catalog-msg{font:500 11px 'Inter';margin-top:10px;padding:9px 12px;border-radius:8px}
+  .catalog-msg.err{background:rgba(224,138,122,.1);color:#e08a7a}
+  .catalog-msg.ok{background:rgba(127,214,176,.1);color:#7fd6b0}
+  .dormant-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(232,230,224,.05);cursor:pointer}
+  .dormant-row:last-child{border-bottom:0}
+  .dormant-row:hover .dr-name{color:var(--ink)}
+  .dormant-row .dr-plus{width:18px;height:18px;border-radius:50%;border:1px solid var(--line);display:flex;
+    align-items:center;justify-content:center;font-size:11px;color:var(--dim);flex:none}
+  .dormant-row .dr-name{flex:1;font:500 12px 'Inter';color:#c9c4b6;text-transform:uppercase;letter-spacing:.06em;transition:color .15s}
+  .dormant-row .dr-tag{font:500 9px 'Inter';color:var(--dim)}
   .sb-log{font:400 9.5px 'JetBrains Mono',monospace;color:#8a856f;background:rgba(0,0,0,.35);
     border:1px solid var(--line);border-radius:10px;padding:12px;line-height:1.75;max-height:140px;
     overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin:0}
@@ -767,8 +802,10 @@ const DEPT_DEFS_BASE=[
             {root:'Automation Jobs',forks:['Compliance']}]},
 ];
 
-// Where each of our real 5 agents actually lives, by department name above.
-const AGENT_DEPT={leads:'SALES',calling:'SALES',receptionist:'CUSTOMER',audit:'BACK OFFICE',billing:'BACK OFFICE'};
+// Where each catalog agent lives, by department name above — every agent
+// server/brain.js can ever load gets a home here (not just the ones
+// currently active), so a dormant one still has somewhere to render.
+const AGENT_DEPT={leads:'SALES',calling:'SALES',receptionist:'CUSTOMER',audit:'BACK OFFICE',billing:'BACK OFFICE',librarian:'INTELLIGENCE'};
 
 function blendGray(colorInt,factor){
   const r=(colorInt>>16)&255,g=(colorInt>>8)&255,b=colorInt&255;
@@ -799,12 +836,19 @@ function chunkToYBranches(items){
   return out;
 }
 
-function buildDeptDefs(agentData){
+function buildDeptDefs(agentData,catalogData){
   const byDept={};
   Object.values(agentData).forEach(h=>{(byDept[AGENT_DEPT[h.id]] ||= []).push(h)});
+  const dormantByDept={};
+  (catalogData||[]).forEach(c=>{
+    if((c.state==='available'||c.state==='needs_setup')&&AGENT_DEPT[c.id]){
+      (dormantByDept[AGENT_DEPT[c.id]] ||= []).push(c);
+    }
+  });
   return DEPT_DEFS_BASE.map(base=>{
     const reals=byDept[base.name]||[];
     const active=reals.some(h=>h.status==='active'||h.status==='needs_review');
+    const dormant=dormantByDept[base.name]||[];
     const realSkillMap={},toolConnected={},realDetails={};
     const extraBranches=[];
     reals.forEach(h=>{
@@ -819,7 +863,7 @@ function buildDeptDefs(agentData){
     return{
       ...base,
       branches:[...base.branches,...extraBranches],
-      active, realSkillMap, toolConnected, realDetails,
+      active, realSkillMap, toolConnected, realDetails, dormant,
     };
   });
 }
@@ -835,17 +879,24 @@ async function boot(){
   // every agent this instance doesn't have and crashed the rest of boot().
   const graphPreview=await api('/api/brain/graph');
   const HUB_IDS=graphPreview.nodes.filter(n=>n.type==='agent').map(n=>n.id);
-  const [dash, ...hubDetails]=await Promise.all([
+  const [dash, catalogResult, ...hubDetails]=await Promise.all([
     api('/api/dashboard'),
+    api('/api/catalog'),
     ...HUB_IDS.map(id=>api('/api/brain/agents/'+id)),
   ]);
   $("clinicSub").textContent=dash.settings?.clinicName||"";
   if(dash.vertical==='restaurant'||dash.hasOrders)document.getElementById('ordersTabBtn').style.display='';
   if(dash.demoMode)document.getElementById('demoBanner').style.display='block';
 
+  // Mutated in place (never reassigned) so every closure that captured
+  // catalogData at definition time still sees fresh data after an
+  // activate/deactivate call refetches it.
+  const catalogData=catalogResult.agents||[];
+  function setCatalogData(fresh){ catalogData.length=0; catalogData.push(...fresh); }
+
   const agentData={};
   hubDetails.forEach(h=>{agentData[h.id]=h});
-  const DEPT_DEFS=buildDeptDefs(agentData);
+  const DEPT_DEFS=buildDeptDefs(agentData,catalogData);
   const liveCount=hubDetails.filter(h=>h.status==='active'||h.status==='needs_review').length;
   $("brandSub").textContent=DEPT_DEFS.length+" departments · "+liveCount+"/"+hubDetails.length+" agents live";
   $("workSub").textContent=hubDetails.length+" AI agents · click one to open it on the map";
@@ -990,46 +1041,35 @@ async function boot(){
   const depts=[];
   let iconIdx=0,edgesDirty=true;
 
-  DEPT_DEFS.forEach((def,di)=>{
-    const ringAngle=-Math.PI/2+di*(2*Math.PI/N_DEPT);
-    const ringX=Math.cos(ringAngle)*RING_R,ringY=Math.sin(ringAngle)*RING_R;
-    const stripX=(di-(N_DEPT-1)/2)*STRIP_GAP;
-    const D={def,di,ringAngle,ringX,ringY,stripX,nodes:[],edges:[]};
-
-    D.ghost=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontSize:74,fontWeight:'500',
-      fill:PAL[theme].ghost,letterSpacing:16});
-    D.ghost.anchor.set(.5);D.ghostBase=def.active?.02:.008;D.ghost.alpha=D.ghostBase;
-    layerGhost.addChild(D.ghost);
-
+  // Hub coloring/glyph/label state, re-runnable any time D.def changes (not
+  // just at initial build) — a dormant-but-catalogable department (has a
+  // not-yet-activated agent mapped to it, server/catalog.js's "available"/
+  // "needs_setup") gets a dimmed ring + "+" glyph instead of the fully-
+  // decorative treatment, so it reads as "you could turn this on" rather
+  // than "nothing here". Departments with zero possible agent (pure
+  // decoration, e.g. MARKETING) look exactly as before either way.
+  function paintHub(D){
+    const def=D.def;
+    const dormantOnly=!def.active&&(def.dormant&&def.dormant.length>0);
     const hubColor=def.active?def.color:blendGray(def.color,0.65);
-    const hub=new PIXI.Container();
-    const hGlow=new PIXI.Sprite(GLOW);hGlow.anchor.set(.5);hGlow.tint=hubColor;
-    hGlow.scale.set(1.1);hGlow.alpha=.5;
-    const hFill=new PIXI.Graphics();redrawHubFill(hFill);
-    const hRing=new PIXI.Graphics();
-    hRing.lineStyle(1.4,hubColor,def.active?.9:.4).drawCircle(0,0,16);
-    hRing.lineStyle(1,hubColor,def.active?.25:.1).drawCircle(0,0,22);
-    const hGlyph=new PIXI.Text(def.glyph,{fontFamily:'Inter',fontSize:13,fill:hubColor});
-    hGlyph.anchor.set(.5,.52);
-    hub.addChild(hGlow,hFill,hRing,hGlyph);
-    hub.eventMode='static';hub.cursor='pointer';hub.hitArea=new PIXI.Circle(0,0,30);
-    hub.on('pointertap',()=>{if(dragDist<6){if(focused===di)openDeptSidebar(di);else focusDept(di)}});
-    hub.on('pointerover',()=>{setHoverTarget(di);showTip(def.name,def.sub,hub)});
-    hub.on('pointerout',()=>{setHoverTarget(-1);hideTip()});
-    layerNodes.addChild(hub);
-    D.hub=hub;D.hubGlow=hGlow;D.hubPh=di*1.7;D.hFill=hFill;
+    D.hubGlow.tint=hubColor;
+    D.hRing.clear();
+    D.hRing.lineStyle(1.4,hubColor,def.active?.9:(dormantOnly?.55:.4)).drawCircle(0,0,16);
+    D.hRing.lineStyle(1,hubColor,def.active?.25:(dormantOnly?.16:.1)).drawCircle(0,0,22);
+    D.hGlyph.text=dormantOnly?'+':def.glyph;
+    D.hGlyph.style.fill=hubColor;
+    D.nm.style.fill=def.active?PAL[theme].ink:PAL[theme].dim;
+    D.ghostBase=def.active?.02:.008;
+    D.ghost.alpha=D.ghostBase;
+  }
 
-    D.nm=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontWeight:'600',fontSize:16,
-      fill:def.active?PAL[theme].ink:PAL[theme].dim,letterSpacing:6});
-    D.nm.anchor.set(.5,0);
-    D.sb=new PIXI.Text(def.sub.toUpperCase(),{fontFamily:'Inter',fontWeight:'500',fontSize:6.5,
-      fill:PAL[theme].dim,letterSpacing:2.6});
-    D.sb.anchor.set(.5,0);
-    layerDeptTx.addChild(D.nm,D.sb);
-
-    // clean deterministic Y-branches: a root off the hub, then up to two
-    // forks off that root — a real forking tree, not a straight ray. No
-    // random jitter anywhere; spacing is fixed and systematic.
+  // Branch/skill-node construction, extracted into its own function so it
+  // can run again later (server/catalog.js activation flipping this
+  // department's agent) without a page reload — rebuildDept() below tears
+  // the old nodes down first, then calls this again against a freshly
+  // recomputed D.def.
+  function buildDeptBranches(D){
+    const def=D.def,di=D.di,hub=D.hub;
     const nB=def.branches.length||1;
 
     function makeSkillNode(skill,branchFrac,forkOffset,dist,parentNode){
@@ -1098,6 +1138,76 @@ async function boot(){
         makeSkillNode(forkSkill,branchFrac,sign*forkDelta,185,rootNode);
       });
     });
+  }
+
+  // Tears down one department's branch nodes/edges/labels and rebuilds them
+  // from a freshly-recomputed D.def — the "activate an agent, the hub
+  // lights up and grows its branches, no reload" behavior. Never touches
+  // other departments, the camera, or anything outside layerNodes/
+  // layerLabels' children belonging to this one dept.
+  function rebuildDept(di){
+    const D=depts[di];
+    // Caller has already refreshed agentData/catalogData in place — pull a
+    // fresh def for just this one department out of a full recompute.
+    D.def=buildDeptDefs(agentData,catalogData)[di];
+    D.nodes.forEach(N=>{ N.cont.destroy({children:true}); N.label.destroy({children:true}); });
+    D.nodes=[];D.edges=[];
+    paintHub(D);
+    buildDeptBranches(D);
+    edgesDirty=true;
+  }
+
+  DEPT_DEFS.forEach((def,di)=>{
+    const ringAngle=-Math.PI/2+di*(2*Math.PI/N_DEPT);
+    const ringX=Math.cos(ringAngle)*RING_R,ringY=Math.sin(ringAngle)*RING_R;
+    const stripX=(di-(N_DEPT-1)/2)*STRIP_GAP;
+    const D={def,di,ringAngle,ringX,ringY,stripX,nodes:[],edges:[]};
+
+    D.ghost=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontSize:74,fontWeight:'500',
+      fill:PAL[theme].ghost,letterSpacing:16});
+    D.ghost.anchor.set(.5);D.ghostBase=def.active?.02:.008;D.ghost.alpha=D.ghostBase;
+    layerGhost.addChild(D.ghost);
+
+    const hubColor=def.active?def.color:blendGray(def.color,0.65);
+    const hub=new PIXI.Container();
+    const hGlow=new PIXI.Sprite(GLOW);hGlow.anchor.set(.5);hGlow.tint=hubColor;
+    hGlow.scale.set(1.1);hGlow.alpha=.5;
+    const hFill=new PIXI.Graphics();redrawHubFill(hFill);
+    const hRing=new PIXI.Graphics();
+    hRing.lineStyle(1.4,hubColor,def.active?.9:.4).drawCircle(0,0,16);
+    hRing.lineStyle(1,hubColor,def.active?.25:.1).drawCircle(0,0,22);
+    const hGlyph=new PIXI.Text(def.glyph,{fontFamily:'Inter',fontSize:13,fill:hubColor});
+    hGlyph.anchor.set(.5,.52);
+    hub.addChild(hGlow,hFill,hRing,hGlyph);
+    hub.eventMode='static';hub.cursor='pointer';hub.hitArea=new PIXI.Circle(0,0,30);
+    hub.on('pointertap',()=>{
+      if(dragDist>=6)return;
+      if(focused!==di){focusDept(di);return}
+      // A department with no live agent at all but exactly one dormant
+      // catalog agent mapped to it (CUSTOMER→receptionist, INTELLIGENCE→
+      // librarian) opens that agent's panel directly — one click, per the
+      // catalog spec — instead of an intermediate dept view with nothing
+      // real in it to show. Two-dormant-agent departments (SALES, BACK
+      // OFFICE) still go through the dept view so the client can pick.
+      const def=depts[di].def;
+      if(!def.active&&def.dormant&&def.dormant.length===1){openCatalogPanel(def.dormant[0].id);return}
+      openDeptSidebar(di);
+    });
+    hub.on('pointerover',()=>{setHoverTarget(di);showTip(def.name,def.sub,hub)});
+    hub.on('pointerout',()=>{setHoverTarget(-1);hideTip()});
+    layerNodes.addChild(hub);
+    D.hub=hub;D.hubGlow=hGlow;D.hubPh=di*1.7;D.hFill=hFill;D.hRing=hRing;D.hGlyph=hGlyph;
+
+    D.nm=new PIXI.Text(def.name,{fontFamily:'Cormorant Garamond',fontWeight:'600',fontSize:16,
+      fill:def.active?PAL[theme].ink:PAL[theme].dim,letterSpacing:6});
+    D.nm.anchor.set(.5,0);
+    D.sb=new PIXI.Text(def.sub.toUpperCase(),{fontFamily:'Inter',fontWeight:'500',fontSize:6.5,
+      fill:PAL[theme].dim,letterSpacing:2.6});
+    D.sb.anchor.set(.5,0);
+    layerDeptTx.addChild(D.nm,D.sb);
+
+    paintHub(D);
+    buildDeptBranches(D);
     depts.push(D);
   });
 
@@ -1401,7 +1511,9 @@ async function boot(){
     const allSkills=def.branches.flatMap(b=>[b.root,...(b.forks||[])]);
     const desc=reals.length
       ? `${esc(def.name)} runs ${reals.map(h=>esc(h.name)).join(' and ')} — ${liveReals.length?'live right now.':'currently paused.'}`
-      : `${esc(def.name)} has no agent built yet. It's mapped and ready — an empty seat waiting for its first Sailz agent.`;
+      : (def.dormant&&def.dormant.length
+        ? `${esc(def.name)} has ${def.dormant.length>1?'agents':'an agent'} ready — ${def.dormant.map(c=>esc(c.name)).join(' and ')} just ${def.dormant.length>1?"aren't":"isn't"} activated yet.`
+        : `${esc(def.name)} has no agent built yet. It's mapped and ready — an empty seat waiting for its first Sailz agent.`);
     const covers=def.branches.slice(0,6).map(b=>b.root);
     const startHere=reals.length?(reals[0].workflows||[])[0]:allSkills[0];
     const totalToday=reals.reduce((s,h)=>s+Number((h.todayStats||[])[0]?.value||0),0);
@@ -1410,6 +1522,14 @@ async function boot(){
       <div id="sbName" style="color:${col}">${esc(def.name)}</div>
       <div id="sbSub">${esc(def.sub)}</div>
       <div class="sb-desc">${desc}</div>
+      ${def.dormant&&def.dormant.length?`
+      <div class="sb-section">
+        <div class="eyebrow accent">READY TO ACTIVATE</div>
+        ${def.dormant.map(c=>`<div class="dormant-row" data-dormant="${esc(c.id)}">
+          <span class="dr-plus">+</span><span class="dr-name">${esc(c.name)}</span>
+          <span class="dr-tag">${c.state==='needs_setup'?'Needs setup':'Available'}</span>
+        </div>`).join('')}
+      </div>`:''}
       <div class="sb-section">
         <div class="eyebrow">WHAT IT COVERS</div>
         <div class="pill-row">${covers.map(c=>`<span class="pill">${esc(c)}</span>`).join('')}</div>
@@ -1434,6 +1554,9 @@ async function boot(){
       <button class="help-btn">ⓘ Need help building this?</button>
     `);
     openPanel();
+    document.querySelectorAll('[data-dormant]').forEach(row=>{
+      row.onclick=()=>openCatalogPanel(row.dataset.dormant);
+    });
   }
 
   function openSkillSidebar(di,skill){
@@ -1554,6 +1677,142 @@ async function boot(){
     `);
     openPanel();
   }
+
+  /* ------------------------------ catalog agent panel ------------------------
+     One shared panel for EVERY catalog agent regardless of state — active,
+     paused, available, or needs_setup — used from a dormant map hub, a
+     dept sidebar's dormant row, and every Workforce card. Requirements
+     checklist posts straight to /api/integrations/keys; the toggle posts to
+     /api/catalog/:id/activate|deactivate and rebuilds just that agent's
+     department in place — no page reload either way. */
+  const CATALOG_STATE_META={
+    active:{label:'Active',color:'#7fd6b0'},
+    paused:{label:'Paused',color:'#6f6f74'},
+    available:{label:'Available',color:'#c9a066'},
+    needs_setup:{label:'Needs setup',color:'#e0904a'},
+  };
+  const INTEGRATION_NAMES={vapi:'Vapi Voice',gcal:'Google Calendar',anthropic:'Claude API',claimmd:'Claim.MD',twilio:'Twilio SMS',meta:'Meta Lead Ads',gads:'Google Ads',resend:'Resend Email'};
+
+  async function afterCatalogChange(agentId){
+    const [graphFresh,catalogFresh]=await Promise.all([api('/api/brain/graph'),api('/api/catalog')]);
+    setCatalogData(catalogFresh.agents||[]);
+    const freshHubIds=graphFresh.nodes.filter(n=>n.type==='agent').map(n=>n.id);
+    const newIds=freshHubIds.filter(id=>!HUB_IDS.includes(id));
+    HUB_IDS.length=0;HUB_IDS.push(...freshHubIds);
+    if(newIds.length){
+      const details=await Promise.all(newIds.map(id=>api('/api/brain/agents/'+id)));
+      details.forEach(h=>{agentData[h.id]=h});
+    }
+    if(agentData[agentId]){
+      try{Object.assign(agentData[agentId],await api('/api/brain/agents/'+agentId))}catch(e){}
+    }
+    const di=deptIndexByHubId[agentId];
+    if(di>=0&&di<depts.length)rebuildDept(di);
+    const liveCount=HUB_IDS.filter(id=>agentData[id]&&(agentData[id].status==='active'||agentData[id].status==='needs_review')).length;
+    $("brandSub").textContent=depts.length+" departments · "+liveCount+"/"+HUB_IDS.length+" agents live";
+    $("navProgress").textContent=liveCount+" of "+HUB_IDS.length+" live";
+    if(view==='work')renderWork();
+  }
+
+  function reqRowHTML(agentId,reqId,connected){
+    const name=INTEGRATION_NAMES[reqId]||reqId;
+    if(connected){
+      return `<div class="req-row"><span class="rq-mark ok">✓</span><span class="rq-name">${esc(name)}</span></div>`;
+    }
+    return `<div class="req-row">
+      <span class="rq-mark no">✗</span>
+      <div class="req-key-form">
+        <input type="text" placeholder="${esc(name)} key" data-req-input="${esc(reqId)}">
+        <button class="req-key-btn" data-req-save="${esc(reqId)}">Save</button>
+      </div>
+    </div>`;
+  }
+
+  function openCatalogPanel(agentId){
+    const c=catalogData.find(x=>x.id===agentId);
+    if(!c)return;
+    sbOpenDi=deptIndexByHubId[agentId]??-1;sbOpenHubId=agentId;sbOpenSkill=null;sbMode='catalog';
+    const meta=CATALOG_STATE_META[c.state]||{label:c.state,color:'#6f6f74'};
+    const isOnOrPaused=c.state==='active'||c.state==='paused';
+    const h=agentData[agentId]; // live stats, only present once ever-activated
+    swapSidebar(`
+      <div class="eyebrow accent" style="color:${meta.color}">${esc(meta.label.toUpperCase())}</div>
+      <div id="sbName">${esc(c.name)}</div>
+      <div id="sbSub">${esc(c.tagline||'')}</div>
+      <div class="sb-desc">${esc(c.description||'')}</div>
+      <div class="sb-section">
+        <div class="eyebrow">WHAT YOU'LL GET</div>
+        <ul class="results-list">${(c.results||[]).map(r=>`<li>${esc(r)}</li>`).join('')||'<li style="color:var(--dim)">—</li>'}</ul>
+      </div>
+      <div class="sb-section">
+        <div class="eyebrow">REQUIREMENTS</div>
+        <div id="reqList">${(c.requires||[]).map(r=>reqRowHTML(agentId,r,!c.missing.includes(r))).join('')||'<div class="sb-desc" style="margin-bottom:0">None — this agent has no connector requirements.</div>'}</div>
+      </div>
+      ${isOnOrPaused?`
+      <div class="sb-section">
+        <div class="eyebrow">RESULTS THIS WEEK</div>
+        <div class="sb-stats">
+          <div class="sb-stat"><div class="n">${esc(String(c.runsThisWeek||0))}</div><div class="l">Runs this week</div></div>
+          <div class="sb-stat"><div class="n">${c.lastRun?esc(fmtRelative(c.lastRun)):'—'}</div><div class="l">Last run</div></div>
+        </div>
+      </div>
+      ${h&&h.recentActivity&&h.recentActivity.length?`
+      <div class="sb-section">
+        <div class="eyebrow">LATEST ACTIVITY</div>
+        <div id="sbList">${sbActsHTML(realAgentInfo(h))}</div>
+      </div>`:''}
+      `:''}
+      <div id="catalogToggleWrap">${catalogToggleHTML(c)}</div>
+      <div id="catalogMsg"></div>
+    `);
+    openPanel();
+    wireCatalogPanel(agentId);
+  }
+
+  function catalogToggleHTML(c){
+    if(c.state==='needs_setup')return `<button class="toggle-btn locked" disabled>Add the key${(c.missing.length>1?'s':'')} above to activate</button>`;
+    if(c.state==='available')return `<button class="toggle-btn activate" id="catalogToggleBtn" data-action="activate">Activate</button>`;
+    if(c.state==='active')return `<button class="toggle-btn pause" id="catalogToggleBtn" data-action="deactivate">Pause</button>`;
+    return `<button class="toggle-btn activate" id="catalogToggleBtn" data-action="activate">Resume</button>`;
+  }
+
+  function wireCatalogPanel(agentId){
+    document.querySelectorAll('[data-req-save]').forEach(btn=>{
+      btn.onclick=async()=>{
+        const reqId=btn.dataset.reqSave;
+        const input=document.querySelector(`[data-req-input="${reqId}"]`);
+        const key=(input.value||'').trim();
+        if(!key)return;
+        btn.disabled=true;btn.textContent='…';
+        try{
+          await api('/api/integrations/keys',{method:'POST',body:JSON.stringify({id:reqId,key})});
+          const fresh=await api('/api/catalog');
+          setCatalogData(fresh.agents||[]);
+          if(sbOpen&&sbMode==='catalog'&&sbOpenHubId===agentId)openCatalogPanel(agentId);
+          if(view==='work')renderWork();
+        }catch(e){
+          btn.disabled=false;btn.textContent='Save';
+          document.getElementById('catalogMsg').innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;
+        }
+      };
+    });
+    const toggleBtn=document.getElementById('catalogToggleBtn');
+    if(toggleBtn)toggleBtn.onclick=async()=>{
+      const action=toggleBtn.dataset.action;
+      toggleBtn.disabled=true;toggleBtn.textContent='…';
+      try{
+        await api(`/api/catalog/${agentId}/${action}`,{method:'POST'});
+        await afterCatalogChange(agentId);
+        if(sbOpen&&sbMode==='catalog'&&sbOpenHubId===agentId)openCatalogPanel(agentId);
+      }catch(e){
+        toggleBtn.disabled=false;
+        toggleBtn.textContent=action==='activate'?'Activate':'Pause';
+        const msgEl=document.getElementById('catalogMsg');
+        if(msgEl)msgEl.innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;
+      }
+    };
+  }
+
   let sbReturnTo=null;
   function openLeadSidebar(leadId){
     const lead=(dash.leads||[]).find(l=>l.id===leadId);
@@ -1632,10 +1891,14 @@ async function boot(){
     setView(b.dataset.v);
   }});
 
+  // Built from the full AGENT_DEPT map (every catalog agent), not just the
+  // currently-active HUB_IDS — a dormant agent (Workforce card, dept
+  // sidebar row) needs to route to its department just as much as an
+  // active one does.
   const deptIndexByHubId={};
-  HUB_IDS.forEach(id=>{deptIndexByHubId[id]=depts.findIndex(D=>D.def.name===AGENT_DEPT[id])});
+  Object.keys(AGENT_DEPT).forEach(id=>{deptIndexByHubId[id]=depts.findIndex(D=>D.def.name===AGENT_DEPT[id])});
   const deptColorByHubId={};
-  HUB_IDS.forEach(id=>{const di=deptIndexByHubId[id];deptColorByHubId[id]=di>=0?depts[di].def.color:0x8f8f8f});
+  Object.keys(AGENT_DEPT).forEach(id=>{const di=deptIndexByHubId[id];deptColorByHubId[id]=di>=0?depts[di].def.color:0x8f8f8f});
 
   function renderDash(){
     const find=(id,label)=>{const h=agentData[id];const s=(h?.todayStats||[]).find(x=>x.label===label);return s?Number(s.value)||0:0};
@@ -1666,22 +1929,33 @@ async function boot(){
     }).join('');
   }
   function renderWork(){
-    document.getElementById('wGrid').innerHTML=HUB_IDS.map(id=>{
-      const h=agentData[id],col=hex(deptColorByHubId[id]);
-      const sc=STATUS_COLOR[h.status]||'#6f6f74',st=STATUS_TEXT[h.status]||h.status;
-      const last=(h.recentActivity||[])[0];
-      return `<div class="wcard" data-hub="${id}">
+    // Full catalog, not just the currently-active roster — this tab IS the
+    // store: every agent brain/agents/*.md can load shows up here, active
+    // or not, with its real state chip. Clicking any card opens the same
+    // shared panel the map's dormant hubs use.
+    const activeNow=catalogData.filter(c=>c.state==='active'||c.state==='paused').length;
+    $("workSub").textContent=`${catalogData.length} agent${catalogData.length===1?'':'s'} in your brain's catalog · ${activeNow} activated · click one to open it`;
+    document.getElementById('wGrid').innerHTML=catalogData.map(c=>{
+      const col=hex(deptColorByHubId[c.id]??0x8f8f8f);
+      const meta=CATALOG_STATE_META[c.state]||{label:c.state,color:'#6f6f74'};
+      const h=agentData[c.id];
+      const last=h&&(h.recentActivity||[])[0];
+      const isLive=c.state==='active'||c.state==='paused';
+      return `<div class="wcard" data-hub="${esc(c.id)}">
         <div class="wtop">
-          <div class="wglyph" style="border-color:${col};color:${col}">${h.glyph}</div>
-          <div><div class="wname">${esc(h.name)}</div><div class="wsub">${esc(AGENT_DEPT[id])} · ${esc(h.tagline||"")}</div></div>
-          <div class="wstatus" style="color:${sc}"><span class="dot" style="background:${sc};box-shadow:0 0 8px ${sc}"></span>${esc(st)}</div>
+          <div class="wglyph" style="border-color:${col};color:${col}">${esc(c.glyph||'◆')}</div>
+          <div><div class="wname">${esc(c.name)}</div><div class="wsub">${esc(AGENT_DEPT[c.id]||'')} · ${esc(c.tagline||"")}</div></div>
+          <div class="wstatus" style="color:${meta.color}"><span class="dot" style="background:${meta.color};box-shadow:0 0 8px ${meta.color}"></span>${esc(meta.label)}</div>
         </div>
-        <div class="wstats">${(h.todayStats||[]).map(s=>`<div class="wstat"><div class="n">${esc(String(s.value))}</div><div class="l">${esc(s.label)}</div></div>`).join('')}</div>
-        <div class="wlast">${last?esc(last.summary)+' — '+fmtRelative(last.ts):'No activity yet.'}</div>
+        ${isLive
+          ? `<div class="wstats">${(h&&h.todayStats||[]).map(s=>`<div class="wstat"><div class="n">${esc(String(s.value))}</div><div class="l">${esc(s.label)}</div></div>`).join('')}</div>
+             <div class="wlast">${last?esc(last.summary)+' — '+fmtRelative(last.ts):'No activity yet.'}</div>`
+          : `<div class="wlast">${c.state==='needs_setup'?`Needs ${esc((c.missing||[]).map(m=>INTEGRATION_NAMES[m]||m).join(', '))} to activate.`:'Ready to activate — one click, no deploy.'}</div>`
+        }
       </div>`;
     }).join('');
     document.querySelectorAll('.wcard').forEach(c=>{
-      c.onclick=()=>{const di=deptIndexByHubId[c.dataset.hub];setView('map');if(di>=0)setTimeout(()=>focusDept(di),120)};
+      c.onclick=()=>openCatalogPanel(c.dataset.hub);
     });
   }
   /* ------------------------------ calls page ------------------------------ */
