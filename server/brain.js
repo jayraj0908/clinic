@@ -50,6 +50,20 @@ function extractSection(body, heading) {
     .map((l) => l.replace(/^-+\s*/, ""));
 }
 
+// A workflow bullet may declare an explicit short node label — "- **Short
+// Label** — the fuller sentence describing what it actually does". The
+// brain map's canvas nodes render `label` (small, fixed space, has to be a
+// name); every panel/tooltip that has room renders `detail` (the real
+// description). Falls back to a truncated version of the bullet itself if
+// a file hasn't been updated to the "**Label** —" convention yet, so an
+// old-style plain bullet degrades instead of breaking.
+function splitLabelDetail(line) {
+  const m = /^\*\*(.+?)\*\*\s*[—-]\s*(.*)$/.exec(line);
+  if (m) return { label: m[1].trim(), detail: (m[2] || m[1]).trim() };
+  const label = line.length > 28 ? line.slice(0, 28).trim().replace(/\s+\S*$/, "") + "…" : line;
+  return { label, detail: line };
+}
+
 function loadAgentFile(filePath) {
   const raw = fs.readFileSync(filePath, "utf8");
   const { data, body } = parseFrontmatter(raw);
@@ -84,7 +98,7 @@ function loadAgentFile(filePath) {
     triggers: splitList(data.triggers),
     handoff: splitList(data.handoff),
     body,
-    workflows: extractSection(body, "Workflows"),
+    workflows: extractSection(body, "Workflows").map(splitLabelDetail),
     // Client-facing "what you'll see" bullets for the catalog/agent panel —
     // honest outcome copy, not implementation detail (that's Workflows).
     results: extractSection(body, "Results"),

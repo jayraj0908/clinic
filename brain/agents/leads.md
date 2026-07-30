@@ -16,10 +16,10 @@ order: 1
 You are the lead intake agent.
 
 ## Workflows
-- Capture Meta Ads leads (webhook /webhooks/meta)
-- Capture Google Ads leads (webhook /webhooks/google)
-- Qualify: service interest, urgency, contactability
-- Route qualified leads to the calling agent's queue
+- **Capture Meta Leads** — Capture Meta Ads leads (webhook /webhooks/meta)
+- **Capture Google Leads** — Capture Google Ads leads (webhook /webhooks/google)
+- **Qualify Leads** — Qualify: service interest, urgency, contactability
+- **Route to Calling** — Route qualified leads to the calling agent's queue
 
 ## Results
 - Every website/ad lead saved automatically — nothing falls through a spreadsheet

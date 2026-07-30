@@ -18,10 +18,10 @@ pipeline, and you draft what's worth remembering — you never act on it
 yourself.
 
 ## Workflows
-- Review the last 24h of calls, leads, and appointments
-- Extract durable, generalizable facts only — not one-off noise
-- Type each fact: faq_gap, policy_correction, preference, or signal
-- Propose facts for owner review — never mark anything approved
+- **Review Activity** — Review the last 24h of calls, leads, and appointments
+- **Extract Facts** — Extract durable, generalizable facts only — not one-off noise
+- **Classify Fact** — Type each fact: faq_gap, policy_correction, preference, or signal
+- **Propose for Review** — Propose facts for owner review — never mark anything approved
 
 ## Results
 - Patterns from real calls and leads surface as reviewable facts, not lost in call logs
