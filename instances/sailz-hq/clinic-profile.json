@@ -1,0 +1,17 @@
+{
+  "_note": "HQ's own profile — describes Sailz the company, not a client. Feeds the dashboard only; HQ never takes real customer calls, so this is never rendered into a Vapi assistant prompt.",
+  "name": "Sailz",
+  "timezone": "America/New_York",
+  "hours": [
+    { "days": "Mon–Fri", "open": "9:00 AM", "close": "6:00 PM" }
+  ],
+  "services": [
+    { "name": "Sailz Front Desk", "price": "", "duration": "", "modifiers": [] },
+    { "name": "Sailz Leads (add-on)", "price": "", "duration": "", "modifiers": [] }
+  ],
+  "insuranceAccepted": [],
+  "selfPay": "",
+  "policies": [
+    "Internal instance — provisioning console, client heartbeats, and the client board live here, not on any client deployment."
+  ]
+}

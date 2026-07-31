@@ -1,0 +1,9 @@
+{
+  "_note": "Sailz's own internal deployment — the admin, not a client. This is the only instance that should ever set SAILZ_ADMIN=1. See DEPLOY.md in this folder for the full deployment checklist.",
+  "id": "sailz-hq",
+  "name": "Sailz",
+  "vertical": "hq",
+  "brandColor": "#c9a066",
+  "timezone": "America/New_York",
+  "agents": ["librarian"]
+}
