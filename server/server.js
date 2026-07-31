@@ -765,6 +765,30 @@ app.post("/api/leads/:id/queue-call", auth, (req, res) => {
   res.json(lead);
 });
 
+// One-tap pipeline actions for the mobile Leads tab — the same "new ->
+// contacted -> booked -> won/lost" stage grouping index.html's LEAD_STAGE
+// computes for display maps onto the real status vocabulary other code
+// already depends on (booked/closed_lost predate this stage), so this is
+// additive, not a rename of anything.
+app.post("/api/leads/:id/mark-booked", auth, (req, res) => {
+  const db = load();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  lead.status = "booked";
+  save();
+  log("system", `${lead.name} marked booked by ${req.user.id}`);
+  res.json(lead);
+});
+app.post("/api/leads/:id/mark-lost", auth, (req, res) => {
+  const db = load();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  lead.status = "closed_lost";
+  save();
+  log("system", `${lead.name} marked lost by ${req.user.id}`);
+  res.json(lead);
+});
+
 // Speed-to-lead auto-queue toggle — surfaced in the calling agent's
 // catalog panel, not a dedicated settings page. Default off; reading the
 // current value is just db.settings.autoCallNewLeads via the existing

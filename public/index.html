@@ -438,6 +438,32 @@
     background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:10px;padding:14px}
   .allergy-banner{margin:12px 0;padding:10px 14px;background:rgba(224,138,122,.12);border:1px solid rgba(224,138,122,.4);
     border-radius:8px;color:#e08a7a;font:600 11px 'Inter'}
+
+  /* ---------- leads pipeline ---------- */
+  .lead-card{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:14px 16px;margin-bottom:8px;
+    background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;cursor:pointer;transition:background .15s}
+  .lead-card:hover{background:rgba(255,255,255,.06)}
+  .lead-card .lc-main{flex:1;min-width:160px}
+  .lead-card .lc-name{font-family:'Cormorant Garamond',serif;font-size:17px;color:var(--ink)}
+  .lead-card .lc-meta{font:400 10.5px 'Inter';color:var(--dim);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .source-badge{font:600 8px 'Inter';letter-spacing:.08em;text-transform:uppercase;color:#c9a066;
+    border:1px solid rgba(201,160,102,.35);border-radius:999px;padding:2px 8px}
+  .speed-badge{font:600 8px 'Inter';letter-spacing:.06em;text-transform:uppercase;color:#7fd6b0}
+  .lead-status-chip{flex:none;font:600 8px 'Inter';letter-spacing:.08em;text-transform:uppercase;
+    padding:4px 10px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+  .lc-actions{display:flex;gap:6px;flex:none;flex-wrap:wrap}
+  .lc-actions button{appearance:none;border:1px solid rgba(240,234,216,.2);background:rgba(240,234,216,.06);
+    color:#f0ead8;border-radius:8px;padding:9px 13px;font:600 9px 'Inter';letter-spacing:.08em;
+    text-transform:uppercase;cursor:pointer;transition:background .2s;min-height:34px}
+  .lc-actions button:hover:not(:disabled){background:rgba(240,234,216,.14)}
+  .lc-actions button:disabled{opacity:.4;cursor:default}
+  .lc-actions button.lc-lost{border-color:rgba(224,138,122,.3);color:#e08a7a}
+  @media (max-width:640px){
+    .lead-card{flex-direction:column;align-items:stretch}
+    .lc-actions{width:100%}
+    .lc-actions button{flex:1;min-height:44px;font-size:10px}
+  }
+
   /* ---------- demo mode banner ---------- */
   #demoBanner{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:70;
     background:#e0904a;color:#0b0c0a;font:700 9px 'Inter';letter-spacing:.2em;text-transform:uppercase;
@@ -588,6 +614,7 @@
     <button class="active" data-v="map">Map</button>
     <button data-v="dash">Dashboards</button>
     <button data-v="calls">Calls</button>
+    <button data-v="leads">Leads</button>
     <button data-v="calendar">Calendar</button>
     <button data-v="orders" id="ordersTabBtn" style="display:none">Orders</button>
     <button data-v="work">Chart</button>
@@ -644,6 +671,18 @@
     <button class="filter-pill" data-outcome="booked">Booked only</button>
   </div>
   <div id="callsTableWrap"></div>
+</div></div>
+
+<div class="view" id="viewLeads"><div class="view-inner">
+  <h1>Leads</h1><div class="vsub">every lead, from every source, one pipeline</div>
+  <div class="calls-toolbar" id="leadsFilterBar">
+    <button class="filter-pill active" data-stage="all">All</button>
+    <button class="filter-pill" data-stage="new">New</button>
+    <button class="filter-pill" data-stage="contacted">Contacted</button>
+    <button class="filter-pill" data-stage="booked">Booked</button>
+    <button class="filter-pill" data-stage="lost">Lost</button>
+  </div>
+  <div id="leadsWrap"></div>
 </div></div>
 
 <div class="view" id="viewCalendar"><div class="view-inner">
@@ -1789,8 +1828,18 @@ async function boot(){
   const LEAD_STATUS_META={
     new:{label:'New',color:'#e0904a'}, qualified:{label:'Qualified',color:'#c9a066'},
     call_scheduled:{label:'Call scheduled',color:'#7fa8d6'}, booked:{label:'Booked',color:'#7fd6b0'},
-    closed_lost:{label:'Closed',color:'#8a8578'},
+    closed_lost:{label:'Lost',color:'#8a8578'}, proposed:{label:'Proposed',color:'#9c8fd6'},
   };
+  // Pipeline stage for the Leads tab's filter — a display-only grouping
+  // over the real status vocabulary above (never renamed in the data
+  // itself, which other already-shipped code depends on: the calling
+  // agent's setter() filters on status==='qualified' directly, etc.).
+  const LEAD_STAGE={new:'new',qualified:'new',proposed:'new',call_scheduled:'contacted',booked:'booked',closed_lost:'lost'};
+  function leadSpeedToLead(l){
+    if(!l.firstContactAt)return null;
+    const mins=Math.round((new Date(l.firstContactAt)-new Date(l.createdAt))/60000);
+    return mins<60?`${mins}m`:`${Math.round(mins/60)}h`;
+  }
   function leadStatusMeta(status){return LEAD_STATUS_META[status]||{label:status||'Unknown',color:'#6f6f74'}}
   function leadsTableHTML(){
     const leads=(dash.leads||[]).slice(0,10);
@@ -2096,7 +2145,7 @@ async function boot(){
 
   /* ============================ tabs / views (real data) ===================== */
   let view='map';
-  const views={dash:document.getElementById('viewDash'),work:document.getElementById('viewWork'),calls:document.getElementById('viewCalls'),calendar:document.getElementById('viewCalendar'),orders:document.getElementById('viewOrders')};
+  const views={dash:document.getElementById('viewDash'),work:document.getElementById('viewWork'),calls:document.getElementById('viewCalls'),leads:document.getElementById('viewLeads'),calendar:document.getElementById('viewCalendar'),orders:document.getElementById('viewOrders')};
   function setView(v){
     view=v;
     document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
@@ -2104,6 +2153,7 @@ async function boot(){
     document.getElementById('bottombar').classList.toggle('hide',v!=='map');
     if(v!=='map')closeSidebar();
     if(v==='calls')renderCalls();
+    if(v==='leads')renderLeads();
     if(v==='calendar'&&typeof renderCalendar==='function')renderCalendar();
     if(v==='orders'&&typeof renderOrders==='function')renderOrders();
   }
@@ -2491,6 +2541,66 @@ async function boot(){
     document.querySelectorAll('.filter-pill[data-ostatus]').forEach(x=>x.classList.toggle('active',x===b));
     ordersFilter=b.dataset.ostatus;renderOrders();
   }});
+
+  /* ============================ leads pipeline ================================ */
+  let leadsStageFilter='all';
+  document.querySelectorAll('#leadsFilterBar .filter-pill[data-stage]').forEach(b=>{b.onclick=()=>{
+    document.querySelectorAll('#leadsFilterBar .filter-pill[data-stage]').forEach(x=>x.classList.toggle('active',x===b));
+    leadsStageFilter=b.dataset.stage;renderLeads();
+  }});
+  async function renderLeads(){
+    // dash.leads is already fetched at boot and kept live by refreshRealData()
+    // (same object every other lead-driven view already reads from) — no
+    // dedicated endpoint needed for a display-only pipeline view.
+    const wrap=document.getElementById('leadsWrap');
+    let leads=dash.leads||[];
+    if(leadsStageFilter!=='all')leads=leads.filter(l=>LEAD_STAGE[l.status]===leadsStageFilter);
+    if(!leads.length){wrap.innerHTML=`<div class="calls-empty">${leadsStageFilter==='all'?"No leads yet — they'll show up here the moment one comes in.":'Nothing in this stage right now.'}</div>`;return}
+    wrap.innerHTML=leads.map(l=>{
+      const m=leadStatusMeta(l.status);
+      const stage=LEAD_STAGE[l.status]||'new';
+      const speed=leadSpeedToLead(l);
+      const isDone=stage==='booked'||stage==='lost';
+      return `<div class="lead-card" data-leadcard="${esc(l.id)}">
+        <div class="lc-main">
+          <div class="lc-name">${esc(l.name||'Unknown caller')}</div>
+          <div class="lc-meta">
+            <span class="source-badge">${esc(l.source||'unknown')}</span>
+            <span class="speed-badge">${speed?'contacted in '+esc(speed):(stage==='new'?'not yet contacted':'')}</span>
+          </div>
+        </div>
+        <span class="lead-status-chip" style="color:${m.color}">${esc(m.label)}</span>
+        ${isDone?'':`<div class="lc-actions">
+          ${l.phone?`<button data-call="${esc(l.id)}">Call now</button>`:''}
+          ${l.status==='proposed'?`<button data-approve="${esc(l.id)}">Approve</button>`:`<button data-book="${esc(l.id)}">Mark booked</button>`}
+          <button class="lc-lost" data-lost="${esc(l.id)}">Lost</button>
+        </div>`}
+      </div>`;
+    }).join('');
+    wrap.querySelectorAll('[data-call]').forEach(btn=>{btn.onclick=async(e)=>{
+      e.stopPropagation();btn.disabled=true;
+      try{await api(`/api/leads/${btn.dataset.call}/queue-call`,{method:'POST'});await refreshRealData();renderLeads()}
+      catch(err){btn.disabled=false}
+    }});
+    wrap.querySelectorAll('[data-book]').forEach(btn=>{btn.onclick=async(e)=>{
+      e.stopPropagation();btn.disabled=true;
+      try{await api(`/api/leads/${btn.dataset.book}/mark-booked`,{method:'POST'});await refreshRealData();renderLeads()}
+      catch(err){btn.disabled=false}
+    }});
+    wrap.querySelectorAll('[data-lost]').forEach(btn=>{btn.onclick=async(e)=>{
+      e.stopPropagation();btn.disabled=true;
+      try{await api(`/api/leads/${btn.dataset.lost}/mark-lost`,{method:'POST'});await refreshRealData();renderLeads()}
+      catch(err){btn.disabled=false}
+    }});
+    wrap.querySelectorAll('[data-approve]').forEach(btn=>{btn.onclick=async(e)=>{
+      e.stopPropagation();btn.disabled=true;
+      try{await api(`/api/leads/${btn.dataset.approve}/approve-proposed`,{method:'POST'});await refreshRealData();renderLeads()}
+      catch(err){btn.disabled=false}
+    }});
+    wrap.querySelectorAll('.lead-card').forEach(card=>{
+      card.onclick=()=>openLeadSidebar(card.dataset.leadcard);
+    });
+  }
   function openOrderDrawer(orderId){
     const o=ordersData.find(x=>x.id===orderId);
     if(!o)return;
