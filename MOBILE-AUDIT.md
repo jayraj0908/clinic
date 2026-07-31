@@ -65,3 +65,40 @@ Findings below drive the mobile-first pass (docs/queue/SAILZ-CURSOR-PROMPT-11.md
 - Top-right icon buttons bumped to 44×44px at ≤640px.
 - `#bottombar` (carets, map-only) and `.brand` repositioned above the
   new bottom tab bar on mobile so nothing stacks on top of it.
+
+## Stage 2 — done
+
+- `idleScale()` now shrinks by a wider divisor on the width axis
+  specifically (`min(w/760, h/600)` vs the old `min(w,h)/600`) — the ring
+  overview's edge department labels (MARKETING, BACK OFFICE) no longer
+  clip past 390px's edges. Verified unchanged at 1280×800 (both formulas
+  clamp to the same 1.0 ceiling there).
+- `canvas{touch-action:none}` — explicit belt-and-suspenders alongside
+  the existing viewport `user-scalable=no` and `body{overflow:hidden}`
+  so a touch drag on the map never fights the browser's own
+  pinch-zoom/pull-to-refresh/edge-swipe gestures.
+- **Deliberately did not add free-form pinch-zoom/drag-pan camera
+  control.** The map's camera is a hard existing design decision (see
+  the "camera" comment in `public/index.html`): it only ever moves via
+  precise, deterministic, click-driven animated tweens — never
+  user-panned/zoomed — so every layout (ring vs. focused-department
+  tree) is a pure function of a known state, guaranteeing text/branches
+  never overlap. Real free-form pinch/pan would need a parallel camera
+  state machine and contradicts that architecture for marginal user
+  value (tapping a department already animates precisely to it). The
+  audit's actual underlying complaint — content clipping at mobile
+  widths — is fixed directly above instead.
+- Branch/skill node tap radius bumped 15→20px (40px effective tap
+  diameter) — big enough finger forgiveness without adjacent
+  branch/fork nodes (75px+ apart) getting overlapping hit zones.
+- Agent/department panel (`#sidebar`) is a proper bottom sheet on
+  mobile — slides up (not desktop's slide-in-from-left), rounded top
+  corners, drag handle, swipe-down-to-dismiss (`touchstart`/`touchmove`/
+  `touchend` on the handle, live-follows the finger, snaps closed past
+  90px or a fast flick, springs back otherwise). Desktop's left-drawer
+  is untouched (`.sb-drag{display:none}` outside the mobile query).
+  Chevrons (prev/next department stepping) unchanged, still present.
+- Found and fixed in passing: the `#crumbBack` ("‹ All departments")
+  pill collided with the 44px top-right icon cluster at 390px — moved
+  below the icon row on mobile instead of shrinking icons under the
+  touch-target minimum to make room.
