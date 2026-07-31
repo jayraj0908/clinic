@@ -46,8 +46,12 @@
   #navInfo .big{color:var(--ink);font-weight:700}
 
   /* ---------- bottom chrome ---------- */
+  /* map-only (department-stepping carets) — hidden on every other tab so
+     it never floats on top of Dashboards/Calls/Calendar/Orders/Workforce
+     content; toggled by setView() below. */
   #bottombar{position:fixed;bottom:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:center;
     padding:18px 20px;pointer-events:none}
+  #bottombar.hide{display:none}
   #bottombar>*{pointer-events:auto}
   .carets{display:flex;align-items:center;gap:22px}
   .caret{color:var(--dim);cursor:pointer;font-size:22px;line-height:1;padding:6px 10px;transition:color .15s,transform .15s}
@@ -426,12 +430,21 @@
 
   /* ---------- mobile / narrow-viewport chrome ---------- */
   @media (max-width:640px){
-    #topbar{padding:12px 12px;flex-wrap:wrap;row-gap:8px}
-    .tabs{position:static;left:auto;top:auto;transform:none;gap:2px}
-    .tabs button{padding:6px 9px;font-size:8.5px}
-    .tb-right{gap:6px}
-    .bell-btn,.theme-btn{width:28px;height:28px;font-size:11px}
-    .brand{left:12px;bottom:48px}
+    #topbar{padding:12px 12px}
+    /* the SAME tab buttons/click-wiring as desktop — just relaid-out from
+       a centered top pill row into a full-width bottom tab bar with real
+       thumb-sized targets, thumb-reach on a one-handed phone. */
+    .tabs{position:fixed;left:0;right:0;top:auto;bottom:0;transform:none;
+      display:flex;justify-content:space-around;gap:0;width:100%;
+      background:var(--glass);backdrop-filter:blur(12px);
+      border-top:1px solid var(--line);
+      padding:4px 2px calc(4px + env(safe-area-inset-bottom));z-index:50}
+    .tabs button{flex:1;display:flex;align-items:center;justify-content:center;
+      min-height:50px;padding:4px 2px;font-size:8px;letter-spacing:.05em;
+      border-radius:10px;white-space:normal;line-height:1.25;text-align:center}
+    .tb-right{gap:8px}
+    .bell-btn,.theme-btn{width:44px;height:44px;font-size:14px}
+    .brand{left:12px;bottom:66px}
     .brand .t{font-size:13px}
     .brand .s{font-size:8px}
     #sideLeft{left:6px}#sideRight{right:6px}
@@ -440,7 +453,10 @@
     #chatDrawer{width:100vw}
     .tip{max-width:70vw}
     .view h1{font-size:22px}
-    #crumbBack.show ~ .tabs{display:none}
+    .view-inner{padding:96px 16px calc(76px + env(safe-area-inset-bottom))}
+    /* map-only carets sit just above the new bottom tab bar instead of
+       under it (setView() hides this entirely on every other tab) */
+    #bottombar{bottom:60px}
   }
   @media (max-width:640px) and (orientation:landscape){
     #sidebar,#chatDrawer{width:min(420px,86vw)}
@@ -1950,6 +1966,7 @@ async function boot(){
     view=v;
     document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
     Object.keys(views).forEach(k=>views[k]?.classList.toggle('show',v===k));
+    document.getElementById('bottombar').classList.toggle('hide',v!=='map');
     if(v!=='map')closeSidebar();
     if(v==='calls')renderCalls();
     if(v==='calendar'&&typeof renderCalendar==='function')renderCalendar();
