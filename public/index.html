@@ -474,13 +474,34 @@
       margin:10px auto 0;flex:none}
     .sb-close{top:14px}
     .sb-body{padding-top:22px;padding-bottom:calc(40px + env(safe-area-inset-bottom))}
-    #chatDrawer{width:100vw}
+    /* every right-slide drawer (chat, call/order/event detail, memory)
+       becomes a full-screen sheet on mobile — same "click -> panel"
+       pattern as desktop's drawers, just sized to the whole viewport
+       instead of a fixed side panel a thumb can't reach across. */
+    #chatDrawer,#callDrawer,#memoryDrawer{width:100vw}
     .tip{max-width:70vw}
     .view h1{font-size:22px}
     .view-inner{padding:96px 16px calc(76px + env(safe-area-inset-bottom))}
     /* map-only carets sit just above the new bottom tab bar instead of
        under it (setView() hides this entirely on every other tab) */
     #bottombar{bottom:60px}
+
+    /* ---------- calls: table -> single-column cards ---------- */
+    #callsTableWrap{overflow-x:visible}
+    .calls-table{min-width:0}
+    .calls-table thead{display:none}
+    .calls-table,.calls-table tbody,.calls-table tr{display:block;width:100%}
+    .calls-table tr{margin-bottom:10px;background:rgba(255,255,255,.03);
+      border:1px solid var(--line);border-radius:12px;padding:6px 14px}
+    .calls-table td{display:block;width:100%;padding:7px 0;border-bottom:0}
+    .calls-table td:not(:last-child){border-bottom:1px solid rgba(232,230,224,.05)}
+    .calls-table td::before{content:attr(data-label);display:block;font:600 8px 'Inter';
+      letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+
+    /* ---------- orders: big full-width thumb button to advance status ---------- */
+    .order-card{flex-wrap:wrap;padding:16px}
+    .order-card .oc-advance{flex-basis:100%;min-height:46px;padding:0 18px;
+      font-size:11px;margin-top:6px}
   }
   @media (max-width:640px) and (orientation:landscape){
     #sidebar,#chatDrawer{width:min(420px,86vw)}
@@ -2134,12 +2155,12 @@ async function boot(){
     </tr></thead><tbody>${callsData.map(c=>{
       const oc=OUTCOME_COLOR[c.outcome]||'#77777c';
       return `<tr data-call="${esc(c.id)}">
-        <td><span class="dir-chip" style="color:${c.dir==='outbound'?'#c9a066':'#7fa8d6'}">${c.dir==='outbound'?'Outbound':'Inbound'}</span></td>
-        <td>${esc(c.who)}</td>
-        <td>${esc(fmtRelative(c.ts))}</td>
-        <td>${esc(fmtDuration(c.durationSeconds))}</td>
-        <td><span class="outcome-chip" style="color:${oc}">${esc((c.outcome||'').replace('_',' ')||'—')}</span></td>
-        <td>${esc(c.summary||'')}</td>
+        <td data-label="Direction"><span class="dir-chip" style="color:${c.dir==='outbound'?'#c9a066':'#7fa8d6'}">${c.dir==='outbound'?'Outbound':'Inbound'}</span></td>
+        <td data-label="Caller">${esc(c.who)}</td>
+        <td data-label="When">${esc(fmtRelative(c.ts))}</td>
+        <td data-label="Duration">${esc(fmtDuration(c.durationSeconds))}</td>
+        <td data-label="Outcome"><span class="outcome-chip" style="color:${oc}">${esc((c.outcome||'').replace('_',' ')||'—')}</span></td>
+        <td data-label="Summary">${esc(c.summary||'')}</td>
       </tr>`;
     }).join('')}</tbody></table>`;
     wrap.querySelectorAll('tr[data-call]').forEach(row=>{row.onclick=()=>openCallDrawer(row.dataset.call)});

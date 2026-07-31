@@ -102,3 +102,30 @@ Findings below drive the mobile-first pass (docs/queue/SAILZ-CURSOR-PROMPT-11.md
   pill collided with the 44px top-right icon cluster at 390px — moved
   below the icon row on mobile instead of shrinking icons under the
   touch-target minimum to make room.
+
+## Stage 3 — done
+
+- **Calls table** → single-column labeled cards at ≤640px (CSS-only:
+  `data-label` attributes added to each `<td>` in `renderCalls()`, a
+  media query turns the table into stacked blocky rows with
+  `content:attr(data-label)` mini-headers). Desktop table layout is
+  untouched — verified identical at 1280×800.
+- **Order status advance** → full-width 46px-tall button on mobile
+  (`.oc-advance{flex-basis:100%}` inside the media query only); desktop
+  keeps the compact inline button.
+- **All three right-slide drawers** (`#callDrawer`, `#memoryDrawer`,
+  joining `#chatDrawer` which already had this) → full-screen (100vw) on
+  mobile, so call/order/event detail and memory review are reachable
+  one-handed instead of a fixed side panel. The call drawer's `<audio>`
+  player was already `width:100%` — confirmed it just inherits the
+  drawer's new full width, no separate change needed.
+- **Calendar** — re-examined against real (Google Calendar-backed) data
+  at 390px: the existing `max-width:820px` day-stacking breakpoint
+  already reads as a genuine agenda list (date header → events →
+  "No bookings." for empty days, one clean scroll), not 7 cramped
+  columns. No code change needed — the Stage 1 audit undersold this as
+  "not yet a true agenda view"; verified it functionally already is one.
+- **Onboarding wizard** re-audited on phone (real token, `/onboard/:token`
+  at 390×844): no drift found — single-column form, thumb-sized
+  "Continue" button, progress dots all render cleanly as-is. Confirms
+  the "built mobile-first" claim; no changes made.
