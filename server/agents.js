@@ -155,7 +155,13 @@ const agents = {
           metadata: { leadId: lead.id, service: lead.service },
         }),
       });
-      if (res.ok) { lead.status = "call_scheduled"; lead.priorityCall = false; placed++; }
+      if (res.ok) {
+        lead.status = "call_scheduled"; lead.priorityCall = false; lead.deferredMorning = false;
+        // firstContactAt: the speed-to-lead metric the Lead Engine sells —
+        // never overwritten if a call was somehow already placed before.
+        if (!lead.firstContactAt) lead.firstContactAt = new Date().toISOString();
+        placed++;
+      }
     }
     save();
     log("agent", `Appointment Setter: placed ${placed} call(s)`);

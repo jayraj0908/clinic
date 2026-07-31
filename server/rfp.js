@@ -7,6 +7,7 @@
 const { load, save, log } = require("./store");
 const { profile, instance } = require("./instance");
 const { claude } = require("./agents");
+const { maybeAutoQueueLead } = require("./leadQueue");
 
 // Resend's inbound-email webhook payload shape (data.from/subject/text)
 // vs. a plain forwarded-mailbox setup ({from, subject, text} directly) —
@@ -114,6 +115,7 @@ async function processInboundRfp(rawBody) {
     },
   };
   db.leads.unshift(lead);
+  maybeAutoQueueLead(db, lead);
   save();
   log("lead", `RFP from ${lead.name} received${draft ? " — response drafted, awaiting approval" : " — draft failed, needs a manual reply"}`);
   return lead;

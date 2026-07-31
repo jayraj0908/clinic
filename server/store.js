@@ -31,6 +31,10 @@ function load() {
   // forever), but additive on every instance so hqClients.js never has to
   // special-case an old db.json that predates it.
   if (!Array.isArray(db.clients)) { db.clients = []; migrated = true; }
+  // Do-not-call list — phone numbers (any format; compared digit-only)
+  // the owner has flagged. Checked by server/leadQueue.js before any
+  // automated outbound contact; never auto-populated, owner-managed only.
+  if (!Array.isArray(db.dnc)) { db.dnc = []; migrated = true; }
   // A live instance's db.integrations was seeded before "resend" existed as
   // an entry — add it in place rather than requiring a reseed (which would
   // wipe real accumulated data) just to pick up a newly-added integration.

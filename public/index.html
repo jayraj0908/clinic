@@ -1954,6 +1954,15 @@ async function boot(){
         <div class="eyebrow">RESULTS THIS WEEK</div>
         ${isOnOrPaused?weekStatsHTML(h):`<div class="sb-desc" style="margin-bottom:0">${esc(EMPTY_RESULTS_PITCH[agentId]||'Activate to start seeing real results here.')}</div>`}
       </div>
+      ${agentId==='calling'?`
+      <div class="sb-section">
+        <div class="eyebrow">SPEED-TO-LEAD AUTO-QUEUE</div>
+        <div class="sb-desc">Every new lead with a phone number (webhook, RFP) gets an instant callback queued the moment it lands — inside quiet hours (8am–8pm). Outside those hours, it's queued for the next morning instead. Target: <b style="color:var(--ink)">under 5 minutes</b>.</div>
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-top:4px">
+          <input type="checkbox" id="autoCallToggle" ${dash.settings&&dash.settings.autoCallNewLeads?'checked':''} style="width:16px;height:16px;accent-color:var(--ink)">
+          <span style="font:500 11px 'Inter';color:var(--ink)">Auto-queue new leads for a callback</span>
+        </label>
+      </div>`:''}
       ${isOnOrPaused&&h&&h.recentActivity&&h.recentActivity.length?`
       <div class="sb-section">
         <div class="eyebrow">LATEST ACTIVITY</div>
@@ -1993,6 +2002,20 @@ async function boot(){
         }
       };
     });
+    const autoCallToggle=document.getElementById('autoCallToggle');
+    if(autoCallToggle)autoCallToggle.onchange=async()=>{
+      const enabled=autoCallToggle.checked;
+      autoCallToggle.disabled=true;
+      try{
+        await api('/api/settings/auto-call-new-leads',{method:'POST',body:JSON.stringify({enabled})});
+        dash.settings=dash.settings||{};dash.settings.autoCallNewLeads=enabled;
+      }catch(e){
+        autoCallToggle.checked=!enabled; // revert on failure
+        document.getElementById('catalogMsg').innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;
+      }finally{
+        autoCallToggle.disabled=false;
+      }
+    };
     const toggleBtn=document.getElementById('catalogToggleBtn');
     if(toggleBtn)toggleBtn.onclick=async()=>{
       const action=toggleBtn.dataset.action;

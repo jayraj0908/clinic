@@ -21,6 +21,7 @@ const vapiAssistant = require("./vapiAssistant");
 const heartbeat = require("./heartbeat");
 const hqClients = require("./hqClients");
 const rfp = require("./rfp");
+const leadQueue = require("./leadQueue");
 const { instance, profile } = require("./instance");
 const orders = require("./orders");
 const onboarding = require("./onboarding");
@@ -753,6 +754,40 @@ app.post("/api/leads/:id/queue-call", auth, (req, res) => {
   res.json(lead);
 });
 
+// Speed-to-lead auto-queue toggle — surfaced in the calling agent's
+// catalog panel, not a dedicated settings page. Default off; reading the
+// current value is just db.settings.autoCallNewLeads via the existing
+// GET /api/dashboard (which already returns settings wholesale).
+app.post("/api/settings/auto-call-new-leads", auth, requireOwner, (req, res) => {
+  const db = load();
+  db.settings.autoCallNewLeads = !!req.body?.enabled;
+  save();
+  log("system", `${req.user.id} turned auto-call-new-leads ${db.settings.autoCallNewLeads ? "on" : "off"}`);
+  res.json({ autoCallNewLeads: db.settings.autoCallNewLeads });
+});
+
+// Do-not-call list — owner-managed only, never auto-populated. Checked
+// by server/leadQueue.js before any automated outbound contact.
+app.get("/api/dnc", auth, requireOwner, (req, res) => {
+  res.json({ dnc: load().dnc });
+});
+app.post("/api/dnc", auth, requireOwner, (req, res) => {
+  const phone = (req.body?.phone || "").trim();
+  if (!phone) return res.status(400).json({ error: "phone is required" });
+  const db = load();
+  if (!leadQueue.isDNC(db, phone)) db.dnc.push(phone);
+  save();
+  log("system", `${req.user.id} added ${maskPhone(phone)} to the do-not-call list`);
+  res.json({ dnc: db.dnc });
+});
+app.delete("/api/dnc/:phone", auth, requireOwner, (req, res) => {
+  const db = load();
+  const digits = req.params.phone.replace(/\D/g, "");
+  db.dnc = db.dnc.filter((n) => n.replace(/\D/g, "") !== digits);
+  save();
+  res.json({ dnc: db.dnc });
+});
+
 app.post("/api/appointments/:id/confirm", auth, (req, res) => {
   const db = load();
   const appt = db.appointments.find((a) => a.id === req.params.id);
@@ -1332,7 +1367,9 @@ app.post("/webhooks/meta", webhookLimiter, (req, res) => {
     for (const ch of entry.changes || []) {
       const f = Object.fromEntries((ch.value?.field_data || []).map((x) => [x.name, x.values?.[0]]));
       if (!f.phone_number && !f.email) continue;
-      db.leads.unshift({ id: "L" + Date.now() + added, name: f.full_name || "Meta lead", phone: f.phone_number || "", email: f.email || "", source: "meta", service: f.service || "", status: "new", createdAt: new Date().toISOString() });
+      const lead = { id: "L" + Date.now() + added, name: f.full_name || "Meta lead", phone: f.phone_number || "", email: f.email || "", source: "meta", service: f.service || "", status: "new", createdAt: new Date().toISOString() };
+      db.leads.unshift(lead);
+      leadQueue.maybeAutoQueueLead(db, lead);
       added++;
     }
   }
@@ -1348,7 +1385,9 @@ app.post("/webhooks/google", webhookLimiter, (req, res) => {
   const db = load();
   db.settings.lastWebhookAt = new Date().toISOString(); // heartbeat's "last webhook seen"
   const cols = Object.fromEntries((req.body?.user_column_data || []).map((x) => [x.column_id, x.string_value]));
-  db.leads.unshift({ id: "L" + Date.now(), name: cols.FULL_NAME || "Google lead", phone: cols.PHONE_NUMBER || "", email: cols.EMAIL || "", source: "google", service: "", status: "new", createdAt: new Date().toISOString() });
+  const lead = { id: "L" + Date.now(), name: cols.FULL_NAME || "Google lead", phone: cols.PHONE_NUMBER || "", email: cols.EMAIL || "", source: "google", service: "", status: "new", createdAt: new Date().toISOString() };
+  db.leads.unshift(lead);
+  leadQueue.maybeAutoQueueLead(db, lead);
   save();
   log("lead", "New Google Ads lead received");
   res.json({ ok: true });

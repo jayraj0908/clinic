@@ -128,6 +128,23 @@ function inLastWeek(ts) {
   return new Date(ts).getTime() >= Date.now() - SEVEN_DAYS_MS;
 }
 
+// The Lead Engine's headline metric: median minutes from a lead landing
+// (createdAt) to the calling agent's first outbound attempt
+// (firstContactAt, set in server/agents.js's setter()). Target on the
+// panel is "< 5 min" — median (not mean) so one lead that sat because
+// Vapi wasn't configured doesn't blow up the number for everyone else.
+function medianSpeedToLead(db) {
+  const minutes = (db.leads || [])
+    .filter((l) => l.firstContactAt && inLastWeek(l.createdAt))
+    .map((l) => (new Date(l.firstContactAt).getTime() - new Date(l.createdAt).getTime()) / 60000)
+    .filter((m) => m >= 0)
+    .sort((a, b) => a - b);
+  if (!minutes.length) return "no data yet";
+  const mid = Math.floor(minutes.length / 2);
+  const median = minutes.length % 2 ? minutes[mid] : (minutes[mid - 1] + minutes[mid]) / 2;
+  return `${Math.round(median)} min`;
+}
+
 // The catalog agent panel's "Results this week" strip — one real,
 // per-agent-type metric set, computed here (not the frontend) so the same
 // numbers are trustworthy wherever they're shown. Every branch returns
@@ -157,6 +174,7 @@ function weekStats(db, hubId) {
     return [
       { label: "Calls made this week", value: outboundWeek.length },
       { label: "Booked this week", value: outboundWeek.filter((c) => c.outcome === "booked").length },
+      { label: "Median speed-to-lead", value: medianSpeedToLead(db) },
     ];
   }
   if (hubId === "audit") {
