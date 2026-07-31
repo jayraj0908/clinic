@@ -45,14 +45,16 @@ Instance config: `instances/`
       isServerUrlSecretSet) and on Shine's Railway env. Verified live:
       /webhooks/vapi 403s without the header, 200 with it, boot warning
       gone. No other assistant fields touched (diffed before/after).
-- [ ] ⚠️ NEW, found during the above audit: The Burg's Railway env has
-      VAPI_SERVER_SECRET set, but its inbound Vapi assistant does NOT
-      have the matching header configured (isServerUrlSecretSet: false)
-      — opposite-direction mismatch from Shine's. The server now
-      requires the header on every webhook call; Vapi was never told to
-      send one. Real tool-calls (place_order) and end-of-call-reports
-      from Burg's live line are likely being rejected with 403 right
-      now. NOT fixed — audit-only per scope, flagged for a follow-up.
+- [x] Burg mismatch closed 7/31: turned out to be a legacy custom
+      `server.headers['x-vapi-secret']` config (not Vapi's native
+      `secret` field, so isServerUrlSecretSet read false even though a
+      header WAS being sent) with a value that didn't match Railway's.
+      Migrated to the same native field Shine uses, fresh secret on
+      both sides, legacy header field removed. Verified live: 403
+      without the header, 200 with it. Incident: GETting the assistant
+      to inspect this printed that legacy header value into a session
+      transcript before its shape was known — immediately rotated away
+      (this fix), so that value is void everywhere now.
 - [x] Fixed 7/31: availability was only ever offering the earliest
       morning slots (old code broke out of the scan loop the moment it
       found MAX_SLOTS free ones) — now spreads evenly across the whole
