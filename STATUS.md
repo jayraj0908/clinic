@@ -22,7 +22,7 @@ order / wash), confirm it. The universal pain, sold to every vertical.
 | 12 | Sailz HQ instance (admin gate) | ✅ done — stage 1 hotfix (SAILZ_ADMIN flag), stage 2 (instances/sailz-hq/), stage 3 (heartbeat protocol + db.clients registry), stage 4 (admin.html client board + onboarding tab), stage 5 verified. TODO (later HQ stage, not started): client nodes on HQ's own brain map — the map itself is untouched/as-is for now. |
 | 11 | Mobile-first pass | ✅ done (audit + bottom-tab nav, map on touch, work surfaces, installable PWA, verified — see MOBILE-AUDIT.md) |
 | 13 | Vapi assistant-request (server/vapiAssistant.js) | ✅ done, flag off everywhere — see operator steps in vapiAssistant.js's file header before flipping VAPI_ASSISTANT_REQUEST=1 on either service |
-| 10 | Lead Engine v1 | 🗂 queued next (docs/queue/) |
+| 10 | Lead Engine v1 | ✅ done — RFP inbox agent (rfp-responder), speed-to-lead auto-queue (quiet hours + DNC), signal watcher (proposed leads, human-gated), mobile Leads pipeline tab. Both new agents dormant by default everywhere (fixed a real bug in catalog.js's fallback along the way — see commit `01f381a`). Myrtle hotels pitch unblocked. |
 | 5 | Case threads | 🗂 parked (docs/queue/) |
 
 Executed prompts: `docs/archive/` · Strategy docs: `docs/` ·
@@ -36,7 +36,7 @@ Instance config: `instances/`
 | Shine Dental | LIVE | keep librarian approvals flowing; case-study stats |
 | The Burg | Vapi wired, menu items in | fill $TBC prices → 5 test calls → demo + pilot signing |
 | Car wash | discovery | book discovery call; instance is ~an afternoon |
-| Myrtle hotels | proposal | RFP pitch after Lead Engine (prompt 10) |
+| Myrtle hotels | proposal | Lead Engine (prompt 10) shipped — RFP pitch unblocked, ready to send |
 
 ## Founder checklist (non-code)
 
