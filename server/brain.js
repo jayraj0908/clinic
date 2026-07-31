@@ -94,6 +94,16 @@ function loadAgentFile(filePath) {
     // (just name + disabled: true) is enough; nothing else in this record
     // matters once it's filtered out.
     disabled: data.disabled === "true" || data.disabled === true,
+    // An agent introduced AFTER a given deployment already existed must
+    // never silently turn itself on there — server/catalog.js's
+    // getActiveAgentIds() "implicit all-active" fallback (for a
+    // deployment that predates the catalog feature and has never called
+    // activate/deactivate) exists specifically to preserve the ORIGINAL
+    // agent roster's old always-on behavior, not to auto-activate agents
+    // that didn't exist yet when that fallback's history began. Set true
+    // on any new agent file that should ship dormant/opt-in everywhere,
+    // even on a deployment whose db.activeAgents was never materialized.
+    dormantByDefault: data.dormantbydefault === "true" || data.dormantByDefault === "true" || data.dormantByDefault === true,
     // optional pipeline metadata (Stage 2 hard requirement: support, not require)
     triggers: splitList(data.triggers),
     handoff: splitList(data.handoff),

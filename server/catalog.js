@@ -19,7 +19,12 @@ const { instance } = require("./instance");
 function getActiveAgentIds(db) {
   if (Array.isArray(db.activeAgents)) return db.activeAgents;
   if (Array.isArray(instance.agents)) return instance.agents.filter((id) => AGENTS[id]);
-  return Object.keys(AGENTS);
+  // dormantByDefault agents (brain.js) are excluded even from this
+  // "implicit all-active" fallback — that fallback exists to preserve
+  // the ORIGINAL roster's old always-on behavior on a deployment that's
+  // never touched activate/deactivate, not to auto-activate an agent
+  // that didn't exist when that history began.
+  return Object.keys(AGENTS).filter((id) => !AGENTS[id].dormantByDefault);
 }
 
 // db.agents rows predate this feature and are keyed by an agent's `runner`

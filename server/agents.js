@@ -259,6 +259,15 @@ const agents = {
     else log("agent", "Librarian: reviewed activity, nothing new to learn");
     return `${added.length} learned`;
   },
+
+  // 6 ─ Signal watcher: daily public-feed/search scan, proposes leads.
+  // Full logic lives in signalWatcher.js (its own module — meaningfully
+  // more code than the other runners, and it needed its own RSS/Brave
+  // helpers), lazily required here to avoid a require cycle (that module
+  // itself lazily requires claude() from this file).
+  async ["signal-watcher"]() {
+    return require("./signalWatcher").runSignalWatch();
+  },
 };
 
 async function runAgent(id) {

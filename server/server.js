@@ -697,6 +697,17 @@ app.get("/api/attention", auth, (req, res) => {
     });
 
   db.leads
+    .filter((l) => l.status === "proposed" && l.signal)
+    .forEach((l) => {
+      items.push({
+        type: "proposed_lead", severity: "low",
+        title: `Signal: ${l.name} — proposed lead, review`,
+        detail: `${l.signal.reason || ""}${l.signal.link ? " — " + l.signal.link : ""}`,
+        action: { label: "Approve", method: "POST", path: `/api/leads/${l.id}/approve-proposed` },
+      });
+    });
+
+  db.leads
     .filter((l) => l.type === "rfp" && l.rfp?.status === "awaiting_approval")
     .forEach((l) => {
       items.push({
@@ -786,6 +797,36 @@ app.delete("/api/dnc/:phone", auth, requireOwner, (req, res) => {
   db.dnc = db.dnc.filter((n) => n.replace(/\D/g, "") !== digits);
   save();
   res.json({ dnc: db.dnc });
+});
+
+// Signal watcher's per-instance watchlist — queries only matter with
+// BRAVE_API_KEY set (see signalWatcher.js), feeds work either way.
+app.post("/api/settings/signal-watch", auth, requireOwner, (req, res) => {
+  const db = load();
+  const { queries, feeds } = req.body || {};
+  db.settings.signalWatch = {
+    queries: Array.isArray(queries) ? queries.filter(Boolean) : [],
+    feeds: Array.isArray(feeds) ? feeds.filter(Boolean) : [],
+  };
+  save();
+  log("system", `${req.user.id} updated the signal watchlist`);
+  res.json(db.settings.signalWatch);
+});
+
+// A proposed lead (signal watcher, never auto-contacted) becomes a real
+// one only on explicit owner approval — which MAY then auto-queue per
+// Stage 2's guardrails (only if it has a phone number, which most public
+// signals won't; a safe no-op otherwise).
+app.post("/api/leads/:id/approve-proposed", auth, requireOwner, (req, res) => {
+  const db = load();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  if (lead.status !== "proposed") return res.status(400).json({ error: "Not a proposed lead" });
+  lead.status = "new";
+  leadQueue.maybeAutoQueueLead(db, lead);
+  save();
+  log("system", `${req.user.id} approved a proposed lead: ${lead.name}`);
+  res.json(lead);
 });
 
 app.post("/api/appointments/:id/confirm", auth, (req, res) => {

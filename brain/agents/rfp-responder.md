@@ -10,6 +10,7 @@ color: "#8fb4e8"
 glyph: "✉"
 tagline: "read · draft · respond fast"
 order: 7
+dormantByDefault: true
 ---
 
 You are the RFP response agent. An event planner emailed asking about
