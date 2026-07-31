@@ -13,18 +13,25 @@ const { load, save, log } = require("./store");
 const { systemPromptFor } = require("./agents");
 const catalog = require("./catalog");
 
+// Exported separately (not inlined into buildReceptionistPrompt below) so
+// server/vapiAssistant.js's assistant-request prompt composer can append
+// the exact same "owner-approved, do not contradict" section without
+// duplicating this filter/format logic.
+function learnedKnowledgeSection(db) {
+  const approved = (db.memory || []).filter(
+    (m) => m.status === "approved" && (m.type === "faq_gap" || m.type === "policy_correction")
+  );
+  return approved.length
+    ? `## Learned knowledge (owner-approved — do not contradict this)\n${approved.map((f) => `- ${f.fact}`).join("\n")}`
+    : "";
+}
+
 // (a) engine base brain/agents/receptionist.md body, (b) instance profile
 // rendered to prose, (c) approved faq_gap/policy_correction facts in a
 // clearly marked section — all via the same systemPromptFor() every other
 // agent's prompt is built from, so this never drifts from that pattern.
 function buildReceptionistPrompt(db) {
-  const approved = (db.memory || []).filter(
-    (m) => m.status === "approved" && (m.type === "faq_gap" || m.type === "policy_correction")
-  );
-  const learnedSection = approved.length
-    ? `## Learned knowledge (owner-approved — do not contradict this)\n${approved.map((f) => `- ${f.fact}`).join("\n")}`
-    : "";
-  return systemPromptFor("receptionist", learnedSection);
+  return systemPromptFor("receptionist", learnedKnowledgeSection(db));
 }
 
 function isDryRun() {
@@ -115,4 +122,4 @@ function scheduleSyncDebounced(pushedBy) {
   }, 5 * 60 * 1000);
 }
 
-module.exports = { buildReceptionistPrompt, syncToVapi, scheduleSyncDebounced, isDryRun, hasVapiConfig };
+module.exports = { buildReceptionistPrompt, learnedKnowledgeSection, syncToVapi, scheduleSyncDebounced, isDryRun, hasVapiConfig };

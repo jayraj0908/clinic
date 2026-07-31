@@ -17,6 +17,7 @@ const notify = require("./notify");
 const chat = require("./chat");
 const { maskPhone, verifyMetaSignature } = require("./security");
 const vapiSync = require("./vapiSync");
+const vapiAssistant = require("./vapiAssistant");
 const { instance, profile } = require("./instance");
 const orders = require("./orders");
 const onboarding = require("./onboarding");
@@ -38,6 +39,14 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 // /api/onboarding/create, so it stays meaningless on a client instance's
 // own (separate) database with or without this flag.
 const SAILZ_ADMIN = process.env.SAILZ_ADMIN === "1" || process.env.SAILZ_ADMIN === "true";
+
+// Vapi assistant-request: composes the assistant config fresh from this
+// repo (server/vapiAssistant.js) instead of Vapi using its own
+// dashboard-pasted copy. Off by default on every deployment — flip per
+// service only after the operator steps in vapiAssistant.js's file header
+// are done. The dashboard assistant stays attached as Vapi's own fallback
+// the whole time; this flag never removes or requires removing it.
+const VAPI_ASSISTANT_REQUEST = process.env.VAPI_ASSISTANT_REQUEST === "1" || process.env.VAPI_ASSISTANT_REQUEST === "true";
 function requireHQ(req, res, next) {
   if (!SAILZ_ADMIN) return res.status(404).end();
   next();
@@ -500,7 +509,10 @@ app.post("/api/memory/:id/approve", auth, requireOwner, (req, res) => {
   mergePreferenceIfApplicable(db, m);
   save();
   log("system", `Memory fact ${m.id} (${m.type}) approved by ${req.user.id}`);
-  if (m.type === "faq_gap" || m.type === "policy_correction") vapiSync.scheduleSyncDebounced(req.user.id);
+  if (m.type === "faq_gap" || m.type === "policy_correction") {
+    vapiSync.scheduleSyncDebounced(req.user.id);
+    vapiAssistant.invalidatePromptCache();
+  }
   res.json(m);
 });
 
@@ -524,6 +536,13 @@ app.post("/api/vapi/sync", auth, requireOwner, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Lets the operator eyeball exactly what a caller would get from
+// assistant-request (or what's cached to send) before/after flipping
+// VAPI_ASSISTANT_REQUEST on for real.
+app.get("/api/vapi/preview-prompt", auth, requireOwner, (req, res) => {
+  res.json({ prompt: vapiAssistant.composeSystemPrompt() });
 });
 
 // ---------- attention inbox ----------
@@ -952,6 +971,21 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
     return res.sendStatus(403);
   }
   const m = req.body?.message || req.body || {};
+
+  // assistant-request: Vapi asks us what assistant config to use for THIS
+  // call, in real time, before it connects. Flag off -> fall through per
+  // Vapi's own spec (an empty/no-op response) so it uses the fallback
+  // assistant attached in the dashboard, exactly like every deployment
+  // that never enables this at all.
+  if (m.type === "assistant-request") {
+    if (!VAPI_ASSISTANT_REQUEST) return res.json({});
+    const started = Date.now();
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const assistant = vapiAssistant.composeAssistantConfig(baseUrl);
+    const ms = Date.now() - started;
+    log("system", `Vapi assistant-request served in ${ms}ms${ms >= 300 ? " (over the 300ms target)" : ""}`);
+    return res.json({ assistant });
+  }
 
   if (m.type === "tool-calls") {
     const db = load();

@@ -6,5 +6,11 @@
   "brandColor": "#c9a066",
   "timezone": "America/New_York",
   "_recommendedAgentsNote": "recommendedAgents is what the onboarding wizard's review screen (server/onboarding.js's VERTICAL_RECOMMENDED_AGENTS) pre-checks for a given vertical before the owner activates a client — copy the list it picked here for your records, or set it by hand when hand-provisioning without the wizard. It becomes this file's own 'agents' field (server/brain.js's activation-set fallback — see server/catalog.js) once you decide the real starting roster; leave 'agents' out entirely for 'everything active', the original default.",
-  "recommendedAgents": ["receptionist", "leads", "calling", "audit", "billing", "librarian"]
+  "recommendedAgents": ["receptionist", "leads", "calling", "audit", "billing", "librarian"],
+  "_vapiNote": "Optional — only read when VAPI_ASSISTANT_REQUEST=1 on this deployment (server/vapiAssistant.js). Every field below falls back to the default shown if this whole 'vapi' block, or any field inside it, is left out entirely.",
+  "vapi": {
+    "firstMessage": "Thanks for calling <business name> — how can I help?",
+    "voice": { "provider": "11labs", "voiceId": "burt" },
+    "model": { "provider": "anthropic", "model": "claude-3-5-sonnet-20241022" }
+  }
 }
