@@ -2,6 +2,11 @@
 
 New service, same repo. Do after prompt 8 is merged + reviewed.
 
+**Number purchased: +1 (804) 581-8379** (Twilio, main account — move into a
+"The Burg" subaccount when convenient). Status: not yet imported to Vapi,
+no assistant yet — deferred until after prompt 4 + batch push.
+Pending on this number: add to A2P campaign once campaign is approved.
+
 ## Railway
 - [ ] New service from the same GitHub repo (sailz-brain)
 - [ ] Volume attached at `/app/data` (BEFORE first boot)
@@ -22,7 +27,7 @@ VAPI_PHONE_NUMBER_ID=<after number import>
 VAPI_SERVER_SECRET=<fresh random — set same value in Vapi assistant header>
 TWILIO_SID=<yours>
 TWILIO_AUTH=<yours>
-TWILIO_FROM=<the new Burg number>
+TWILIO_FROM=+18045818379
 KITCHEN_SMS=<kitchen phone, from discovery call>
 KITCHEN_EMAIL=<optional>
 RESEND_API_KEY=<yours>

@@ -1,21 +1,222 @@
 {
   "name": "The Burg",
   "timezone": "America/New_York",
+  "address": "201 Towne Center West Blvd, Henrico, VA 23233",
+  "publicPhone": "(804) 277-5775",
   "hours": [
-    { "days": "Mon–Thu", "open": "11:00 AM", "close": "9:00 PM" },
-    { "days": "Fri–Sat", "open": "11:00 AM", "close": "10:30 PM" },
-    { "days": "Sun", "open": "12:00 PM", "close": "8:00 PM" }
+    {
+      "days": "Every day (online ordering)",
+      "open": "11:00 AM",
+      "close": "2:25 AM"
+    }
   ],
+  "halal": true,
   "services": [
-    { "name": "REPLACE — Classic Burger", "price": "$9.99", "duration": "15 min pickup", "modifiers": ["cheese +$1", "bacon +$1.50", "no onion", "extra patty +$3"] },
-    { "name": "REPLACE — Large Pepperoni Pizza", "price": "$14.99", "duration": "20 min pickup", "modifiers": ["extra cheese +$2", "half-and-half toppings ok", "thin or regular crust"] },
-    { "name": "REPLACE — Fries", "price": "$3.99", "duration": "", "modifiers": ["cajun seasoning", "large +$1.50"] }
+    {
+      "name": "Cheeseburg",
+      "price": "$8.99",
+      "duration": "15 min pickup",
+      "modifiers": [
+        "make it combo (fries + drink, upcharge)",
+        "no/extra toppings"
+      ]
+    },
+    {
+      "name": "Double Cheeseburg",
+      "price": "$10.99",
+      "duration": "15 min pickup",
+      "modifiers": [
+        "make it combo",
+        "no/extra toppings"
+      ]
+    },
+    {
+      "name": "The Burg Special",
+      "price": "$19.99",
+      "duration": "20 min pickup",
+      "modifiers": [
+        "make it combo"
+      ]
+    },
+    {
+      "name": "The Rooster",
+      "price": "$16.99",
+      "duration": "20 min pickup",
+      "modifiers": [
+        "make it combo"
+      ]
+    },
+    {
+      "name": "Original Philly",
+      "price": "$10.99",
+      "duration": "15-20 min pickup",
+      "modifiers": [
+        "make it combo",
+        "no onions",
+        "no peppers"
+      ]
+    },
+    {
+      "name": "NY Philly",
+      "price": "$11.99",
+      "duration": "15-20 min pickup",
+      "modifiers": [
+        "make it combo",
+        "steak/chicken/shrimp mix",
+        "no shrimp"
+      ]
+    },
+    {
+      "name": "Chicken Shawarma",
+      "price": "$9.99",
+      "duration": "15 min pickup",
+      "modifiers": [
+        "make it combo"
+      ]
+    },
+    {
+      "name": "Nashville Chicken Kofta",
+      "price": "$11.99",
+      "duration": "15 min pickup",
+      "modifiers": [
+        "make it combo",
+        "spice level"
+      ]
+    },
+    {
+      "name": "Margherita Pizza",
+      "price": "$14.99",
+      "duration": "20 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "Pepperoni Pizza",
+      "price": "$17.99",
+      "duration": "20 min pickup",
+      "modifiers": [
+        "extra cheese"
+      ]
+    },
+    {
+      "name": "Hotish Pizza",
+      "price": "$17.99",
+      "duration": "20 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "Greekish Pizza",
+      "price": "$18.99",
+      "duration": "20 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "Tandori Pizza",
+      "price": "$18.99",
+      "duration": "20 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "Meat Master Pizza",
+      "price": "$18.99",
+      "duration": "20 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "Butter Chicken Pizza",
+      "price": "$19.00",
+      "duration": "20 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "Achari Chicken Pizza",
+      "price": "$19.99",
+      "duration": "20 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "Alfredo Buffalo Pizza",
+      "price": "$17.99",
+      "duration": "20 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "6 Piece Wings",
+      "price": "$10.99",
+      "duration": "15-20 min pickup",
+      "modifiers": [
+        "flavor: Buffalo",
+        "Honey Mustard",
+        "Lemon Pepper",
+        "Caribbean Jerk",
+        "Mango Habanero"
+      ]
+    },
+    {
+      "name": "12 Piece Wings",
+      "price": "$18.99",
+      "duration": "20 min pickup",
+      "modifiers": [
+        "up to 2 flavors"
+      ]
+    },
+    {
+      "name": "25 Piece Wings",
+      "price": "$32.99",
+      "duration": "25 min pickup",
+      "modifiers": [
+        "multiple flavors"
+      ]
+    },
+    {
+      "name": "6 Piece Boneless Wings",
+      "price": "$8.99",
+      "duration": "15 min pickup",
+      "modifiers": [
+        "flavor choice"
+      ]
+    },
+    {
+      "name": "12 Piece Boneless Wings",
+      "price": "$18.99",
+      "duration": "20 min pickup",
+      "modifiers": [
+        "flavor choice"
+      ]
+    },
+    {
+      "name": "Mozzarella Sticks",
+      "price": "$8.00",
+      "duration": "10-15 min pickup",
+      "modifiers": [
+        "6/12/18 pc \u2014 larger sizes priced higher, confirm"
+      ]
+    },
+    {
+      "name": "Loaded Steak Fries",
+      "price": "$11.00",
+      "duration": "15 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "Loaded Fries Crispy Chicken & Chips",
+      "price": "$11.00",
+      "duration": "15 min pickup",
+      "modifiers": []
+    },
+    {
+      "name": "OWNER_CONFIRM \u2014 wraps list, salads, desserts, beverages, combo upcharge amount, 12/18pc mozz prices",
+      "price": "",
+      "duration": "",
+      "modifiers": []
+    }
   ],
   "insuranceAccepted": [],
-  "selfPay": "Payment at pickup — card or cash. No payment over the phone.",
+  "selfPay": "Payment at pickup \u2014 card or cash. No payment over the phone.",
   "policies": [
-    "Pickup orders only through the phone line (no delivery dispatch v1).",
-    "Quote pickup time from current prep-time setting; during rush add 10 minutes.",
-    "Allergy mentions: read back the allergy, flag it clearly on the kitchen ticket, and advise the kitchen will be notified — never guarantee zero cross-contamination."
+    "Entire menu is HALAL \u2014 say so proudly and confidently when asked.",
+    "Most items can be made a combo (fries + drink) for an additional charge \u2014 confirm exact upcharge with owner.",
+    "Pickup orders only via phone line (delivery goes through their online platforms).",
+    "Late-night is normal here \u2014 orders until 2:25 AM get full service.",
+    "Allergy mentions: read back, flag prominently on ticket, never guarantee zero cross-contamination."
   ]
 }
