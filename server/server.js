@@ -20,6 +20,7 @@ const vapiSync = require("./vapiSync");
 const vapiAssistant = require("./vapiAssistant");
 const heartbeat = require("./heartbeat");
 const hqClients = require("./hqClients");
+const rfp = require("./rfp");
 const { instance, profile } = require("./instance");
 const orders = require("./orders");
 const onboarding = require("./onboarding");
@@ -694,6 +695,17 @@ app.get("/api/attention", auth, (req, res) => {
       });
     });
 
+  db.leads
+    .filter((l) => l.type === "rfp" && l.rfp?.status === "awaiting_approval")
+    .forEach((l) => {
+      items.push({
+        type: "rfp_draft", severity: "high",
+        title: `RFP from ${l.name} — response drafted, review & send`,
+        detail: `${l.rfp.eventDate ? "Event " + l.rfp.eventDate + " · " : ""}${l.rfp.headcount ? l.rfp.headcount + " guests · " : ""}"${(l.rfp.draftBody || "").slice(0, 140)}"`,
+        action: { label: "Send drafted reply", method: "POST", path: `/api/leads/${l.id}/rfp/approve` },
+      });
+    });
+
   const proposedMemory = db.memory.filter((m) => m.status === "proposed");
   if (proposedMemory.length) {
     items.push({
@@ -1340,6 +1352,30 @@ app.post("/webhooks/google", webhookLimiter, (req, res) => {
   save();
   log("lead", "New Google Ads lead received");
   res.json({ ok: true });
+});
+
+// RFP inbox: Resend's inbound-email webhook shape, or a plain
+// {from,subject,text} JSON for a forwarded-mailbox setup (see
+// rfp.js's normalizeEmailPayload for exactly how both are read). A
+// malformed/unparseable email is logged and skipped, never a 500 — see
+// rfp.js's processInboundRfp for the full reasoning.
+app.post("/webhooks/email", webhookLimiter, async (req, res) => {
+  if (process.env.RESEND_INBOUND_SECRET && req.headers["x-resend-secret"] !== process.env.RESEND_INBOUND_SECRET) {
+    return res.sendStatus(403);
+  }
+  load().settings.lastWebhookAt = new Date().toISOString(); save(); // heartbeat's "last webhook seen"
+  try {
+    await rfp.processInboundRfp(req.body);
+  } catch (e) {
+    log("error", `RFP inbox error: ${e.message}`); // logged, never thrown up to the response
+  }
+  res.json({ ok: true });
+});
+
+app.post("/api/leads/:id/rfp/approve", auth, requireOwner, async (req, res) => {
+  const result = await rfp.approveAndSend(req.params.id, req.user.id);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.lead);
 });
 
 // ---------- scheduler ----------

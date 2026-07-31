@@ -266,4 +266,4 @@ async function runAgent(id) {
   return result;
 }
 
-module.exports = { runAgent, systemPromptFor, isSameFact };
+module.exports = { runAgent, systemPromptFor, isSameFact, claude };
