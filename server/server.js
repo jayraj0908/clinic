@@ -117,9 +117,18 @@ app.get("/brain.html", (req, res) => res.redirect(301, "/"));
 // own (SAILZ_ADMIN=1), same reasoning as requireHQ below. Registered
 // before the static middleware so it wins over the file that's still
 // sitting in public/ (every deployment ships the same codebase).
+// onboarding-review.html was the whole console before Stage 4 folded it
+// into admin.html as one tab (CLIENTS being the other) — redirect old
+// bookmarks/links rather than 404 or serve a frozen standalone page.
+// Same 404-if-not-HQ gate either way, so a redirect never leaks that this
+// deployment IS the HQ instance to a client that can't reach either URL.
 app.get("/onboarding-review.html", (req, res) => {
   if (!SAILZ_ADMIN) return res.status(404).end();
-  res.sendFile(path.join(__dirname, "..", "public", "onboarding-review.html"));
+  res.redirect(301, "/admin.html?tab=onboarding");
+});
+app.get("/admin.html", (req, res) => {
+  if (!SAILZ_ADMIN) return res.status(404).end();
+  res.sendFile(path.join(__dirname, "..", "public", "admin.html"));
 });
 // PWA manifest — generated per-request (not a static file) so name/theme
 // color reflect THIS deployment's actual instance/owner-set clinic name,
@@ -569,6 +578,7 @@ app.get("/api/hq/clients", requireHQ, auth, requireOwner, (req, res) => {
       name: c.name,
       baseUrl: c.baseUrl,
       addedAt: c.addedAt,
+      mrr: c.mrr || 0,
       maskedKey: c.key ? "••••" + c.key.slice(-4) : null,
       status: hqClients.clientStatus(c),
       latest: (c.heartbeats && c.heartbeats[c.heartbeats.length - 1]) || null,
@@ -594,10 +604,14 @@ app.patch("/api/hq/clients/:id", requireHQ, auth, requireOwner, (req, res) => {
   const db = load();
   const c = db.clients.find((x) => x.id === req.params.id);
   if (!c) return res.status(404).json({ error: "Client not found" });
-  const { name, baseUrl, key } = req.body || {};
+  const { name, baseUrl, key, mrr } = req.body || {};
   if (name) c.name = name;
   if (baseUrl) c.baseUrl = baseUrl.replace(/\/+$/, "");
   if (key) c.key = key;
+  // MRR is manual-entry-only (Stripe/automated billing is explicitly out
+  // of scope) — 0 is a valid value (a not-yet-billing pilot), so check
+  // for undefined rather than falsy.
+  if (mrr !== undefined) c.mrr = Number(mrr) || 0;
   save();
   res.json({ ok: true });
 });

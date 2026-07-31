@@ -19,7 +19,7 @@ order / wash), confirm it. The universal pain, sold to every vertical.
 | 7 | Security & HIPAA hardening | ✅ done |
 | 8 | Restaurant vertical (orders) + agent allowlist | ✅ done |
 | 9 | Agent catalog / plug-and-play store | 🔨 stages 1–3 done, 4–6 in flight |
-| 12 | Sailz HQ instance (admin gate) | 🔨 stage 1 hotfix done (SAILZ_ADMIN flag); stages 2–5 (HQ instance, heartbeats, client board) not started |
+| 12 | Sailz HQ instance (admin gate) | ✅ done — stage 1 hotfix (SAILZ_ADMIN flag), stage 2 (instances/sailz-hq/), stage 3 (heartbeat protocol + db.clients registry), stage 4 (admin.html client board + onboarding tab), stage 5 verified. TODO (later HQ stage, not started): client nodes on HQ's own brain map — the map itself is untouched/as-is for now. |
 | 11 | Mobile-first pass | ✅ done (audit + bottom-tab nav, map on touch, work surfaces, installable PWA, verified — see MOBILE-AUDIT.md) |
 | 13 | Vapi assistant-request (server/vapiAssistant.js) | ✅ done, flag off everywhere — see operator steps in vapiAssistant.js's file header before flipping VAPI_ASSISTANT_REQUEST=1 on either service |
 | 10 | Lead Engine v1 | 🗂 queued next (docs/queue/) |
