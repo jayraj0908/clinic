@@ -20,8 +20,8 @@ order / wash), confirm it. The universal pain, sold to every vertical.
 | 8 | Restaurant vertical (orders) + agent allowlist | ✅ done |
 | 9 | Agent catalog / plug-and-play store | 🔨 stages 1–3 done, 4–6 in flight |
 | 12 | Sailz HQ instance (admin gate) | 🔨 stage 1 hotfix done (SAILZ_ADMIN flag); stages 2–5 (HQ instance, heartbeats, client board) not started |
-| 11 | Mobile-first pass | 🗂 queued next (docs/queue/) |
-| 10 | Lead Engine v1 | 🗂 queued after 11 (docs/queue/) |
+| 11 | Mobile-first pass | ✅ done (audit + bottom-tab nav, map on touch, work surfaces, installable PWA, verified — see MOBILE-AUDIT.md) |
+| 10 | Lead Engine v1 | 🗂 queued next (docs/queue/) |
 | 5 | Case threads | 🗂 parked (docs/queue/) |
 
 Executed prompts: `docs/archive/` · Strategy docs: `docs/` ·
