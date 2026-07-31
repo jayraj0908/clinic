@@ -19,7 +19,7 @@ order / wash), confirm it. The universal pain, sold to every vertical.
 | 7 | Security & HIPAA hardening | ✅ done |
 | 8 | Restaurant vertical (orders) + agent allowlist | ✅ done |
 | 9 | Agent catalog / plug-and-play store | 🔨 stages 1–3 done, 4–6 in flight |
-| 12 | Sailz HQ instance (admin gate) | ✅ done — stage 1 hotfix (SAILZ_ADMIN flag), stage 2 (instances/sailz-hq/), stage 3 (heartbeat protocol + db.clients registry), stage 4 (admin.html client board + onboarding tab), stage 5 verified. TODO (later HQ stage, not started): client nodes on HQ's own brain map — the map itself is untouched/as-is for now. |
+| 12 | Sailz HQ instance (admin gate) | ✅ done — stage 1 hotfix (SAILZ_ADMIN flag), stage 2 (instances/sailz-hq/), stage 3 (heartbeat protocol + db.clients registry), stage 4 (admin.html client board + onboarding tab), stage 5 verified. **Deployed live 7/31**: own Railway service + volume, both Shine and The Burg registered on the client board and polling healthy. TODO (later HQ stage, not started): client nodes on HQ's own brain map — the map itself is untouched/as-is for now. |
 | 11 | Mobile-first pass | ✅ done (audit + bottom-tab nav, map on touch, work surfaces, installable PWA, verified — see MOBILE-AUDIT.md) |
 | 13 | Vapi assistant-request (server/vapiAssistant.js) | ✅ done, flag off everywhere — see operator steps in vapiAssistant.js's file header before flipping VAPI_ASSISTANT_REQUEST=1 on either service |
 | 10 | Lead Engine v1 | ✅ done — RFP inbox agent (rfp-responder), speed-to-lead auto-queue (quiet hours + DNC), signal watcher (proposed leads, human-gated), mobile Leads pipeline tab. Both new agents dormant by default everywhere (fixed a real bug in catalog.js's fallback along the way — see commit `01f381a`). Myrtle hotels pitch unblocked. |
@@ -53,6 +53,16 @@ Instance config: `instances/`
       send one. Real tool-calls (place_order) and end-of-call-reports
       from Burg's live line are likely being rejected with 403 right
       now. NOT fixed — audit-only per scope, flagged for a follow-up.
+- [x] Fixed 7/31: availability was only ever offering the earliest
+      morning slots (old code broke out of the scan loop the moment it
+      found MAX_SLOTS free ones) — now spreads evenly across the whole
+      open day. Verified live against Shine's real calendar.
+- [x] Sailz HQ stood up on Railway 7/31 — own service (sailz-hq) +
+      volume, admin console live, Shine + The Burg both registered on
+      the client board and polling healthy. Jay: wire hq.sailz.org
+      (Cloudflare integration, SSL already Full) — using the Railway-
+      generated URL until then. Login is in hq-credentials.txt
+      (gitignored, local only) — first login forces a password change.
 - [x] Domain bought (sailz.org) + shine/theburg subdomains wired
 - [ ] Immigration attorney consult: "12-mo OPT, PM degree — report Sailz
       as degree-related self-employment?" — GATES ALL REVENUE
