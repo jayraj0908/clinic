@@ -40,8 +40,20 @@ Instance config: `instances/`
 
 ## Founder checklist (non-code)
 
-- [ ] Buy domain (sailz.com TAKEN; sailz.io likely free — confirm at
-      registrar) → wire client subdomains in Railway
+- [x] SECURITY DEBT closed 7/31: VAPI_SERVER_SECRET set on both Shine
+      Vapi assistants (inbound + outbound, header confirmed via
+      isServerUrlSecretSet) and on Shine's Railway env. Verified live:
+      /webhooks/vapi 403s without the header, 200 with it, boot warning
+      gone. No other assistant fields touched (diffed before/after).
+- [ ] ⚠️ NEW, found during the above audit: The Burg's Railway env has
+      VAPI_SERVER_SECRET set, but its inbound Vapi assistant does NOT
+      have the matching header configured (isServerUrlSecretSet: false)
+      — opposite-direction mismatch from Shine's. The server now
+      requires the header on every webhook call; Vapi was never told to
+      send one. Real tool-calls (place_order) and end-of-call-reports
+      from Burg's live line are likely being rejected with 403 right
+      now. NOT fixed — audit-only per scope, flagged for a follow-up.
+- [x] Domain bought (sailz.org) + shine/theburg subdomains wired
 - [ ] Immigration attorney consult: "12-mo OPT, PM degree — report Sailz
       as degree-related self-employment?" — GATES ALL REVENUE
 - [ ] Pilot agreements signed (Burg → car wash), zero billing until cleared
