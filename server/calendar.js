@@ -114,7 +114,12 @@ function overlaps(startA, endA, startB, endB) {
 }
 
 function computeOpenSlots(window, busy, durationMinutes) {
-  const slots = [];
+  // Collect EVERY free slot in the day first, then offer MAX_SLOTS spread
+  // evenly across the whole day. The old version broke out of the loop at
+  // the first MAX_SLOTS free slots, which meant an open morning consumed
+  // the entire quota — callers were only ever offered times before ~9:30am
+  // no matter what the afternoon looked like.
+  const free = [];
   const stepMs = SLOT_STEP_MINUTES * 60000;
   const durMs = durationMinutes * 60000;
   const closeTime = new Date(window.closeISO).getTime();
@@ -123,10 +128,15 @@ function computeOpenSlots(window, busy, durationMinutes) {
     if (t < now) continue;
     const slotEnd = t + durMs;
     const busyHit = busy.some((b) => overlaps(t, slotEnd, new Date(b.start).getTime(), new Date(b.end).getTime()));
-    if (!busyHit) slots.push(new Date(t).toISOString());
-    if (slots.length >= MAX_SLOTS) break;
+    if (!busyHit) free.push(t);
   }
-  return slots;
+  if (free.length <= MAX_SLOTS) return free.map((t) => new Date(t).toISOString());
+  const picked = [];
+  for (let i = 0; i < MAX_SLOTS; i++) {
+    const idx = Math.round((i * (free.length - 1)) / (MAX_SLOTS - 1));
+    if (!picked.includes(free[idx])) picked.push(free[idx]);
+  }
+  return picked.map((t) => new Date(t).toISOString());
 }
 
 function serviceDurationMinutes(serviceName) {
