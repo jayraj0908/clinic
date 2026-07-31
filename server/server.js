@@ -18,6 +18,8 @@ const chat = require("./chat");
 const { maskPhone, verifyMetaSignature } = require("./security");
 const vapiSync = require("./vapiSync");
 const vapiAssistant = require("./vapiAssistant");
+const heartbeat = require("./heartbeat");
+const hqClients = require("./hqClients");
 const { instance, profile } = require("./instance");
 const orders = require("./orders");
 const onboarding = require("./onboarding");
@@ -545,6 +547,79 @@ app.get("/api/vapi/preview-prompt", auth, requireOwner, (req, res) => {
   res.json({ prompt: vapiAssistant.composeSystemPrompt() });
 });
 
+// ---------- heartbeat (every instance answers; only HQ polls) ----------
+// Service-to-service, not a user login — a shared secret header, checked
+// against THIS deployment's own HEARTBEAT_KEY. No key configured here
+// means nobody can ever successfully poll this instance (safe default,
+// not an open-by-omission bug). No PHI in the response — see
+// heartbeat.js's own header for exactly what is and isn't included.
+app.get("/api/heartbeat", (req, res) => {
+  const key = process.env.HEARTBEAT_KEY;
+  if (!key || req.headers["x-sailz-hq-key"] !== key) return res.sendStatus(403);
+  res.json(heartbeat.buildSnapshot());
+});
+
+// ---------- HQ client board (HQ-only — requireHQ, same reasoning as the
+// onboarding console) ----------
+app.get("/api/hq/clients", requireHQ, auth, requireOwner, (req, res) => {
+  const db = load();
+  res.json({
+    clients: (db.clients || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      baseUrl: c.baseUrl,
+      addedAt: c.addedAt,
+      maskedKey: c.key ? "••••" + c.key.slice(-4) : null,
+      status: hqClients.clientStatus(c),
+      latest: (c.heartbeats && c.heartbeats[c.heartbeats.length - 1]) || null,
+      heartbeats: c.heartbeats || [],
+    })),
+  });
+});
+
+app.post("/api/hq/clients", requireHQ, auth, requireOwner, async (req, res) => {
+  const { name, baseUrl, key } = req.body || {};
+  if (!name || !baseUrl || !key) return res.status(400).json({ error: "name, baseUrl, and key are required" });
+  const db = load();
+  const client = { id: "CL" + nanoid(10), name, baseUrl: baseUrl.replace(/\/+$/, ""), key, addedAt: new Date().toISOString(), heartbeats: [] };
+  db.clients.push(client);
+  save();
+  log("system", `${req.user.id} added client "${name}" to the HQ board`);
+  const snap = await hqClients.pollOne(client); // immediate poll so the card isn't blank until the next 10-min tick
+  save();
+  res.json({ id: client.id, latest: snap });
+});
+
+app.patch("/api/hq/clients/:id", requireHQ, auth, requireOwner, (req, res) => {
+  const db = load();
+  const c = db.clients.find((x) => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: "Client not found" });
+  const { name, baseUrl, key } = req.body || {};
+  if (name) c.name = name;
+  if (baseUrl) c.baseUrl = baseUrl.replace(/\/+$/, "");
+  if (key) c.key = key;
+  save();
+  res.json({ ok: true });
+});
+
+app.delete("/api/hq/clients/:id", requireHQ, auth, requireOwner, (req, res) => {
+  const db = load();
+  const before = db.clients.length;
+  db.clients = db.clients.filter((c) => c.id !== req.params.id);
+  save();
+  if (db.clients.length < before) log("system", `${req.user.id} removed a client from the HQ board`);
+  res.json({ ok: true, removed: before - db.clients.length });
+});
+
+app.post("/api/hq/clients/:id/poll", requireHQ, auth, requireOwner, async (req, res) => {
+  const db = load();
+  const c = db.clients.find((x) => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: "Client not found" });
+  const snap = await hqClients.pollOne(c);
+  save();
+  res.json(snap);
+});
+
 // ---------- attention inbox ----------
 // Computed entirely from data already in the store — no new infra. Each
 // item's action either maps to a real one-click route (method POST) or is
@@ -970,6 +1045,10 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
   if (process.env.VAPI_SERVER_SECRET && req.headers["x-vapi-secret"] !== process.env.VAPI_SERVER_SECRET) {
     return res.sendStatus(403);
   }
+  // Heartbeat's "last webhook seen" health flag (server/heartbeat.js) —
+  // stamped on any authenticated hit, every message type, since even an
+  // assistant-request ping confirms this endpoint is alive and reachable.
+  load().settings.lastWebhookAt = new Date().toISOString(); save();
   const m = req.body?.message || req.body || {};
 
   // assistant-request: Vapi asks us what assistant config to use for THIS
@@ -1221,6 +1300,7 @@ app.get("/webhooks/meta", webhookLimiter, (req, res) => {
 app.post("/webhooks/meta", webhookLimiter, (req, res) => {
   if (!verifyMetaSignature(req)) return res.sendStatus(403);
   const db = load();
+  db.settings.lastWebhookAt = new Date().toISOString(); // heartbeat's "last webhook seen"
   let added = 0;
   for (const entry of req.body?.entry || []) {
     for (const ch of entry.changes || []) {
@@ -1240,6 +1320,7 @@ app.post("/webhooks/google", webhookLimiter, (req, res) => {
   if (process.env.GOOGLE_ADS_WEBHOOK_KEY && req.body?.google_key !== process.env.GOOGLE_ADS_WEBHOOK_KEY)
     return res.sendStatus(403);
   const db = load();
+  db.settings.lastWebhookAt = new Date().toISOString(); // heartbeat's "last webhook seen"
   const cols = Object.fromEntries((req.body?.user_column_data || []).map((x) => [x.column_id, x.string_value]));
   db.leads.unshift({ id: "L" + Date.now(), name: cols.FULL_NAME || "Google lead", phone: cols.PHONE_NUMBER || "", email: cols.EMAIL || "", source: "google", service: "", status: "new", createdAt: new Date().toISOString() });
   save();
@@ -1376,4 +1457,7 @@ app.listen(PORT, () => {
   bootBackupCron();
   bootVapiSyncCron();
   warnUnsetWebhookSecrets();
+  // Only HQ ever polls other deployments — a plain client instance just
+  // answers /api/heartbeat requests and never calls startPolling() at all.
+  if (SAILZ_ADMIN) hqClients.startPolling();
 });

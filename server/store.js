@@ -27,6 +27,10 @@ function load() {
   if (!Array.isArray(db.onboardings)) { db.onboardings = []; migrated = true; }
   if (!Array.isArray(db.passwordResets)) { db.passwordResets = []; migrated = true; }
   if (!Array.isArray(db.magicLinks)) { db.magicLinks = []; migrated = true; }
+  // HQ-only in practice (a plain client's db.clients just stays empty
+  // forever), but additive on every instance so hqClients.js never has to
+  // special-case an old db.json that predates it.
+  if (!Array.isArray(db.clients)) { db.clients = []; migrated = true; }
   // A live instance's db.integrations was seeded before "resend" existed as
   // an entry — add it in place rather than requiring a reseed (which would
   // wipe real accumulated data) just to pick up a newly-added integration.
