@@ -26,6 +26,23 @@ const { AGENTS } = require("./brain");
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
+// HQ admin gate — Sailz's own provisioning/onboarding console (who gets
+// onboarded, draft review, activation) must never exist on a client
+// deployment, not even behind a login. Set SAILZ_ADMIN=1 only on Sailz's
+// own internal instance (instances/sailz-hq); Shine, The Burg, and every
+// other client deployment simply never set it, so these surfaces 404 —
+// indistinguishable from a route that was never registered — regardless
+// of who's asking or whether they have a valid owner token. The
+// client-facing wizard (/onboard/:token and its step/complete routes) is
+// deliberately NOT gated here: a token is only ever minted by HQ's own
+// /api/onboarding/create, so it stays meaningless on a client instance's
+// own (separate) database with or without this flag.
+const SAILZ_ADMIN = process.env.SAILZ_ADMIN === "1" || process.env.SAILZ_ADMIN === "true";
+function requireHQ(req, res, next) {
+  if (!SAILZ_ADMIN) return res.status(404).end();
+  next();
+}
+
 // First boot (e.g. a fresh Railway deploy with no persistent volume yet):
 // seed so the owner login exists. Skipped whenever a database already
 // exists, so a restart/redeploy never wipes real accumulated data.
@@ -85,6 +102,14 @@ app.use(express.json({ limit: "2mb", verify: (req, res, buf) => { req.rawBody = 
 // a frozen old screen. Registered before the static middleware so it wins
 // over the file that's still sitting in public/ for reference.
 app.get("/brain.html", (req, res) => res.redirect(301, "/"));
+// Sailz's own provisioning console — 404 on every deployment except HQ's
+// own (SAILZ_ADMIN=1), same reasoning as requireHQ below. Registered
+// before the static middleware so it wins over the file that's still
+// sitting in public/ (every deployment ships the same codebase).
+app.get("/onboarding-review.html", (req, res) => {
+  if (!SAILZ_ADMIN) return res.status(404).end();
+  res.sendFile(path.join(__dirname, "..", "public", "onboarding-review.html"));
+});
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 if (!process.env.JWT_SECRET) {
@@ -760,7 +785,7 @@ const onboardingUpload = multer({
 // tighter ceiling than the webhook limiter, keyed by IP.
 const onboardingLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
 
-app.post("/api/onboarding/create", auth, requireOwner, (req, res) => {
+app.post("/api/onboarding/create", requireHQ, auth, requireOwner, (req, res) => {
   const { clientName } = req.body || {};
   if (!clientName) return res.status(400).json({ error: "clientName is required" });
   const entry = onboarding.createOnboarding({ clientName, createdBy: req.user.id });
@@ -775,23 +800,23 @@ app.get("/onboard/:token", (req, res) => {
 // /api/onboarding/:token/* routes below — Express matches path segments in
 // registration order, and "admin" would otherwise be swallowed as a :token
 // value by the earlier (identically-shaped) public route.
-app.get("/api/onboarding/admin", auth, requireOwner, (req, res) => {
+app.get("/api/onboarding/admin", requireHQ, auth, requireOwner, (req, res) => {
   res.json({ onboardings: onboarding.listOnboardings() });
 });
 
-app.get("/api/onboarding/admin/:id", auth, requireOwner, (req, res) => {
+app.get("/api/onboarding/admin/:id", requireHQ, auth, requireOwner, (req, res) => {
   const found = onboarding.getForReview(req.params.id);
   if (!found) return res.status(404).json({ error: "Onboarding not found" });
   res.json(found);
 });
 
-app.post("/api/onboarding/admin/:id/draft", auth, requireOwner, (req, res) => {
+app.post("/api/onboarding/admin/:id/draft", requireHQ, auth, requireOwner, (req, res) => {
   const result = onboarding.updateDraft(req.params.id, req.body || {});
   if (!result.ok) return res.status(result.status).json({ error: result.error });
   res.json(result.onboarding);
 });
 
-app.post("/api/onboarding/admin/:id/activate", auth, requireOwner, async (req, res) => {
+app.post("/api/onboarding/admin/:id/activate", requireHQ, auth, requireOwner, async (req, res) => {
   try {
     const result = await onboarding.activateOnboarding(req.params.id, req.user.id);
     if (!result.ok) return res.status(result.status).json({ error: result.error });
