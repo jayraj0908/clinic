@@ -525,6 +525,10 @@
     <p class="sub">Owner sign-in</p>
     <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="username"></div>
     <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password"></div>
+    <div class="field" style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="keepSignedIn" checked style="width:auto;margin:0">
+      <label for="keepSignedIn" style="display:inline;text-transform:none;letter-spacing:normal;font:500 12px 'Inter';color:var(--dim);cursor:pointer">Keep me signed in</label>
+    </div>
     <div class="err" id="loginErr"></div>
     <button onclick="doLogin()">Sign in</button>
     <div class="authlinks">
@@ -764,7 +768,22 @@ function hex(c){return '#'+c.toString(16).padStart(6,'0')}
 
 /* ------------------------------ auth / api -------------------------------- */
 const $=(id)=>document.getElementById(id);
-let token=sessionStorage.getItem("token");
+// "Keep me signed in" (default on) stores the JWT in localStorage so an
+// installed PWA reopened from the home-screen icon (a fresh browsing
+// context — sessionStorage never survives that) stays signed in;
+// unchecked keeps the tighter sessionStorage-only behavior (cleared when
+// the tab/window closes). Token expiry is unchanged either way — 7d,
+// enforced server-side — this only controls how long the CLIENT holds
+// onto it. Both storages are checked on load (localStorage preferred)
+// and both are always cleared together on sign-out, so a stale copy in
+// the other storage can never resurrect a signed-out session.
+function setAuthItem(key,val,persist){
+  if(persist){localStorage.setItem(key,val);sessionStorage.removeItem(key)}
+  else{sessionStorage.setItem(key,val);localStorage.removeItem(key)}
+}
+function getAuthItem(key){return localStorage.getItem(key)??sessionStorage.getItem(key)}
+function clearAuthItem(key){localStorage.removeItem(key);sessionStorage.removeItem(key)}
+let token=getAuthItem("token");
 
 async function api(path, opts={}){
   const res=await fetch(path,{...opts,headers:{"content-type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}});
@@ -780,13 +799,14 @@ function showMagic(){ hideAuthPanels(); $("magicPanel").classList.remove("hidden
 function showForceChange(){ hideAuthPanels(); $("forceChangeErr").textContent=""; $("fc_cur").value=""; $("fc_new").value=""; $("fc_new2").value=""; $("forceChangePw").classList.remove("hidden"); }
 
 async function afterAuth(data){
-  token=data.token; sessionStorage.setItem("token",token);
+  const persist=$("keepSignedIn")?$("keepSignedIn").checked:true;
+  token=data.token; setAuthItem("token",token,persist);
   if(data.mustChangePassword){
-    sessionStorage.setItem("mustChangePassword","1");
+    setAuthItem("mustChangePassword","1",persist);
     showForceChange();
     return;
   }
-  sessionStorage.removeItem("mustChangePassword");
+  clearAuthItem("mustChangePassword");
   hideAuthPanels(); $("app").classList.remove("hidden");
   boot().catch(err=>console.error(err));
 }
@@ -822,11 +842,11 @@ async function doForceChange(){
     body:JSON.stringify({currentPassword:cur,newPassword:p1})});
   const data=await res.json().catch(()=>({}));
   if(!res.ok){$("forceChangeErr").textContent=data.error||"Couldn't set that password — try again.";return}
-  sessionStorage.removeItem("mustChangePassword");
+  clearAuthItem("mustChangePassword");
   hideAuthPanels(); $("app").classList.remove("hidden");
   boot().catch(err=>console.error(err));
 }
-function logout(){sessionStorage.removeItem("token");sessionStorage.removeItem("mustChangePassword");location.reload()}
+function logout(){clearAuthItem("token");clearAuthItem("mustChangePassword");location.reload()}
 $("pw").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
 
 // Text-node escaping (via textContent round-trip) neutralizes < > & but not
@@ -2752,7 +2772,7 @@ async function boot(){
 }
 
 if(token){
-  if(sessionStorage.getItem("mustChangePassword")==="1"){
+  if(getAuthItem("mustChangePassword")==="1"){
     showForceChange();
   }else{
     hideAuthPanels(); $("app").classList.remove("hidden");
