@@ -129,3 +129,57 @@ Findings below drive the mobile-first pass (docs/queue/SAILZ-CURSOR-PROMPT-11.md
   at 390×844): no drift found — single-column form, thumb-sized
   "Continue" button, progress dots all render cleanly as-is. Confirms
   the "built mobile-first" claim; no changes made.
+
+## Stage 4 — done (installable)
+
+- `GET /manifest.json` (new route, `server/server.js`) — generated
+  per-request from `db.settings.clinicName || instance.name` and
+  `instance.brandColor`, not a static file, so each deployment's install
+  prompt/home-screen name and theme color reflect ITS actual clinic, not
+  a hardcoded default. Verified: swapping in a clean instance (no
+  `db.settings.clinicName` set) correctly falls back to `instance.name`
+  ("The Burg — Sailz", `#e05545`) — the one test run that showed "Shine
+  Dental Clinic" was a local-only artifact (this machine's shared `.env`
+  has `CLINIC_NAME` hardcoded, which every local seed picks up
+  regardless of `INSTANCE`; Railway services don't share env vars across
+  deployments, so this doesn't happen in production).
+- Icons: a plain sailboat glyph (⛵) rendered onto a dark rounded
+  background, exported at 192/512/512-maskable + a 180×180
+  `apple-touch-icon.png` + 32×32 favicon (`public/icons/`,
+  `public/apple-touch-icon.png`, `public/favicon-32.png`). Shared static
+  assets across every instance — the spec asked for one simple icon, not
+  a per-instance-colored set (that's what the manifest's dynamic
+  `theme_color` already covers).
+- `<head>` gained the manifest link, apple-touch-icon link, favicon,
+  `theme-color` meta, and the `apple-mobile-web-app-*` meta trio iOS
+  needs for standalone/status-bar behavior when added to the home
+  screen.
+- `public/sw.js` (new): shell-only service worker. Never intercepts
+  `/api/*` or any cross-origin request (Google Fonts, the PixiJS CDN
+  script) — those fall straight through to the network untouched.
+  Same-origin shell requests (`/`, manifest, icons) are network-first
+  with a cache fallback, so a deploy is visible immediately while
+  online and the cache only ever covers an offline fallback. Registered
+  from `index.html` on `window.load`.
+- Verified live: service worker registers and reaches `active` state
+  with zero console errors; mutated real order data via `/api/orders/
+  :id/advance` and re-fetched `/api/orders` through the same active
+  service worker with no reload — status flipped `new` → `preparing`
+  immediately, confirming the SW never serves stale `/api/*` data.
+  Desktop (1280×800) unaffected.
+- Lighthouse (mobile, `npx lighthouse`, headless) on `/`: **performance
+  99, best-practices 96, accessibility 79** — comfortably clears the ≥85
+  bar on performance. The two accessibility deductions are both
+  pre-existing design decisions, not regressions from this pass, and
+  weren't changed:
+  - `color-contrast` — the app's whole dark/dim-text aesthetic
+    (established across every prior stage of this project); redesigning
+    the color system is out of scope for a mobile-navigation pass.
+  - `meta-viewport` (`user-scalable=no`) — was already in `index.html`
+    before Stage 1. Deliberately left as-is: it's what makes Stage 2's
+    "no page scroll fights" guarantee possible (alongside
+    `touch-action:none`) for the Pixi map's click-only camera: without
+    it, a touch drag risks the browser's own pinch-zoom fighting the
+    canvas instead of the map's own deterministic navigation. Flagging
+    the tradeoff here rather than silently overriding an existing,
+    intentional decision.

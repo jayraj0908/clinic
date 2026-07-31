@@ -110,6 +110,28 @@ app.get("/onboarding-review.html", (req, res) => {
   if (!SAILZ_ADMIN) return res.status(404).end();
   res.sendFile(path.join(__dirname, "..", "public", "onboarding-review.html"));
 });
+// PWA manifest — generated per-request (not a static file) so name/theme
+// color reflect THIS deployment's actual instance/owner-set clinic name,
+// not a hardcoded default. Icons are shared static assets (a plain
+// sailboat glyph, public/icons/) since the spec only asked for one
+// simple icon, not a per-instance-colored set.
+app.get("/manifest.json", (req, res) => {
+  const db = load();
+  const name = (db.settings && db.settings.clinicName) || instance.name || "Sailz";
+  res.json({
+    name: `${name} — Sailz`,
+    short_name: name,
+    start_url: "/",
+    display: "standalone",
+    background_color: "#0a0a0d",
+    theme_color: instance.brandColor || "#c9a066",
+    icons: [
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
+  });
+});
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 if (!process.env.JWT_SECRET) {
