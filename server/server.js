@@ -27,6 +27,7 @@ const orders = require("./orders");
 const onboarding = require("./onboarding");
 const ingest = require("./ingest");
 const leadImport = require("./leadImport");
+const dialer = require("./dialer");
 const { diffProfileFragment, applyProfileEdit } = require("./profileEdits");
 const multer = require("multer");
 const catalog = require("./catalog");
@@ -1590,8 +1591,12 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
   const leadId = m.call?.metadata?.leadId;
   if (leadId) {
     const lead = db.leads.find((l) => l.id === leadId);
-    if (lead && call.outcome === "booked") lead.status = "booked";
-    if (lead && call.outcome === "not_interested") lead.status = "closed_lost";
+    // Single source of truth for outcome → lead-state routing (server/
+    // dialer.js's applyOutcome) — booked/declined/do_not_call apply to any
+    // lead; callback_requested/no_answer/voicemail retry scheduling only
+    // to leads that came from an import batch. do_not_call permanently
+    // adds to db.dnc here regardless of call direction or batch origin.
+    if (lead) dialer.applyOutcome(db, lead, call.outcome, { callbackTime: analysis.structuredData?.callbackTime });
   }
   // Fallback booking path for calls that ended "booked" without a tool-call
   // (e.g. assistant fell back to describing a time in speech only). Skipped
@@ -1789,6 +1794,21 @@ app.get("/api/lead-batches/:id", auth, (req, res) => {
   res.json({ batch, counts, leads });
 });
 
+// Pacing lives on the calling agent's own catalog panel — GET returns the
+// effective (already-clamped) values plus the ceilings themselves, so the
+// UI can show "cap: 30" without hardcoding it twice.
+app.get("/api/dialer/pacing", auth, (req, res) => {
+  const db = load();
+  res.json({ pacing: dialer.getPacing(db), max: dialer.PACING_MAX, min: dialer.PACING_MIN });
+});
+app.post("/api/dialer/pacing", auth, requireOwner, (req, res) => {
+  const db = load();
+  const pacing = dialer.setPacing(db, req.body || {});
+  save();
+  log("system", `${req.user.id} updated dialer pacing: ${JSON.stringify(pacing)}`);
+  res.json({ pacing });
+});
+
 // ---------- scheduler ----------
 let jobs = [];
 function bootSchedules() {
@@ -1873,6 +1893,17 @@ function bootVapiSyncCron() {
   );
 }
 
+// setInterval, not cron — pacing (calls/hour, concurrency) needs a tick
+// far tighter than any cron granularity makes sense for, and it's how
+// "pausing the calling agent halts the loop within one tick, always" is
+// actually true: the kill-switch check is the first thing every tick does.
+const DIALER_TICK_MS = 30 * 1000;
+function bootDialerLoop() {
+  setInterval(() => {
+    dialer.tick().catch((e) => log("error", `Dialer tick failed: ${e.message}`));
+  }, DIALER_TICK_MS);
+}
+
 // Webhook secrets are optional-if-unset (an instance can come up before
 // they're wired), but that should never be silent — a loud boot warning is
 // the difference between "we forgot to set this" being caught in the
@@ -1917,6 +1948,7 @@ app.listen(PORT, () => {
   bootReminderCron();
   bootBackupCron();
   bootVapiSyncCron();
+  bootDialerLoop();
   warnUnsetWebhookSecrets();
   // Only HQ ever polls other deployments — a plain client instance just
   // answers /api/heartbeat requests and never calls startPolling() at all.

@@ -29,6 +29,17 @@ function isDNC(db, phone) {
   return (db.dnc || []).some((n) => String(n).replace(/\D/g, "") === digits);
 }
 
+// Permanent, cross-batch — a number added here is never re-eligible for
+// outbound calling again, even from a future, completely separate import
+// batch (server/dialer.js checks isDNC before ever dialing; server/
+// leadImport.js doesn't check it at import time since DNC is an outbound-
+// calling guardrail, not an import-eligibility one — a DNC contact can
+// still be imported as a record, it just never gets called).
+function addToDNC(db, phone) {
+  if (!phone || isDNC(db, phone)) return;
+  db.dnc.push(phone);
+}
+
 // Called right after a genuinely NEW lead is created, from an
 // asynchronous source (webhook or RFP) where nobody is already talking
 // to the person — never from a live-call flow (save_contact/
@@ -56,4 +67,4 @@ function maybeAutoQueueLead(db, lead) {
   }
 }
 
-module.exports = { isQuietHours, isDNC, maybeAutoQueueLead, QUIET_START_HOUR, QUIET_END_HOUR };
+module.exports = { isQuietHours, isDNC, addToDNC, maybeAutoQueueLead, QUIET_START_HOUR, QUIET_END_HOUR };
