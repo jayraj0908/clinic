@@ -2717,6 +2717,10 @@ async function boot(){
           <span class="tc-name">${esc(f.name)}${f.note?`<span class="tc-note">${esc(f.note)}</span>`:''}</span>
         </div>`).join(''));
     }
+    const heard=(result.files||[]).filter(f=>f.kind==='audio'&&f.status==='parsed'&&f.text);
+    if(heard.length){
+      parts.push(`<div class="k">Here's what I heard — fix anything wrong by typing a follow-up</div>`+heard.map(f=>`<div class="teach-fact-item">"${esc(f.text)}"</div>`).join(''));
+    }
     const p=result.extractedProfile||{};
     if(p.services?.length) parts.push(`<div class="k">Services understood</div>`+p.services.map(s=>`<div class="teach-fact-item">${esc(s.name)}${s.priceRange?' — '+esc(s.priceRange):''}${s.duration?' · '+esc(s.duration):''}</div>`).join(''));
     if(p.policies?.length) parts.push(`<div class="k">Policies understood</div>`+p.policies.map(x=>`<div class="teach-fact-item">${esc(x)}</div>`).join(''));

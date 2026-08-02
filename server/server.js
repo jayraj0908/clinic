@@ -1264,6 +1264,10 @@ app.post("/api/teach/upload", auth, teachLimiter, handleUpload(teachUpload.array
     const teachFileRecords = processed.map((f) => ({
       id: "TF" + Date.now() + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(),
       name: f.name, mimetype: f.mimetype, size: f.size, kind: f.kind, status: f.status,
+      // Capped and kept (not just for audio) so a transcribed voice memo can
+      // be shown back to the client as "here's what I heard — fix anything"
+      // instead of only feeding the extraction pipeline invisibly.
+      text: (f.text || "").slice(0, ingest.MAX_STORED_TEXT_CHARS),
       note: f.note || null, storedPath: f.storedPath || null,
     }));
     db.teachFiles.push(...teachFileRecords);

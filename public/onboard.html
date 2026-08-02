@@ -202,14 +202,18 @@ function wireRecorder(onUploaded){
   $("recUse").onclick=async()=>{
     if(!_recBlob) return;
     const useBtn=$("recUse"); useBtn.disabled=true; useBtn.innerHTML=`<span class="spinner"></span>Uploading…`;
+    const filename=`recording-${Date.now()}.webm`;
     try{
       const fd=new FormData();
-      fd.append("text","");
-      fd.append("files",_recBlob,`recording-${Date.now()}.webm`);
+      // $("f_dump") only exists on the brainDump step — preserve whatever's
+      // already typed there rather than overwriting it with an empty
+      // string (this step's recorder shares state with that textarea).
+      fd.append("text",$("f_dump")?$("f_dump").value:"");
+      fd.append("files",_recBlob,filename);
       const result=await api(`/api/onboarding/${token}/brain-dump`,{method:"POST",body:fd});
       state.data.brainDump=result.data.brainDump;
       _recBlob=null; $("recPlaybackWrap").style.display="none"; $("recHint").textContent="Hold to talk";
-      if(onUploaded) onUploaded(result.data.brainDump);
+      if(onUploaded) onUploaded(result.data.brainDump,filename);
     }catch(e){
       $("recHint").textContent="Upload failed: "+e.message;
     }finally{
@@ -446,7 +450,7 @@ function renderBrainDump(){
   $("skipDumpBtn").onclick=()=>goTo(stepIdx+1);
   $("readBtn").onclick=readBrainDump;
   paintUploaded(d.files||[]);
-  wireRecorder((bd)=>{ paintUploaded(bd.files||[]); paintExtraction(bd.extractedProfile,bd.proposedFacts); });
+  wireRecorder((bd,filename)=>{ paintUploaded(bd.files||[]); appendTranscripts(bd.files,[filename]); paintExtraction(bd.extractedProfile,bd.proposedFacts); });
   if(d.extractedProfile) paintExtraction(d.extractedProfile,d.proposedFacts||[]);
 }
 function paintPending(){
@@ -475,9 +479,21 @@ async function removeUploadedFile(i){
   state.data.brainDump=data;
   paintUploaded(files);
 }
+// Surfaces any newly-transcribed audio's text directly into the visible
+// brain-dump textarea ("here's what I heard — fix anything wrong") instead
+// of letting it feed the extraction pipeline invisibly — matched against
+// uploadedNames so a re-render/later batch never re-appends the same
+// transcript twice.
+function appendTranscripts(files,uploadedNames){
+  const fresh=(files||[]).filter(f=>uploadedNames.includes(f.name)&&f.kind==="audio"&&f.status==="parsed"&&f.text);
+  if(!fresh.length)return;
+  const block=fresh.map(f=>`[Here's what I heard from "${f.name}" — fix anything wrong]\n${f.text}`).join("\n\n");
+  $("f_dump").value=($("f_dump").value.trim()?$("f_dump").value.trim()+"\n\n":"")+block;
+}
 async function readBrainDump(){
   if(!pendingFiles.length&&!$("f_dump").value.trim()){goTo(stepIdx+1);return}
   const btn=$("readBtn"); btn.disabled=true; btn.innerHTML=`<span class="spinner"></span>Reading…`;
+  const uploadedNames=pendingFiles.map(f=>f.name);
   const fd=new FormData();
   fd.append("text",$("f_dump").value);
   pendingFiles.forEach(f=>fd.append("files",f));
@@ -488,6 +504,7 @@ async function readBrainDump(){
     $("f_files").value="";
     paintPending();
     paintUploaded(result.data.brainDump.files||[]);
+    appendTranscripts(result.data.brainDump.files,uploadedNames);
     paintExtraction(result.data.brainDump.extractedProfile,result.data.brainDump.proposedFacts);
   }catch(e){
     $("extractResult").innerHTML=`<div class="err">${esc(e.message)}</div>`;
@@ -575,7 +592,12 @@ function paintInterview(loading){
   $("recToggle").onclick=()=>{
     const opening=$("recWrap").style.display==="none";
     $("recWrap").style.display=opening?"block":"none";
-    if(opening) wireRecorder(()=>{ $("recInterviewMsg").innerHTML=`<p class="sub" style="margin:10px 0 0;text-align:center">Got it — added to what your brain knows.</p>`; });
+    if(opening) wireRecorder((bd,filename)=>{
+      const f=(bd.files||[]).find(x=>x.name===filename);
+      const heard=f&&f.kind==="audio"&&f.status==="parsed"&&f.text
+        ?`<p class="sub" style="margin:10px 0 0"><strong style="color:var(--ink)">Here's what I heard:</strong> "${esc(f.text)}"</p>`:"";
+      $("recInterviewMsg").innerHTML=`<p class="sub" style="margin:10px 0 0;text-align:center">Got it — added to what your brain knows.</p>${heard}`;
+    });
   };
 }
 async function fetchNextQuestion(){
