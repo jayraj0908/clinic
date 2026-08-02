@@ -63,6 +63,22 @@ const instance = instanceMetaPath ? readJSONSafe(instanceMetaPath, DEFAULT_INSTA
 const profilePath = resolveFile("clinic-profile.json");
 const profile = profilePath ? readJSONSafe(profilePath, DEFAULT_PROFILE) : DEFAULT_PROFILE;
 
+// Replay any Teach-approved profile edits (server.js's /api/profile-edits/
+// :id/approve — new service, price/hours change, etc.) on top of the static
+// file. This is a DB-backed overlay, not a file rewrite: an approval
+// mutates `profile` in place immediately (live on the very next call, no
+// redeploy — see server/profileEdits.js), and this replay is what makes
+// that survive an actual process restart, since `profile` above is
+// otherwise re-read fresh from the static file on every boot.
+try {
+  const { load } = require("./store");
+  const { applyProfileEdit } = require("./profileEdits");
+  const db = load();
+  (db.profileEdits || [])
+    .filter((e) => e.status === "approved")
+    .forEach((e) => { try { applyProfileEdit(profile, e.diff); } catch { /* skip a bad overlay entry, don't fail boot */ } });
+} catch { /* db not ready yet on a truly fresh boot — profile stays file-only until the first edit is approved */ }
+
 const inboundPromptPath = resolveFile("inbound-receptionist-prompt.md");
 const outboundPromptPath = resolveFile("outbound-setter-prompt.md");
 

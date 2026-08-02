@@ -25,6 +25,8 @@ const leadQueue = require("./leadQueue");
 const { instance, profile } = require("./instance");
 const orders = require("./orders");
 const onboarding = require("./onboarding");
+const ingest = require("./ingest");
+const { diffProfileFragment, applyProfileEdit } = require("./profileEdits");
 const multer = require("multer");
 const catalog = require("./catalog");
 const { AGENTS } = require("./brain");
@@ -774,6 +776,28 @@ app.get("/api/attention", auth, (req, res) => {
     }
   });
 
+  // Same as onboarding's own audio-review item above, but for the
+  // post-onboarding Teach surface (db.teachFiles) on THIS live instance.
+  const queuedTeachAudio = db.teachFiles.filter((f) => f.kind === "audio" && f.status === "queued");
+  if (queuedTeachAudio.length) {
+    items.push({
+      type: "teach_audio_review", severity: "low",
+      title: `${queuedTeachAudio.length} voice recording${queuedTeachAudio.length > 1 ? "s" : ""} ${queuedTeachAudio.length > 1 ? "need" : "needs"} manual review`,
+      detail: `No transcription service is connected — listen and teach the brain what's in them by hand.`,
+      action: { label: "Review", method: "GET", path: "teach" },
+    });
+  }
+
+  const proposedProfileEdits = db.profileEdits.filter((e) => e.status === "proposed");
+  if (proposedProfileEdits.length) {
+    items.push({
+      type: "profile_edit_review", severity: "medium",
+      title: `${proposedProfileEdits.length} profile edit${proposedProfileEdits.length > 1 ? "s" : ""} proposed — review`,
+      detail: `New service, price, or hours changes learned from something you taught the brain — nothing's live until you approve.`,
+      action: { label: "Review", method: "GET", path: "memory" },
+    });
+  }
+
   res.json({ items, count: items.length });
 });
 
@@ -1174,6 +1198,138 @@ app.post("/api/onboarding/:token/complete", onboardingLimiter, async (req, res) 
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ---------- Teach Your Brain (post-onboarding, forever) ----------
+// Same drop-anything pipeline as the onboarding wizard's brain dump
+// (server/ingest.js), but scoped to the live instance instead of a token,
+// and open to any logged-in user (owner or staff) — this is a client
+// surface, not a Sailz one. Facts flow into the existing db.memory
+// approval queue (librarian dedup via isSameFact, same as every other
+// fact source); profile-shaped extractions (new service, price/hours
+// change) become a proposed db.profileEdits entry with a diff preview
+// instead of ever silently overwriting anything.
+const teachUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024, files: 20 },
+  fileFilter(req, file, cb) {
+    const ok = /\.(txt|pdf|docx|jpe?g|png|heic|heif|m4a|mp3|wav|webm)$/i.test(file.originalname || "");
+    cb(ok ? null : new Error(`"${file.originalname}" isn't a supported file type — try .txt, .pdf, .docx, a photo (.jpg/.png/.heic), or audio (.m4a/.mp3/.wav/.webm).`), ok);
+  },
+});
+const teachLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+
+app.post("/api/teach/upload", auth, teachLimiter, handleUpload(teachUpload.array("files", 20)), async (req, res) => {
+  try {
+    const text = (req.body?.text || "").trim();
+    const files = req.files || [];
+    if (!text && !files.length) return res.status(400).json({ error: "Type something or attach a file first." });
+
+    const db = load();
+    const processed = [];
+    for (const f of files) processed.push(await ingest.processFile(f, "teach", instance.id));
+
+    const parsedText = processed.filter((f) => f.status === "parsed" && f.text).map((f) => `\n\n[From ${f.name}]\n${f.text}`).join("\n");
+    const corpus = [text, parsedText].join("\n").trim();
+    const extractedProfile = corpus
+      ? await ingest.structureCorpus(corpus)
+      : { services: [], policies: [], insuranceAccepted: [], selfPay: "", hours: [], facts: [] };
+    const imageFacts = processed.filter((f) => f.kind === "image" && f.imageProfile?.facts?.length).flatMap((f) => f.imageProfile.facts);
+    const allFacts = [...(extractedProfile.facts || []), ...imageFacts];
+
+    const source = files.length ? `Teach: ${files.map((f) => f.originalname).join(", ")}` : "Teach: typed note";
+    const proposedFacts = [];
+    for (const f of allFacts) {
+      const candidate = { type: "policy_correction", fact: f.fact, source };
+      // Only checked against db.memory's EXISTING entries, never against
+      // other facts from this same batch: isSameFact's source-overlap
+      // heuristic treats "same source" as a strong same-event signal, but
+      // every fact from one Teach upload shares this exact source string —
+      // comparing within the batch would falsely dedup unrelated facts
+      // that just happen to come from the same photo/note.
+      const isDup = db.memory.some((e) => isSameFact(e, candidate));
+      if (isDup) continue;
+      const entry = { id: "M" + Date.now() + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), status: "proposed", ...candidate };
+      db.memory.push(entry);
+      proposedFacts.push(entry);
+    }
+
+    const diff = diffProfileFragment(profile, extractedProfile);
+    let profileEdit = null;
+    if (diff) {
+      profileEdit = { id: "PE" + Date.now() + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), status: "proposed", source, diff };
+      db.profileEdits.push(profileEdit);
+    }
+
+    const teachFileRecords = processed.map((f) => ({
+      id: "TF" + Date.now() + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(),
+      name: f.name, mimetype: f.mimetype, size: f.size, kind: f.kind, status: f.status,
+      note: f.note || null, storedPath: f.storedPath || null,
+    }));
+    db.teachFiles.push(...teachFileRecords);
+
+    save();
+    log("system", `${req.user.id} taught the brain — ${proposedFacts.length} fact(s) proposed${profileEdit ? ", 1 profile edit proposed" : ""}`);
+    res.json({ files: teachFileRecords, extractedProfile, proposedFacts, profileEdit });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Same raw-bytes pattern as the onboarding admin route above — whitelisted
+// against storedPath values this server itself already recorded, Content-
+// Type derived from a fixed extension map, never the uploader's mimetype.
+// auth only (not requireOwner) so staff can also listen/look, matching
+// GET /api/memory's own access level.
+app.get("/api/teach/upload", auth, (req, res) => {
+  const db = load();
+  const rel = req.query.path;
+  const file = db.teachFiles.find((f) => f.storedPath && f.storedPath === rel);
+  if (!file) return res.status(404).json({ error: "File not found" });
+  const abs = path.join(path.dirname(DB_PATH), file.storedPath);
+  const type = RAW_UPLOAD_CONTENT_TYPES[path.extname(abs).toLowerCase()] || "application/octet-stream";
+  res.setHeader("Content-Type", type);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.name || "upload")}"`);
+  const stream = fs.createReadStream(abs);
+  stream.on("error", () => { if (!res.headersSent) res.status(404).end(); });
+  stream.pipe(res);
+});
+
+app.get("/api/profile-edits", auth, (req, res) => {
+  const db = load();
+  const { status } = req.query;
+  const items = (status ? db.profileEdits.filter((e) => e.status === status) : db.profileEdits)
+    .slice()
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+  res.json({ profileEdits: items });
+});
+
+app.post("/api/profile-edits/:id/approve", auth, requireOwner, (req, res) => {
+  const db = load();
+  const e = db.profileEdits.find((x) => x.id === req.params.id);
+  if (!e) return res.status(404).json({ error: "Profile edit not found" });
+  if (e.status !== "proposed") return res.status(409).json({ error: `Already ${e.status}.` });
+  applyProfileEdit(profile, e.diff); // live immediately — mutates the same object agents.js/vapiAssistant.js already read
+  e.status = "approved";
+  e.approvedBy = req.user.id;
+  e.approvedAt = new Date().toISOString();
+  save();
+  vapiAssistant.invalidatePromptCache();
+  vapiSync.scheduleSyncDebounced(req.user.id);
+  log("system", `Profile edit ${e.id} approved by ${req.user.id} — live immediately, no redeploy`);
+  res.json(e);
+});
+
+app.post("/api/profile-edits/:id/reject", auth, requireOwner, (req, res) => {
+  const db = load();
+  const e = db.profileEdits.find((x) => x.id === req.params.id);
+  if (!e) return res.status(404).json({ error: "Profile edit not found" });
+  e.status = "rejected";
+  e.rejectedBy = req.user.id;
+  save();
+  log("system", `Profile edit ${e.id} rejected by ${req.user.id}`);
+  res.json(e);
 });
 
 // ---------- webhooks (no auth; verify per-provider signatures in prod) ----------

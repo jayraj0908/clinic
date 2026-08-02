@@ -35,6 +35,12 @@ function load() {
   // the owner has flagged. Checked by server/leadQueue.js before any
   // automated outbound contact; never auto-populated, owner-managed only.
   if (!Array.isArray(db.dnc)) { db.dnc = []; migrated = true; }
+  // "Teach Your Brain" (server.js's /api/teach/upload) — everything ever
+  // uploaded there, and the profile-shaped extractions proposed from it.
+  // Facts extracted the same way land in the existing db.memory instead
+  // (same approval flow the librarian already uses).
+  if (!Array.isArray(db.teachFiles)) { db.teachFiles = []; migrated = true; }
+  if (!Array.isArray(db.profileEdits)) { db.profileEdits = []; migrated = true; }
   // A live instance's db.integrations was seeded before "resend" existed as
   // an entry — add it in place rather than requiring a reseed (which would
   // wipe real accumulated data) just to pick up a newly-added integration.
