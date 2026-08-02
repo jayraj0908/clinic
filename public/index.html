@@ -2152,6 +2152,11 @@ async function boot(){
           <input type="checkbox" id="autoCallToggle" ${dash.settings&&dash.settings.autoCallNewLeads?'checked':''} style="width:16px;height:16px;accent-color:var(--ink)">
           <span style="font:500 11px 'Inter';color:var(--ink)">Auto-queue new leads for a callback</span>
         </label>
+      </div>
+      <div class="sb-section">
+        <div class="eyebrow">DIALER PACING — IMPORTED BATCHES</div>
+        <div class="sb-desc">Caps how fast the dialer works an imported list. Enforced server-side, not by a prompt — these hard ceilings can't be configured away.</div>
+        <div id="pacingForm"><div class="center-state" style="padding:14px"><span class="spinner"></span></div></div>
       </div>`:''}
       ${isOnOrPaused&&h&&h.recentActivity&&h.recentActivity.length?`
       <div class="sb-section">
@@ -2219,6 +2224,39 @@ async function boot(){
         toggleBtn.textContent=action==='activate'?'Activate':'Pause';
         const msgEl=document.getElementById('catalogMsg');
         if(msgEl)msgEl.innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;
+      }
+    };
+    if(agentId==='calling'&&document.getElementById('pacingForm'))loadPacingForm();
+  }
+
+  const PACING_FIELDS=[
+    {id:'maxConcurrent',label:'Max concurrent calls'},
+    {id:'maxPerHour',label:'Max calls per hour'},
+    {id:'maxAttempts',label:'Attempts per lead'},
+    {id:'retrySpacingHours',label:'Retry spacing (hours)'},
+  ];
+  async function loadPacingForm(){
+    const wrap=document.getElementById('pacingForm');
+    let data;
+    try{data=await api('/api/dialer/pacing')}catch(e){wrap.innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;return}
+    const {pacing,min,max}=data;
+    wrap.innerHTML=PACING_FIELDS.map(f=>`
+      <label style="display:block;font:600 9px 'Inter';letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:10px 0 5px">${esc(f.label)} <span style="text-transform:none;letter-spacing:0">(${min[f.id]}–${max[f.id]})</span></label>
+      <input type="number" class="import-select" data-pacing-field="${f.id}" min="${min[f.id]}" max="${max[f.id]}" value="${pacing[f.id]}">
+    `).join('')+`<button class="toggle-btn activate" id="pacingSaveBtn" style="margin-top:12px;width:100%">Save pacing</button><div id="pacingMsg" style="margin-top:8px"></div>`;
+    document.getElementById('pacingSaveBtn').onclick=async()=>{
+      const btn=document.getElementById('pacingSaveBtn');
+      const patch={};
+      document.querySelectorAll('[data-pacing-field]').forEach(inp=>{patch[inp.dataset.pacingField]=Number(inp.value)});
+      btn.disabled=true;btn.textContent='Saving…';
+      try{
+        const result=await api('/api/dialer/pacing',{method:'POST',body:JSON.stringify(patch)});
+        document.getElementById('pacingMsg').innerHTML='<div class="catalog-msg ok">Saved.</div>';
+        PACING_FIELDS.forEach(f=>{const inp=document.querySelector(`[data-pacing-field="${f.id}"]`);if(inp)inp.value=result.pacing[f.id]});
+      }catch(e){
+        document.getElementById('pacingMsg').innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;
+      }finally{
+        btn.disabled=false;btn.textContent='Save pacing';
       }
     };
   }
