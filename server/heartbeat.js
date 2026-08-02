@@ -69,6 +69,11 @@ function buildSnapshot() {
       ordersThisWeek: countSince(db.orders, "ts"),
       leadsThisWeek: countSince(db.leads, "createdAt"),
       apptsUpcomingThisWeek: apptsUpcoming,
+      // Outbound Lead Engine dialer — counts only, no PHI (no names/phones/
+      // transcripts), matching this whole snapshot's own rule.
+      dialerAttemptsThisWeek: countSince(db.dialerAttempts, "ts"),
+      dialerLeadsQueued: (db.leads || []).filter((l) => l.dialerState === "queued").length,
+      dialerLeadsExhausted: (db.leads || []).filter((l) => l.dialerState === "exhausted").length,
     },
     activeAgents,
     health: {

@@ -170,10 +170,20 @@ function weekStats(db, hubId) {
     ];
   }
   if (hubId === "calling") {
+    // The scoreboard IS the sell here — every number a client evaluating
+    // the outbound Lead Engine actually cares about, front and center.
     const outboundWeek = db.calls.filter((c) => c.dir === "outbound" && inLastWeek(c.ts));
+    const booked = outboundWeek.filter((c) => c.outcome === "booked").length;
+    // A "connect" = a live human actually picked up — everything except
+    // no_answer/voicemail (which never reached a person) counts, including
+    // the generic "completed" fallback outcome.
+    const connects = outboundWeek.filter((c) => c.outcome !== "no_answer" && c.outcome !== "voicemail").length;
+    const bookRate = outboundWeek.length ? `${Math.round((booked / outboundWeek.length) * 100)}%` : "—";
     return [
       { label: "Calls made this week", value: outboundWeek.length },
-      { label: "Booked this week", value: outboundWeek.filter((c) => c.outcome === "booked").length },
+      { label: "Connects this week", value: connects },
+      { label: "Meetings booked this week", value: booked },
+      { label: "Book rate", value: bookRate },
       { label: "Median speed-to-lead", value: medianSpeedToLead(db) },
     ];
   }

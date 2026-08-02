@@ -2286,6 +2286,15 @@ async function boot(){
         <div class="lead-detail-row"><span class="k">Source</span><span class="v">${esc(lead.source||'—')}</span></div>
         <div class="lead-detail-row"><span class="k">First contact</span><span class="v">${esc(fmtRelative(lead.createdAt))}</span></div>
       </div>
+      ${lead.batchId?`
+      <div class="sb-section">
+        <div class="eyebrow">DIALER — IMPORT BATCH</div>
+        <div class="lead-detail-row"><span class="k">State</span><span class="v"><span class="bc-stat bc-${esc(lead.dialerState||'queued')}">${esc(lead.dialerState||'queued')}</span></span></div>
+        <div class="lead-detail-row"><span class="k">Attempts</span><span class="v">${lead.attempts||0}</span></div>
+        ${lead.nextAttemptAt?`<div class="lead-detail-row"><span class="k">Next attempt</span><span class="v">${esc(new Date(lead.nextAttemptAt).toLocaleString())}</span></div>`:''}
+        ${lead.voicemailLeft?`<div class="lead-detail-row"><span class="k">Voicemail</span><span class="v">Left on first attempt</span></div>`:''}
+        ${lead.timezone?`<div class="lead-detail-row"><span class="k">Timezone</span><span class="v">${esc(lead.timezone)}</span></div>`:''}
+      </div>`:''}
       ${linkedAppts.length?`
       <div class="sb-section">
         <div class="eyebrow">APPOINTMENTS</div>
@@ -2293,12 +2302,15 @@ async function boot(){
       </div>`:''}
       ${linkedCalls.length?`
       <div class="sb-section">
-        <div class="eyebrow">CALLS</div>
-        ${linkedCalls.map(c=>`<div class="sb-item"><span class="ts">${esc(fmtRelative(c.ts))}</span>${esc(c.summary||'Call')}${c.outcome?' · '+esc(c.outcome):''}</div>`).join('')}
+        <div class="eyebrow">CALLS — TAP FOR RECORDING/TRANSCRIPT</div>
+        ${linkedCalls.map(c=>`<div class="sb-item" style="cursor:pointer" data-open-call="${esc(c.id)}"><span class="ts">${esc(fmtRelative(c.ts))}</span>${esc(c.summary||'Call')}${c.outcome?' · '+esc(c.outcome):''}${c.recordingUrl?' · 🎙':''}</div>`).join('')}
       </div>`:''}
     `);
     openPanel();
     document.getElementById('sbBack').onclick=()=>sbReturnTo&&sbReturnTo();
+    document.querySelectorAll('[data-open-call]').forEach(row=>{
+      row.onclick=()=>openCallDrawer(row.dataset.openCall);
+    });
   }
   function openPanel(){
     sidebar.classList.add('show');sbOpen=true;sbShiftT=1;
@@ -2457,7 +2469,11 @@ async function boot(){
     return(dash.leads||[]).find(l=>l.name===c.who||l.phone===c.who);
   }
   function openCallDrawer(callId){
-    const c=callsData.find(x=>x.id===callId);
+    // callsData is only populated once the Calls tab has been visited
+    // (renderCalls' own fetch) — dash.calls (loaded at boot, kept live by
+    // refreshRealData) is the fallback so opening a call from the lead
+    // drawer works even if the Calls tab was never opened this session.
+    const c=callsData.find(x=>x.id===callId)||(dash.calls||[]).find(x=>x.id===callId);
     if(!c)return;
     document.getElementById('callDrawerTitle').textContent=c.who||'Call';
     const lead=findLeadForCall(c);
