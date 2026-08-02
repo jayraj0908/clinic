@@ -68,6 +68,18 @@
   .fstatus.parsed{background:rgba(120,200,120,.14);color:#8fd18f}
   .fstatus.queued{background:rgba(201,160,102,.16);color:var(--accent)}
   .fstatus.failed{background:rgba(224,138,122,.16);color:#e08a7a}
+  /* voice recorder — shared between brainDump + interview steps */
+  .recorder{border:1px solid var(--line);border-radius:12px;padding:18px;text-align:center;margin-top:14px}
+  .rec-btn{width:64px;height:64px;border-radius:50%;background:rgba(201,160,102,.12);border:1px solid rgba(201,160,102,.4);
+    color:var(--accent);font-size:22px;display:flex;align-items:center;justify-content:center;margin:0 auto;cursor:pointer;
+    user-select:none;-webkit-user-select:none;transition:background .15s,transform .1s,border-color .15s}
+  .rec-btn.active{background:#c0392b;border-color:#c0392b;color:#fff;transform:scale(1.08)}
+  .rec-hint{font:500 10px 'Inter';letter-spacing:.06em;color:var(--dim);margin-top:10px;text-transform:uppercase}
+  .rec-playback{margin-top:14px}
+  .rec-playback audio{width:100%}
+  .rec-actions{display:flex;gap:8px;margin-top:10px}
+  .rec-actions button{flex:1}
+  .rec-toggle{font:500 11px 'Inter';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;text-align:center;margin-top:14px}
   .fstatus.pending{background:rgba(255,255,255,.08);color:var(--dim)}
   /* extraction review */
   .extract-sec{margin-top:18px}
@@ -115,6 +127,89 @@ async function api(path,opts={}){
   const data=await res.json().catch(()=>({}));
   if(!res.ok){const e=new Error(data.error||"Something went wrong");e.status=res.status;throw e}
   return data;
+}
+
+/* ---------------- shared voice recorder (brainDump + interview steps) ----
+   Hold the mic to talk, release to stop; playback + re-record; "Use this
+   recording" uploads the blob into the SAME brain-dump pipeline as any
+   other file, so a voice memo gets exactly the same parsed/queued/failed
+   treatment as an uploaded audio file. */
+function recorderHTML(){
+  return `
+    <div class="recorder" id="recorder">
+      <div class="rec-btn" id="recBtn">🎙</div>
+      <div class="rec-hint" id="recHint">Hold to talk</div>
+      <div class="rec-playback" id="recPlaybackWrap" style="display:none">
+        <audio id="recAudio" controls></audio>
+        <div class="rec-actions">
+          <button class="btn-ghost" id="recRedo">Re-record</button>
+          <button class="btn-primary" id="recUse">Use this recording</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+let _recMedia=null,_recChunks=[],_recBlob=null,_recStream=null;
+function wireRecorder(onUploaded){
+  const btn=$("recBtn");
+  if(!btn) return;
+  if(!(navigator.mediaDevices && window.MediaRecorder)){
+    $("recHint").textContent="Voice recording isn't supported in this browser.";
+    btn.style.opacity=.35; btn.style.pointerEvents="none";
+    return;
+  }
+  const start=async(e)=>{
+    e.preventDefault();
+    if(_recMedia&&_recMedia.state==="recording") return;
+    $("recPlaybackWrap").style.display="none";
+    try{
+      _recStream=await navigator.mediaDevices.getUserMedia({audio:true});
+    }catch{
+      $("recHint").textContent="Microphone access denied — check your browser's site settings.";
+      return;
+    }
+    _recChunks=[];
+    const mime=(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported("audio/webm;codecs=opus"))?"audio/webm;codecs=opus":"audio/webm";
+    _recMedia=new MediaRecorder(_recStream,{mimeType:mime});
+    _recMedia.ondataavailable=(ev)=>{ if(ev.data.size>0) _recChunks.push(ev.data); };
+    _recMedia.onstop=()=>{
+      _recBlob=new Blob(_recChunks,{type:"audio/webm"});
+      _recStream.getTracks().forEach(t=>t.stop());
+      $("recAudio").src=URL.createObjectURL(_recBlob);
+      $("recPlaybackWrap").style.display="block";
+      btn.classList.remove("active");
+      $("recHint").textContent="Tap and hold to talk again";
+    };
+    _recMedia.start();
+    btn.classList.add("active");
+    $("recHint").textContent="Recording… release to stop";
+  };
+  const stop=(e)=>{
+    if(e) e.preventDefault();
+    if(_recMedia&&_recMedia.state==="recording") _recMedia.stop();
+  };
+  btn.onmousedown=start; btn.onmouseup=stop; btn.onmouseleave=stop;
+  btn.ontouchstart=start; btn.ontouchend=stop;
+  $("recRedo").onclick=()=>{
+    _recBlob=null; $("recPlaybackWrap").style.display="none"; $("recHint").textContent="Hold to talk";
+  };
+  $("recUse").onclick=async()=>{
+    if(!_recBlob) return;
+    const useBtn=$("recUse"); useBtn.disabled=true; useBtn.innerHTML=`<span class="spinner"></span>Uploading…`;
+    try{
+      const fd=new FormData();
+      fd.append("text","");
+      fd.append("files",_recBlob,`recording-${Date.now()}.webm`);
+      const result=await api(`/api/onboarding/${token}/brain-dump`,{method:"POST",body:fd});
+      state.data.brainDump=result.data.brainDump;
+      _recBlob=null; $("recPlaybackWrap").style.display="none"; $("recHint").textContent="Hold to talk";
+      if(onUploaded) onUploaded(result.data.brainDump);
+    }catch(e){
+      $("recHint").textContent="Upload failed: "+e.message;
+    }finally{
+      useBtn.disabled=false; useBtn.textContent="Use this recording";
+    }
+  };
 }
 
 function renderProgress(){
@@ -285,6 +380,7 @@ function renderBrainDump(){
     </div>
     <div class="filelist" id="pendingList"></div>
     <div class="filelist" id="fileList"></div>
+    ${recorderHTML()}
     <div id="extractResult"></div>
     <div class="btnbar">
       <button class="btn-ghost" onclick="goTo(stepIdx-1)">Back</button>
@@ -300,6 +396,7 @@ function renderBrainDump(){
   $("skipDumpBtn").onclick=()=>goTo(stepIdx+1);
   $("readBtn").onclick=readBrainDump;
   paintUploaded(d.files||[]);
+  wireRecorder((bd)=>{ paintUploaded(bd.files||[]); paintExtraction(bd.extractedProfile,bd.proposedFacts); });
   if(d.extractedProfile) paintExtraction(d.extractedProfile,d.proposedFacts||[]);
 }
 function paintPending(){
@@ -421,7 +518,15 @@ function paintInterview(loading){
     <div class="qcount">${interviewQas.length} of up to 8</div>
     <div class="chat" id="chat">${bubbles}</div>
     <div id="qArea">${loading?`<div class="center-state" style="padding:20px"><span class="spinner"></span>Thinking of a question…</div>`:""}</div>
+    <div class="rec-toggle" id="recToggle">🎙 Or just talk instead</div>
+    <div id="recWrap" style="display:none">${recorderHTML()}</div>
+    <div id="recInterviewMsg"></div>
   `;
+  $("recToggle").onclick=()=>{
+    const opening=$("recWrap").style.display==="none";
+    $("recWrap").style.display=opening?"block":"none";
+    if(opening) wireRecorder(()=>{ $("recInterviewMsg").innerHTML=`<p class="sub" style="margin:10px 0 0;text-align:center">Got it — added to what your brain knows.</p>`; });
+  };
 }
 async function fetchNextQuestion(){
   let result;

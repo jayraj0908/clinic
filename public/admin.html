@@ -67,6 +67,18 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .empty{text-align:center;color:var(--dim);font:500 12px 'Inter';padding:40px 0}
 
+  /* ---------- uploaded files (brain-dump review) ---------- */
+  .upfile{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .upfile .uf-head{display:flex;align-items:center;gap:10px}
+  .upfile .uf-name{flex:1;font:600 12px 'Inter';min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .upfile .uf-note{font:400 11px 'Inter';color:var(--dim);margin-top:6px;line-height:1.5}
+  .upfile audio,.upfile img{margin-top:8px;width:100%;max-height:220px;border-radius:8px}
+  .upfile img{object-fit:contain;background:rgba(255,255,255,.03)}
+  .ufstatus{flex:none;font:700 8.5px 'Inter';letter-spacing:.1em;text-transform:uppercase;padding:3px 9px;border-radius:999px}
+  .ufstatus.parsed{background:rgba(127,214,176,.14);color:#7fd6b0}
+  .ufstatus.queued{background:rgba(201,160,102,.16);color:var(--accent)}
+  .ufstatus.failed{background:rgba(224,138,122,.14);color:#e08a7a}
+
   /* ---------- HQ console tab bar ---------- */
   .tabbar{display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--line)}
   .tabbar button{background:transparent;border:0;border-radius:0;color:var(--dim);font:600 10px 'Inter';
@@ -297,6 +309,33 @@ async function renderOnboardingList(){
   renderOnboardRows();
 }
 
+// Every file the client has uploaded so far (brain dump + voice, during
+// onboarding or — same shape — later via the Teach surface), regardless of
+// whether the wizard's finished. audio/image files link to the raw-bytes
+// route (server.js's /api/onboarding/admin/:id/upload) so Sailz can
+// actually listen/look, not just see a filename.
+function renderUploadedFiles(o){
+  const files=o.data?.brainDump?.files||[];
+  if(!files.length) return "";
+  const src=(f)=>`/api/onboarding/admin/${o.id}/upload?path=${encodeURIComponent(f.storedPath)}`;
+  return `
+    <div class="panel" style="margin-top:20px">
+      <h2>Uploaded files (${files.length})</h2>
+      ${files.map(f=>`
+        <div class="upfile">
+          <div class="uf-head">
+            <span class="ufstatus ${esc(f.status)}">${esc(f.status)}</span>
+            <span class="uf-name">${esc(f.name)}</span>
+          </div>
+          ${f.note?`<div class="uf-note">${esc(f.note)}</div>`:""}
+          ${f.storedPath&&f.kind==="audio"?`<audio controls src="${src(f)}"></audio>`:""}
+          ${f.storedPath&&f.kind==="image"?`<img src="${src(f)}" alt="${esc(f.name)}">`:""}
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 let draftState=null, currentId=null, factRows=[];
 async function renderOnboardDetail(id){
   currentId=id;
@@ -305,7 +344,7 @@ async function renderOnboardDetail(id){
   try{ o=await api(`/api/onboarding/admin/${id}`); }catch(e){ $("tabBody").innerHTML=`<div class="empty">${esc(e.message)}</div>`; return; }
 
   if(!o.draft){
-    $("tabBody").innerHTML=`<a class="back" onclick="location.search='?tab=onboarding'">‹ All onboardings</a><div class="empty" style="margin-top:20px">${esc(o.clientName)} hasn't finished the wizard yet (currently on "${esc(o.currentStep)}").</div>`;
+    $("tabBody").innerHTML=`<a class="back" onclick="location.search='?tab=onboarding'">‹ All onboardings</a><div class="empty" style="margin-top:20px">${esc(o.clientName)} hasn't finished the wizard yet (currently on "${esc(o.currentStep)}").</div>${renderUploadedFiles(o)}`;
     return;
   }
   draftState=JSON.parse(JSON.stringify(o.draft));
@@ -338,6 +377,8 @@ async function renderOnboardDetail(id){
         <textarea class="tall" id="d_messages">${esc(JSON.stringify(draftState.messagesJson,null,2))}</textarea>
       </div>
     </div>
+
+    ${renderUploadedFiles(o)}
 
     <div class="panel" style="margin-top:20px">
       <h2>Agents to activate</h2>

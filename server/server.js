@@ -759,6 +759,21 @@ app.get("/api/attention", auth, (req, res) => {
       });
     });
 
+  // Voice memos land here whenever no DEEPGRAM_API_KEY/ASSEMBLYAI_API_KEY was
+  // configured at upload time (server/onboarding.js's processFile) — never a
+  // dead end for the client, just a manual-review queue for Sailz.
+  db.onboardings.forEach((o) => {
+    const queuedAudio = (o.data?.brainDump?.files || []).filter((f) => f.kind === "audio" && f.status === "queued");
+    if (queuedAudio.length) {
+      items.push({
+        type: "onboarding_audio_review", severity: "low",
+        title: `${o.clientName} — ${queuedAudio.length} voice recording${queuedAudio.length > 1 ? "s" : ""} ${queuedAudio.length > 1 ? "need" : "needs"} manual review`,
+        detail: `No transcription service was connected when these were uploaded — listen and fold anything useful into the draft by hand.`,
+        action: { label: "Review", method: "GET", path: `onboarding/${o.id}` },
+      });
+    }
+  });
+
   res.json({ items, count: items.length });
 });
 
@@ -1086,6 +1101,35 @@ app.post("/api/onboarding/admin/:id/activate", requireHQ, auth, requireOwner, as
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Lets Sailz actually listen to / view a raw photo or voice memo a client
+// uploaded (needed for the "queued for manual review" path when no
+// transcription key is set). Content-Type is derived from a fixed
+// extension allowlist — NEVER the uploader's self-reported mimetype — and
+// the requested path must exactly match a storedPath this onboarding's own
+// upload pipeline already recorded, so this can't be turned into an
+// arbitrary-file-read or a stored-XSS-via-spoofed-Content-Type vector.
+const RAW_UPLOAD_CONTENT_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".webm": "audio/webm" };
+app.get("/api/onboarding/admin/:id/upload", requireHQ, auth, requireOwner, (req, res) => {
+  const o = onboarding.getById(req.params.id);
+  if (!o) return res.status(404).json({ error: "Onboarding not found" });
+  const rel = req.query.path;
+  const file = (o.data?.brainDump?.files || []).find((f) => f.storedPath && f.storedPath === rel);
+  if (!file) return res.status(404).json({ error: "File not found" });
+  const abs = path.join(path.dirname(DB_PATH), file.storedPath);
+  const type = RAW_UPLOAD_CONTENT_TYPES[path.extname(abs).toLowerCase()] || "application/octet-stream";
+  res.setHeader("Content-Type", type);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.name || "upload")}"`);
+  // fs.createReadStream directly rather than res.sendFile/send() — send's
+  // dotfile guard 404s any path with a dot-prefixed segment (e.g. a
+  // DB_PATH under a dotfile directory in local dev), which is irrelevant
+  // here since storedPath is only ever a value this server itself wrote
+  // and already validated above, never user input.
+  const stream = fs.createReadStream(abs);
+  stream.on("error", () => { if (!res.headersSent) res.status(404).end(); });
+  stream.pipe(res);
 });
 
 app.get("/api/onboarding/:token", onboardingLimiter, (req, res) => {

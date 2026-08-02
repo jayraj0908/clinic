@@ -700,6 +700,7 @@ module.exports = {
   completeOnboarding,
   listOnboardings,
   getForReview,
+  getById,
   updateDraft,
   activateOnboarding,
   slugify,
