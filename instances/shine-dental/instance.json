@@ -4,5 +4,5 @@
   "vertical": "dental",
   "brandColor": "#c9a066",
   "timezone": "America/New_York",
-  "tabs": ["dash", "calls", "leads", "calendar", "work"]
+  "tabs": ["dash", "calls", "leads", "calendar", "teach", "work"]
 }

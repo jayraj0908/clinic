@@ -391,6 +391,49 @@
     text-transform:uppercase;cursor:pointer;transition:background .2s;white-space:nowrap}
   .sync-status button:hover:not(:disabled){background:rgba(240,234,216,.14)}
   .sync-status button:disabled{opacity:.5;cursor:default}
+  /* ---------- teach page ---------- */
+  .teach-empty{text-align:center;color:var(--dim);font:400 12.5px 'Inter';line-height:1.7;max-width:480px;margin:0 auto 28px}
+  .teach-textarea{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;
+    color:var(--ink);font:400 13.5px 'Inter';padding:14px 16px;min-height:100px;resize:vertical;outline:none}
+  .teach-textarea:focus{border-color:rgba(201,160,102,.5)}
+  .teach-filepick{border:1px dashed var(--line);border-radius:12px;padding:20px;text-align:center;cursor:pointer;
+    margin-top:14px;transition:border-color .2s}
+  .teach-filepick:hover{border-color:rgba(201,160,102,.5)}
+  .teach-filepick input{display:none}
+  .teach-filepick .tp-t{font:600 11px 'Inter';letter-spacing:.08em;color:var(--ink)}
+  .teach-filepick .tp-s{font:400 10.5px 'Inter';color:var(--dim);margin-top:4px}
+  .teach-filelist{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  .teach-filechip{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(255,255,255,.03);
+    border:1px solid var(--line);border-radius:8px;padding:9px 13px;font:500 11.5px 'Inter'}
+  .teach-filechip .tc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .teach-filechip .tc-note{display:block;font:400 10px 'Inter';color:var(--dim);white-space:normal;margin-top:2px}
+  .teach-filechip .x{color:var(--dim);cursor:pointer;flex:none;font-size:13px;padding:2px 4px}
+  .tstatus{flex:none;font:700 8.5px 'Inter';letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px}
+  .tstatus.parsed{background:rgba(127,214,176,.14);color:#7fd6b0}
+  .tstatus.queued{background:rgba(201,160,102,.16);color:var(--accent)}
+  .tstatus.failed{background:rgba(224,138,122,.14);color:#e08a7a}
+  .tstatus.pending{background:rgba(255,255,255,.08);color:var(--dim)}
+  .teach-recorder{border:1px solid var(--line);border-radius:12px;padding:18px;text-align:center;margin-top:14px}
+  .teach-rec-btn{width:60px;height:60px;border-radius:50%;background:rgba(201,160,102,.12);border:1px solid rgba(201,160,102,.4);
+    color:var(--accent);font-size:20px;display:flex;align-items:center;justify-content:center;margin:0 auto;cursor:pointer;
+    user-select:none;-webkit-user-select:none;transition:background .15s,transform .1s,border-color .15s}
+  .teach-rec-btn.active{background:#c0392b;border-color:#c0392b;color:#fff;transform:scale(1.08)}
+  .teach-rec-hint{font:500 10px 'Inter';letter-spacing:.06em;color:var(--dim);margin-top:10px;text-transform:uppercase}
+  .teach-rec-playback{margin-top:12px}
+  .teach-rec-playback audio{width:100%}
+  .teach-submit{margin-top:18px;width:100%;appearance:none;border:1px solid rgba(240,234,216,.2);background:var(--ink);
+    color:var(--bg);border-radius:10px;padding:14px 0;font:600 11px 'Inter';letter-spacing:.12em;text-transform:uppercase;
+    cursor:pointer;transition:opacity .2s}
+  .teach-submit:disabled{opacity:.4;cursor:default}
+  .teach-result{margin-top:22px}
+  .teach-result .k{font:600 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:16px 0 8px}
+  .teach-result .k:first-child{margin-top:0}
+  .teach-fact-item{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+    font:400 12.5px 'Inter';line-height:1.5;margin-bottom:6px;color:var(--ink)}
+  .teach-diff{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:6px}
+  .teach-diff .dline{font:400 12px 'Inter';line-height:1.7;color:var(--ink)}
+  .teach-diff .dline .from{color:#e08a7a;text-decoration:line-through}
+  .teach-diff .dline .to{color:#7fd6b0}
   /* ---------- calendar page ---------- */
   .cal-toolbar{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
   .cal-week-label{font:600 11px 'Inter';letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
@@ -617,6 +660,7 @@
     <button data-v="leads">Leads</button>
     <button data-v="calendar">Calendar</button>
     <button data-v="orders" id="ordersTabBtn" style="display:none">Orders</button>
+    <button data-v="teach">Teach</button>
     <button data-v="work">Chart</button>
   </div>
   <div class="tb-right">
@@ -720,6 +764,30 @@
   <div id="ordersListWrap"></div>
 </div></div>
 
+<div class="view" id="viewTeach"><div class="view-inner">
+  <h1>Teach your brain</h1><div class="vsub">drop anything, forever — it reviews before anything changes</div>
+  <div class="teach-empty">Menu changed? Snap a photo of the new menu. New price, new hours, a policy you explain on every call — type it, paste it, upload it, or just talk. Everything lands here for your approval first — nothing reaches the phone line on its own.</div>
+  <textarea class="teach-textarea" id="teachText" placeholder="Tell your brain anything — a new price, a policy, how to handle a specific situation…"></textarea>
+  <div class="teach-filepick" id="teachFilepick">
+    <input type="file" id="teachFiles" multiple accept=".txt,.pdf,.docx,.jpg,.jpeg,.png,.heic,.heif,.m4a,.mp3,.wav,.webm">
+    <div class="tp-t">Tap to attach files</div>
+    <div class="tp-s">Docs, photos, or audio — up to 20 files per batch</div>
+  </div>
+  <div class="teach-filelist" id="teachPendingList"></div>
+  <div class="teach-recorder" id="teachRecorder">
+    <div class="teach-rec-btn" id="teachRecBtn">🎙</div>
+    <div class="teach-rec-hint" id="teachRecHint">Hold to talk</div>
+    <div class="teach-rec-playback" id="teachRecPlaybackWrap" style="display:none">
+      <audio id="teachRecAudio" controls></audio>
+      <div class="rec-actions" style="display:flex;gap:8px;margin-top:10px">
+        <button class="filter-pill" id="teachRecRedo" style="flex:1">Re-record</button>
+      </div>
+    </div>
+  </div>
+  <button class="teach-submit" id="teachSubmitBtn">Teach the brain</button>
+  <div class="teach-result" id="teachResult"></div>
+</div></div>
+
 <aside id="callDrawer">
   <div class="chat-head">
     <div class="chat-title" id="callDrawerTitle">Call</div>
@@ -745,6 +813,10 @@
       <input type="text" id="memAddSource" placeholder="Source (optional — e.g. a patient's name)">
       <button class="filter-pill active" id="memAddBtn">Teach</button>
       <span id="memAddMsg" style="font:400 11px 'Inter';color:var(--dim)"></span>
+    </div>
+    <div id="profileEditsSection" style="display:none">
+      <div class="sec-t" style="margin:0 0 12px;font-size:9px">Profile edits proposed</div>
+      <div id="profileEditsList"></div>
     </div>
     <div id="memoryList"></div>
   </div>
@@ -825,7 +897,16 @@ function clearAuthItem(key){localStorage.removeItem(key);sessionStorage.removeIt
 let token=getAuthItem("token");
 
 async function api(path, opts={}){
-  const res=await fetch(path,{...opts,headers:{"content-type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}});
+  // FormData (file uploads — Teach) must NOT get a content-type header set
+  // here: fetch auto-generates the multipart boundary only when it computes
+  // the header itself. Forcing application/json on a FormData body silently
+  // corrupts the request (server sees "application/json" but a multipart
+  // body, and body-parser throws a JSON syntax error before ever reaching
+  // multer).
+  const isForm=(typeof FormData!=='undefined')&&opts.body instanceof FormData;
+  const headers={Authorization:"Bearer "+token,...(opts.headers||{})};
+  if(!isForm)headers["content-type"]="application/json";
+  const res=await fetch(path,{...opts,headers});
   if(res.status===401){logout();throw new Error("auth")}
   return res.json();
 }
@@ -2163,7 +2244,7 @@ async function boot(){
 
   /* ============================ tabs / views (real data) ===================== */
   let view='map';
-  const views={dash:document.getElementById('viewDash'),work:document.getElementById('viewWork'),calls:document.getElementById('viewCalls'),leads:document.getElementById('viewLeads'),calendar:document.getElementById('viewCalendar'),orders:document.getElementById('viewOrders')};
+  const views={dash:document.getElementById('viewDash'),work:document.getElementById('viewWork'),calls:document.getElementById('viewCalls'),leads:document.getElementById('viewLeads'),calendar:document.getElementById('viewCalendar'),orders:document.getElementById('viewOrders'),teach:document.getElementById('viewTeach')};
   function setView(v){
     view=v;
     document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
@@ -2174,6 +2255,7 @@ async function boot(){
     if(v==='leads')renderLeads();
     if(v==='calendar'&&typeof renderCalendar==='function')renderCalendar();
     if(v==='orders'&&typeof renderOrders==='function')renderOrders();
+    if(v==='teach'&&typeof renderTeach==='function')renderTeach();
   }
   document.querySelectorAll('#tabs button').forEach(b=>{b.onclick=()=>{
     if(b.dataset.v==='map'&&view==='map'){exitFocus();return}
@@ -2495,7 +2577,52 @@ async function boot(){
       };
     });
   }
-  function openMemoryDrawer(){document.getElementById('memoryDrawer').classList.add('show');renderMemory()}
+  // A diff line per changed/added field — "from" struck through, "to" in
+  // green, so approving is a real "does this look right?" glance, not a
+  // blind trust-the-brain click.
+  function diffLinesHTML(diff){
+    const lines=[];
+    if(diff.services){
+      diff.services.add.forEach(s=>lines.push(`+ ${esc(s.name)} — ${esc([s.price,s.duration].filter(Boolean).join(', ')||'no price/duration given')}`));
+      diff.services.change.forEach(c=>lines.push(`${esc(c.name)} — <span class="from">${esc(c.from.price||'?')}${c.from.duration?', '+esc(c.from.duration):''}</span> → <span class="to">${esc(c.to.price||'?')}${c.to.duration?', '+esc(c.to.duration):''}</span>`));
+    }
+    if(diff.hours){
+      diff.hours.add.forEach(h=>lines.push(`+ ${esc(h.days)} — ${h.open?esc(h.open)+'–'+esc(h.close):'closed'}`));
+      diff.hours.change.forEach(c=>lines.push(`${esc(c.days)} — <span class="from">${c.from.open?esc(c.from.open)+'–'+esc(c.from.close):'closed'}</span> → <span class="to">${c.to.open?esc(c.to.open)+'–'+esc(c.to.close):'closed'}</span>`));
+    }
+    if(diff.insuranceAccepted) diff.insuranceAccepted.add.forEach(x=>lines.push(`+ Insurance: ${esc(x)}`));
+    if(diff.policies) diff.policies.add.forEach(x=>lines.push(`+ Policy: ${esc(x)}`));
+    if(diff.selfPay) lines.push(`Self-pay — <span class="from">${esc(diff.selfPay.from||'(none)')}</span> → <span class="to">${esc(diff.selfPay.to)}</span>`);
+    return lines.map(l=>`<div class="dline">${l}</div>`).join('');
+  }
+  async function renderProfileEdits(){
+    const data=await api('/api/profile-edits?status=proposed');
+    const items=data.profileEdits||[];
+    const section=document.getElementById('profileEditsSection');
+    section.style.display=items.length?'block':'none';
+    document.getElementById('profileEditsList').innerHTML=items.map(e=>`
+      <div class="mem-item">
+        <div class="mtop"><span class="mem-type-chip" style="color:#8fb4e8">Profile edit</span><span class="mts">${esc(fmtRelative(e.ts))}</span></div>
+        <div class="msource">${esc(e.source||'')}</div>
+        <div class="teach-diff">${diffLinesHTML(e.diff)}</div>
+        <div class="mactions"><button data-pe-approve="${esc(e.id)}">Approve</button><button data-pe-reject="${esc(e.id)}">Reject</button></div>
+      </div>`).join('');
+    document.querySelectorAll('[data-pe-approve]').forEach(btn=>{
+      btn.onclick=async()=>{
+        btn.disabled=true;btn.textContent='…';
+        try{await api(`/api/profile-edits/${btn.dataset.peApprove}/approve`,{method:'POST'});await renderProfileEdits();refreshAttention()}
+        catch(e){btn.disabled=false;btn.textContent='Approve'}
+      };
+    });
+    document.querySelectorAll('[data-pe-reject]').forEach(btn=>{
+      btn.onclick=async()=>{
+        btn.disabled=true;btn.textContent='…';
+        try{await api(`/api/profile-edits/${btn.dataset.peReject}/reject`,{method:'POST'});await renderProfileEdits();refreshAttention()}
+        catch(e){btn.disabled=false;btn.textContent='Reject'}
+      };
+    });
+  }
+  function openMemoryDrawer(){document.getElementById('memoryDrawer').classList.add('show');renderMemory();renderProfileEdits()}
   document.getElementById('memoryBtn').onclick=openMemoryDrawer;
   document.getElementById('memoryDrawerClose').onclick=()=>{document.getElementById('memoryDrawer').classList.remove('show')};
   document.getElementById('memAddBtn').onclick=async()=>{
@@ -2513,6 +2640,121 @@ async function boot(){
       await renderMemory();
       setTimeout(()=>{msg.textContent=''},1500);
     }catch(e){msg.textContent=e.message||'Something went wrong.'}
+  };
+
+  /* ------------------------------ teach your brain ------------------------------ */
+  const TEACH_STATUS_LABEL={parsed:'Parsed ✓',queued:'Queued',failed:'Failed'};
+  let teachPendingFiles=[];
+  let _teachRecMedia=null,_teachRecChunks=[],_teachRecBlob=null,_teachRecStream=null;
+  function renderTeach(){
+    teachPendingFiles=[];
+    document.getElementById('teachText').value='';
+    document.getElementById('teachResult').innerHTML='';
+    paintTeachPending();
+    wireTeachRecorder();
+  }
+  function paintTeachPending(){
+    document.getElementById('teachPendingList').innerHTML=teachPendingFiles.map((f,i)=>`
+      <div class="teach-filechip"><span class="tstatus pending">Ready</span><span class="tc-name">${esc(f.name)}</span><span class="x" data-teach-rm="${i}">✕</span></div>
+    `).join('');
+    document.querySelectorAll('[data-teach-rm]').forEach(el=>{
+      el.onclick=()=>{teachPendingFiles.splice(Number(el.dataset.teachRm),1);paintTeachPending()};
+    });
+  }
+  document.getElementById('teachFilepick').onclick=()=>document.getElementById('teachFiles').click();
+  document.getElementById('teachFiles').onchange=(e)=>{
+    teachPendingFiles=Array.from(e.target.files).slice(0,20);
+    paintTeachPending();
+  };
+  function wireTeachRecorder(){
+    const btn=document.getElementById('teachRecBtn');
+    if(!btn||btn.dataset.wired)return;
+    btn.dataset.wired='1';
+    if(!(navigator.mediaDevices&&window.MediaRecorder)){
+      document.getElementById('teachRecHint').textContent="Voice recording isn't supported in this browser.";
+      btn.style.opacity=.35;btn.style.pointerEvents='none';
+      return;
+    }
+    const hint=document.getElementById('teachRecHint');
+    const start=async(e)=>{
+      e.preventDefault();
+      if(_teachRecMedia&&_teachRecMedia.state==='recording')return;
+      document.getElementById('teachRecPlaybackWrap').style.display='none';
+      try{_teachRecStream=await navigator.mediaDevices.getUserMedia({audio:true})}
+      catch{hint.textContent="Microphone access denied — check your browser's site settings.";return}
+      _teachRecChunks=[];
+      const mime=(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))?'audio/webm;codecs=opus':'audio/webm';
+      _teachRecMedia=new MediaRecorder(_teachRecStream,{mimeType:mime});
+      _teachRecMedia.ondataavailable=(ev)=>{if(ev.data.size>0)_teachRecChunks.push(ev.data)};
+      _teachRecMedia.onstop=()=>{
+        _teachRecBlob=new Blob(_teachRecChunks,{type:'audio/webm'});
+        _teachRecStream.getTracks().forEach(t=>t.stop());
+        document.getElementById('teachRecAudio').src=URL.createObjectURL(_teachRecBlob);
+        document.getElementById('teachRecPlaybackWrap').style.display='block';
+        btn.classList.remove('active');
+        hint.textContent='Tap and hold to talk again';
+      };
+      _teachRecMedia.start();
+      btn.classList.add('active');
+      hint.textContent='Recording… release to stop';
+    };
+    const stop=(e)=>{if(e)e.preventDefault();if(_teachRecMedia&&_teachRecMedia.state==='recording')_teachRecMedia.stop()};
+    btn.onmousedown=start;btn.onmouseup=stop;btn.onmouseleave=stop;
+    btn.ontouchstart=start;btn.ontouchend=stop;
+    document.getElementById('teachRecRedo').onclick=()=>{
+      _teachRecBlob=null;document.getElementById('teachRecPlaybackWrap').style.display='none';hint.textContent='Hold to talk';
+    };
+  }
+  function teachDiffPreviewHTML(diff){
+    return `<div class="teach-diff">${diffLinesHTML(diff)}</div>`;
+  }
+  function paintTeachResult(result){
+    const parts=[];
+    if(result.files&&result.files.length){
+      parts.push(`<div class="k">Files</div>`+result.files.map(f=>`
+        <div class="teach-filechip">
+          <span class="tstatus ${esc(f.status)}">${esc(TEACH_STATUS_LABEL[f.status]||f.status)}</span>
+          <span class="tc-name">${esc(f.name)}${f.note?`<span class="tc-note">${esc(f.note)}</span>`:''}</span>
+        </div>`).join(''));
+    }
+    const p=result.extractedProfile||{};
+    if(p.services?.length) parts.push(`<div class="k">Services understood</div>`+p.services.map(s=>`<div class="teach-fact-item">${esc(s.name)}${s.priceRange?' — '+esc(s.priceRange):''}${s.duration?' · '+esc(s.duration):''}</div>`).join(''));
+    if(p.policies?.length) parts.push(`<div class="k">Policies understood</div>`+p.policies.map(x=>`<div class="teach-fact-item">${esc(x)}</div>`).join(''));
+    if(result.proposedFacts&&result.proposedFacts.length){
+      parts.push(`<div class="k">Sent for your approval — Memory drawer</div>`+result.proposedFacts.map(f=>`<div class="teach-fact-item">${esc(f.fact)}</div>`).join(''));
+    }
+    if(result.profileEdit){
+      parts.push(`<div class="k">Profile change proposed — approve in the Memory drawer</div>${teachDiffPreviewHTML(result.profileEdit.diff)}`);
+    }
+    if(!parts.length){
+      parts.push(`<div class="teach-fact-item" style="color:var(--dim)">Nothing structured came out of that — no problem, it's still saved.</div>`);
+    }
+    document.getElementById('teachResult').innerHTML=parts.join('');
+  }
+  document.getElementById('teachSubmitBtn').onclick=async()=>{
+    const btn=document.getElementById('teachSubmitBtn');
+    const text=document.getElementById('teachText').value;
+    if(!text.trim()&&!teachPendingFiles.length&&!_teachRecBlob){
+      document.getElementById('teachResult').innerHTML=`<div class="teach-fact-item" style="color:var(--dim)">Type something, attach a file, or record a note first.</div>`;
+      return;
+    }
+    btn.disabled=true;btn.textContent='Teaching…';
+    const fd=new FormData();
+    fd.append('text',text);
+    teachPendingFiles.forEach(f=>fd.append('files',f));
+    if(_teachRecBlob)fd.append('files',_teachRecBlob,`recording-${Date.now()}.webm`);
+    try{
+      const result=await api('/api/teach/upload',{method:'POST',body:fd});
+      paintTeachResult(result);
+      teachPendingFiles=[];document.getElementById('teachFiles').value='';paintTeachPending();
+      _teachRecBlob=null;document.getElementById('teachRecPlaybackWrap').style.display='none';
+      document.getElementById('teachText').value='';
+      refreshAttention();
+    }catch(e){
+      document.getElementById('teachResult').innerHTML=`<div class="teach-fact-item" style="color:#e08a7a">${esc(e.message)}</div>`;
+    }finally{
+      btn.disabled=false;btn.textContent='Teach the brain';
+    }
   };
 
   /* ------------------------------ orders (restaurant vertical) ------------------------------ */

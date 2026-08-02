@@ -6,5 +6,5 @@
   "timezone": "America/New_York",
   "agents": ["receptionist", "librarian"],
   "_tabsNote": "Pickup orders, not calendar appointments — Calendar doesn't apply here.",
-  "tabs": ["dash", "calls", "leads", "orders", "work"]
+  "tabs": ["dash", "calls", "leads", "orders", "teach", "work"]
 }
