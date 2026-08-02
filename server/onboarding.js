@@ -9,7 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { nanoid } = require("nanoid");
-const { load, save, log } = require("./store");
+const { load, save, log, DB_PATH } = require("./store");
 const notify = require("./notify");
 const { parseFrontmatter, AGENTS } = require("./brain");
 
@@ -19,6 +19,30 @@ const STEP_ORDER = ["basics", "hours", "services", "policies", "brainDump", "voi
 const MAX_INTERVIEW_QUESTIONS = 8;
 const INSTANCES_DIR = path.join(__dirname, "..", "instances");
 const ENGINE_RECEPTIONIST_MD = path.join(__dirname, "..", "brain", "agents", "receptionist.md");
+
+// Upload limits enforced server-side too (not just multer's per-request
+// checks in server.js) since a total cap has to span multiple batches —
+// see runBrainDump's running-total check below.
+const MAX_FILES_PER_BATCH = 20;
+const MAX_TOTAL_UPLOAD_BYTES = 200 * 1024 * 1024;
+// Per-file cap on how much extracted text db.json retains — keeps a giant
+// PDF from bloating storage forever; structureBrainDump further caps the
+// combined corpus at 40k chars regardless.
+const MAX_STORED_TEXT_CHARS = 20000;
+
+// Raw bytes for image/audio uploads land on disk (never just in memory/db.json)
+// so a human can open the actual photo/recording later — text-extractable
+// types (.txt/.pdf/.docx) don't need this, their content is already fully
+// captured as extracted text. Lives next to db.json so it's on the same
+// persistent volume in production (see server/store.js's DB_PATH).
+const UPLOADS_ROOT = path.join(path.dirname(DB_PATH), "uploads", "onboarding");
+function saveUploadToDisk(onboardingId, file) {
+  const dir = path.join(UPLOADS_ROOT, onboardingId);
+  fs.mkdirSync(dir, { recursive: true });
+  const safeName = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}${path.extname(file.originalname || "").toLowerCase()}`;
+  fs.writeFileSync(path.join(dir, safeName), file.buffer);
+  return path.relative(path.dirname(DB_PATH), path.join(dir, safeName));
+}
 
 // The review screen's starting checkbox state, per vertical — matches
 // instances/_template/instance.json's own recommendedAgents convention.
@@ -134,28 +158,6 @@ function saveStep(token, step, data) {
 
 // ---------- brain dump: file/text extraction + Claude structuring ----------
 
-async function extractFileText(file) {
-  const ext = path.extname(file.originalname || "").toLowerCase();
-  try {
-    if (ext === ".txt" || file.mimetype === "text/plain") {
-      return file.buffer.toString("utf8");
-    }
-    if (ext === ".pdf" || file.mimetype === "application/pdf") {
-      const pdfParse = require("pdf-parse");
-      const data = await pdfParse(file.buffer);
-      return data.text || "";
-    }
-    if (ext === ".docx" || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-      const mammoth = require("mammoth");
-      const { value } = await mammoth.extractRawText({ buffer: file.buffer });
-      return value || "";
-    }
-    return `[Unsupported file type: ${file.originalname}]`;
-  } catch (e) {
-    return `[Couldn't read ${file.originalname}: ${e.message}]`;
-  }
-}
-
 async function claude(prompt, system, maxTokens = 3000) {
   if (!hasKey("ANTHROPIC_API_KEY")) return null;
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -206,25 +208,205 @@ async function structureBrainDump(corpusText) {
   }
 }
 
+// A photo of a menu/price list/hour sign should produce the same quality
+// draft as pasted text — same output shape as structureBrainDump, sent as a
+// Claude vision content block instead of a text corpus. Returns null (never
+// throws) on no key, no useful content, or a bad response, so callers just
+// fall back to "couldn't read this" rather than needing their own try/catch.
+async function extractImageProfile(file) {
+  if (!hasKey("ANTHROPIC_API_KEY")) return null;
+  const mediaType = /^image\/(jpeg|png|gif|webp)$/.test(file.mimetype || "") ? file.mimetype : "image/jpeg";
+  let out;
+  try {
+    out = await claude(
+      [
+        { type: "image", source: { type: "base64", media_type: mediaType, data: file.buffer.toString("base64") } },
+        {
+          type: "text",
+          text:
+            `A business owner photographed this while setting up their AI phone assistant — could be a menu, price list, service board, or hours sign. Extract everything readable into structured fields. Never invent anything not visible in the photo.\n\n` +
+            `Output strict JSON:\n` +
+            `{"services":[{"name":"","priceRange":"","duration":""}],"policies":["..."],"insuranceAccepted":["..."],"selfPay":"","hours":[{"days":"Mon–Fri","open":"9:00 AM","close":"5:00 PM"}],"facts":[{"fact":"","source":"photo upload"}]}\n\n` +
+            `If the photo has no readable business info (blurry, unrelated, upside down beyond recognition), output {"unreadable": true} instead.`,
+        },
+      ],
+      "You read photos of menus, price lists, service boards, and hour signs and extract structured business knowledge. Output ONLY the JSON object, nothing else.",
+      2000
+    );
+  } catch {
+    return null;
+  }
+  if (!out) return null;
+  try {
+    const parsed = JSON.parse(stripJsonFence(out));
+    if (parsed.unreadable) return null;
+    const profile = {
+      services: Array.isArray(parsed.services) ? parsed.services : [],
+      policies: Array.isArray(parsed.policies) ? parsed.policies : [],
+      insuranceAccepted: Array.isArray(parsed.insuranceAccepted) ? parsed.insuranceAccepted : [],
+      selfPay: parsed.selfPay || "",
+      hours: Array.isArray(parsed.hours) ? parsed.hours : [],
+      facts: Array.isArray(parsed.facts) ? parsed.facts.filter((f) => f && f.fact) : [],
+    };
+    const summary = [
+      profile.services.length ? `Services: ${profile.services.map((s) => `${s.name}${s.priceRange ? ` (${s.priceRange})` : ""}`).join(", ")}` : "",
+      profile.hours.length ? `Hours: ${profile.hours.map((h) => `${h.days} ${h.open ? `${h.open}–${h.close}` : "closed"}`).join(", ")}` : "",
+      profile.policies.length ? `Policies: ${profile.policies.join(" ")}` : "",
+      profile.insuranceAccepted.length ? `Insurance: ${profile.insuranceAccepted.join(", ")}` : "",
+    ].filter(Boolean).join("\n");
+    if (!summary && !profile.facts.length) return null; // structurally valid but nothing usable — treat like unreadable
+    return { profile, text: summary };
+  } catch {
+    return null;
+  }
+}
+
+// Optional — DEEPGRAM_API_KEY or ASSEMBLYAI_API_KEY (documented in
+// .env.example). Returns null (not an error) when neither is configured, so
+// callers can tell "no provider" apart from "provider failed" and degrade
+// each appropriately. Deepgram answers in one request; AssemblyAI needs an
+// upload + poll round-trip, capped so a slow/stuck job can't hang the
+// onboarding request forever.
+async function transcribeAudio(file) {
+  if (hasKey("DEEPGRAM_API_KEY")) {
+    const res = await fetch("https://api.deepgram.com/v1/listen?smart_format=true", {
+      method: "POST",
+      headers: { Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`, "Content-Type": file.mimetype || "application/octet-stream" },
+      body: file.buffer,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.err_msg || `Deepgram error ${res.status}`);
+    return data.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+  }
+  if (hasKey("ASSEMBLYAI_API_KEY")) {
+    const uploadRes = await fetch("https://api.assemblyai.com/v2/upload", {
+      method: "POST",
+      headers: { authorization: process.env.ASSEMBLYAI_API_KEY },
+      body: file.buffer,
+    });
+    const uploadData = await uploadRes.json();
+    if (!uploadRes.ok) throw new Error(uploadData.error || `AssemblyAI upload error ${uploadRes.status}`);
+    const transcriptRes = await fetch("https://api.assemblyai.com/v2/transcript", {
+      method: "POST",
+      headers: { authorization: process.env.ASSEMBLYAI_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ audio_url: uploadData.upload_url }),
+    });
+    const transcriptData = await transcriptRes.json();
+    if (!transcriptRes.ok) throw new Error(transcriptData.error || `AssemblyAI error ${transcriptRes.status}`);
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptData.id}`, {
+        headers: { authorization: process.env.ASSEMBLYAI_API_KEY },
+      });
+      const pollData = await pollRes.json();
+      if (pollData.status === "completed") return pollData.text || "";
+      if (pollData.status === "error") throw new Error(pollData.error || "AssemblyAI transcription failed");
+    }
+    throw new Error("Transcription timed out");
+  }
+  return null;
+}
+
+const IMAGE_EXT = /\.(jpe?g|png)$/i;
+const HEIC_EXT = /\.(heic|heif)$/i;
+const AUDIO_EXT = /\.(m4a|mp3|wav|webm)$/i;
+
+// One file in → one status-chip row out. Never throws — every branch is
+// wrapped so a single bad file (corrupt PDF, unreadable photo, a
+// transcription API hiccup) fails that file only, with a friendly note,
+// instead of taking down the whole batch.
+async function processFile(file, onboardingId) {
+  const name = file.originalname || "file";
+  const ext = path.extname(name).toLowerCase();
+  const base = { name, mimetype: file.mimetype || "", size: file.buffer.length };
+  try {
+    if (ext === ".txt" || file.mimetype === "text/plain") {
+      return { ...base, kind: "text", status: "parsed", text: file.buffer.toString("utf8") };
+    }
+    if (ext === ".pdf" || file.mimetype === "application/pdf") {
+      const pdfParse = require("pdf-parse");
+      const data = await pdfParse(file.buffer);
+      return { ...base, kind: "text", status: "parsed", text: data.text || "" };
+    }
+    if (ext === ".docx" || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+      const mammoth = require("mammoth");
+      const { value } = await mammoth.extractRawText({ buffer: file.buffer });
+      return { ...base, kind: "text", status: "parsed", text: value || "" };
+    }
+    if (HEIC_EXT.test(name)) {
+      return { ...base, kind: "image", status: "failed", text: "", note: "HEIC photos aren't supported yet — export it as a JPG first (on iPhone: Settings → Camera → Formats → “Most Compatible”, or just share the photo to Messages/Mail and re-save it) and upload again." };
+    }
+    if (IMAGE_EXT.test(name) || /^image\//.test(file.mimetype || "")) {
+      const storedPath = saveUploadToDisk(onboardingId, file);
+      if (!hasKey("ANTHROPIC_API_KEY")) {
+        return { ...base, kind: "image", status: "queued", text: "", storedPath, note: "Saved — Claude isn't connected on this deployment yet, so this photo is queued for the Sailz team to read manually." };
+      }
+      const result = await extractImageProfile(file);
+      if (!result) return { ...base, kind: "image", status: "failed", text: "", storedPath, note: "Couldn't make out anything useful in this photo — try a clearer, well-lit shot, or type the details instead." };
+      return { ...base, kind: "image", status: "parsed", text: result.text, storedPath, imageProfile: result.profile };
+    }
+    if (AUDIO_EXT.test(name) || /^audio\//.test(file.mimetype || "")) {
+      const storedPath = saveUploadToDisk(onboardingId, file);
+      let transcript = null;
+      try {
+        transcript = await transcribeAudio(file);
+      } catch (e) {
+        return { ...base, kind: "audio", status: "queued", text: "", storedPath, note: `Saved — transcription failed (${e.message}), queued for the Sailz team to review.` };
+      }
+      if (transcript === null) {
+        return { ...base, kind: "audio", status: "queued", text: "", storedPath, note: "Saved — no transcription service is connected on this deployment yet, so this recording is queued for the Sailz team to review." };
+      }
+      return { ...base, kind: "audio", status: "parsed", text: transcript, storedPath, note: transcript.trim() ? null : "Transcribed, but nothing came through — queued for review just in case." };
+    }
+    return { ...base, kind: "other", status: "failed", text: "", note: `Unsupported file type: ${name}` };
+  } catch (e) {
+    return { ...base, kind: "other", status: "failed", text: "", note: `Couldn't read ${name}: ${e.message}` };
+  }
+}
+
 async function runBrainDump(token, { text, files }) {
   const found = findLiveByToken(token);
   if (!found.ok) return found;
-  const { db, onboarding } = found;
+  const { onboarding } = found;
 
-  const fileTexts = [];
-  for (const f of files || []) {
-    const extracted = await extractFileText(f);
-    fileTexts.push({ name: f.originalname, text: extracted });
+  const incoming = (files || []).slice(0, MAX_FILES_PER_BATCH);
+  const existingFiles = onboarding.data.brainDump?.files || [];
+  const existingBytes = existingFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+  const incomingBytes = incoming.reduce((sum, f) => sum + (f.buffer?.length || 0), 0);
+  if (existingBytes + incomingBytes > MAX_TOTAL_UPLOAD_BYTES) {
+    const usedMB = Math.round(existingBytes / 1024 / 1024);
+    return { ok: false, status: 400, error: `That would put this onboarding over the 200MB total upload limit (${usedMB}MB already uploaded) — remove a file or two and try again.` };
   }
-  const corpus = [text || "", ...fileTexts.map((f) => `\n\n[From ${f.name}]\n${f.text}`)].join("\n").trim();
+
+  const processed = [];
+  for (const f of incoming) processed.push(await processFile(f, onboarding.id));
+  // existingFiles already carry a (possibly truncated) .text from a prior
+  // batch's save below — re-used as-is so the corpus stays cumulative across
+  // batches instead of only reflecting whatever was just uploaded.
+  const allFiles = [...existingFiles, ...processed];
+
+  const parsedText = allFiles.filter((f) => f.status === "parsed" && f.text).map((f) => `\n\n[From ${f.name}]\n${f.text}`).join("\n");
+  const corpus = [text || "", parsedText].join("\n").trim();
 
   const extractedProfile = await structureBrainDump(corpus);
+  // Images return their own structured facts directly (a photo of a menu
+  // shouldn't depend on structureBrainDump re-parsing a plain-text summary
+  // of itself to surface its facts) — folded in alongside whatever
+  // structureBrainDump found in the combined text corpus.
+  const imageFacts = allFiles.filter((f) => f.kind === "image" && f.imageProfile?.facts?.length).flatMap((f) => f.imageProfile.facts);
 
   onboarding.data.brainDump = {
     text: text || "",
-    files: fileTexts.map((f) => ({ name: f.name, chars: f.text.length })),
+    // .text kept (capped) per file — needed so the NEXT batch's corpus can
+    // still include earlier batches' extracted text; structureBrainDump
+    // itself further caps the combined corpus at 40k chars.
+    files: allFiles.map((f) => ({
+      name: f.name, mimetype: f.mimetype, size: f.size, kind: f.kind, status: f.status,
+      text: (f.text || "").slice(0, MAX_STORED_TEXT_CHARS),
+      chars: f.text ? f.text.length : 0, note: f.note || null, storedPath: f.storedPath || null,
+    })),
     extractedProfile,
-    proposedFacts: extractedProfile.facts || [],
+    proposedFacts: [...(extractedProfile.facts || []), ...imageFacts],
   };
   onboarding.status = "in_progress";
   onboarding.currentStep = "brainDump";

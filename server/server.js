@@ -1025,12 +1025,24 @@ app.post("/api/demo/reset", auth, requireOwner, (req, res) => {
 // explicitly activates it (see the /api/onboarding/admin/* routes below).
 const onboardingUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024, files: 5 },
+  limits: { fileSize: 25 * 1024 * 1024, files: 20 },
   fileFilter(req, file, cb) {
-    const ok = /\.(txt|pdf|docx)$/i.test(file.originalname || "");
-    cb(ok ? null : new Error("Only .txt, .pdf, or .docx files are accepted"), ok);
+    const ok = /\.(txt|pdf|docx|jpe?g|png|heic|heif|m4a|mp3|wav|webm)$/i.test(file.originalname || "");
+    cb(ok ? null : new Error(`"${file.originalname}" isn't a supported file type — try .txt, .pdf, .docx, a photo (.jpg/.png/.heic), or audio (.m4a/.mp3/.wav/.webm).`), ok);
   },
 });
+// multer/fileFilter errors otherwise fall through to Express's default HTML
+// error page — the wizard needs JSON so it can show a friendly inline message.
+function handleUpload(middleware) {
+  return (req, res, next) => {
+    middleware(req, res, (err) => {
+      if (!err) return next();
+      if (err.code === "LIMIT_FILE_SIZE") return res.status(400).json({ error: "One of those files is over the 25MB-per-file limit." });
+      if (err.code === "LIMIT_FILE_COUNT") return res.status(400).json({ error: "Up to 20 files per batch — try again with fewer, you can always upload more after." });
+      res.status(400).json({ error: err.message || "Upload failed." });
+    });
+  };
+}
 // Public, unauthenticated, and each hop can trigger a Claude call — a
 // tighter ceiling than the webhook limiter, keyed by IP.
 const onboardingLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
@@ -1090,7 +1102,7 @@ app.post("/api/onboarding/:token/step", onboardingLimiter, (req, res) => {
   res.json(result.onboarding);
 });
 
-app.post("/api/onboarding/:token/brain-dump", onboardingLimiter, onboardingUpload.array("files", 5), async (req, res) => {
+app.post("/api/onboarding/:token/brain-dump", onboardingLimiter, handleUpload(onboardingUpload.array("files", 20)), async (req, res) => {
   try {
     const result = await onboarding.runBrainDump(req.params.token, { text: req.body?.text || "", files: req.files || [] });
     if (!result.ok) return res.status(result.status).json({ error: result.error });

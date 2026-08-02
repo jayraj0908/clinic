@@ -60,8 +60,15 @@
   .filepick .fp-t{font:600 11px 'Inter';letter-spacing:.08em;color:var(--ink)}
   .filepick .fp-s{font:400 10px 'Inter';color:var(--dim);margin-top:4px}
   .filelist{margin-top:10px;display:flex;flex-direction:column;gap:6px}
-  .filechip{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 12px;font:500 11px 'Inter'}
-  .filechip .x{color:var(--dim);cursor:pointer}
+  .filechip{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 12px;font:500 11px 'Inter'}
+  .filechip .fc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .filechip .fc-note{display:block;font:400 10px 'Inter';color:var(--dim);white-space:normal;margin-top:2px}
+  .filechip .x{color:var(--dim);cursor:pointer;flex:none;font-size:13px;padding:2px 4px}
+  .fstatus{flex:none;font:600 9px 'Inter';letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px}
+  .fstatus.parsed{background:rgba(120,200,120,.14);color:#8fd18f}
+  .fstatus.queued{background:rgba(201,160,102,.16);color:var(--accent)}
+  .fstatus.failed{background:rgba(224,138,122,.16);color:#e08a7a}
+  .fstatus.pending{background:rgba(255,255,255,.08);color:var(--dim)}
   /* extraction review */
   .extract-sec{margin-top:18px}
   .extract-sec .k{font:600 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:16px 0 8px}
@@ -263,18 +270,20 @@ function renderPolicies(){
 
 /* ---------------- Step 5: brain dump ---------------- */
 let pendingFiles=[];
+const FSTATUS_LABEL={parsed:"Parsed ✓",queued:"Queued",failed:"Failed"};
 function renderBrainDump(){
   const d=state.data.brainDump||{};
   pendingFiles=[];
   $("card").innerHTML=`
     <h1>The brain dump</h1>
-    <p class="sub">Paste ANYTHING — your price list, your FAQ doc, your training manual. Our brain will read it and figure out the rest.</p>
+    <p class="sub">Paste ANYTHING — your price list, your FAQ doc, a photo of your menu or hours sign. Our brain will read it and figure out the rest.</p>
     <textarea class="mono" id="f_dump" placeholder="Paste anything here — pricing, FAQs, policies, how you talk to patients…">${esc(d.text||"")}</textarea>
     <div class="filepick" id="filepick">
-      <input type="file" id="f_files" multiple accept=".txt,.pdf,.docx">
+      <input type="file" id="f_files" multiple accept=".txt,.pdf,.docx,.jpg,.jpeg,.png,.heic,.heif,.m4a,.mp3,.wav,.webm">
       <div class="fp-t">Tap to attach files</div>
-      <div class="fp-s">.txt, .pdf, or .docx — up to 5 files</div>
+      <div class="fp-s">Docs, photos, or audio — up to 20 files per batch, add more batches anytime</div>
     </div>
+    <div class="filelist" id="pendingList"></div>
     <div class="filelist" id="fileList"></div>
     <div id="extractResult"></div>
     <div class="btnbar">
@@ -285,18 +294,42 @@ function renderBrainDump(){
   `;
   $("filepick").onclick=()=>$("f_files").click();
   $("f_files").onchange=()=>{
-    pendingFiles=Array.from($("f_files").files).slice(0,5);
-    $("fileList").innerHTML=pendingFiles.map((f,i)=>`<div class="filechip"><span>${esc(f.name)}</span><span class="x" onclick="removeFile(${i})">✕</span></div>`).join("");
+    pendingFiles=Array.from($("f_files").files).slice(0,20);
+    paintPending();
   };
   $("skipDumpBtn").onclick=()=>goTo(stepIdx+1);
   $("readBtn").onclick=readBrainDump;
+  paintUploaded(d.files||[]);
   if(d.extractedProfile) paintExtraction(d.extractedProfile,d.proposedFacts||[]);
+}
+function paintPending(){
+  $("pendingList").innerHTML=pendingFiles.map((f,i)=>`
+    <div class="filechip"><span class="fstatus pending">Ready</span><span class="fc-name">${esc(f.name)}</span><span class="x" onclick="removeFile(${i})">✕</span></div>
+  `).join("");
 }
 function removeFile(i){
   pendingFiles.splice(i,1);
-  $("fileList").innerHTML=pendingFiles.map((f,j)=>`<div class="filechip"><span>${esc(f.name)}</span><span class="x" onclick="removeFile(${j})">✕</span></div>`).join("");
+  paintPending();
+}
+function paintUploaded(files){
+  $("fileList").innerHTML=files.map((f,i)=>`
+    <div class="filechip">
+      <span class="fstatus ${esc(f.status)}">${esc(FSTATUS_LABEL[f.status]||f.status)}</span>
+      <span class="fc-name">${esc(f.name)}${f.note?`<span class="fc-note">${esc(f.note)}</span>`:""}</span>
+      <span class="x" onclick="removeUploadedFile(${i})">✕</span>
+    </div>
+  `).join("");
+}
+async function removeUploadedFile(i){
+  const files=(state.data.brainDump.files||[]).slice();
+  files.splice(i,1);
+  const data={...state.data.brainDump,files};
+  await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"brainDump",data})});
+  state.data.brainDump=data;
+  paintUploaded(files);
 }
 async function readBrainDump(){
+  if(!pendingFiles.length&&!$("f_dump").value.trim()){goTo(stepIdx+1);return}
   const btn=$("readBtn"); btn.disabled=true; btn.innerHTML=`<span class="spinner"></span>Reading…`;
   const fd=new FormData();
   fd.append("text",$("f_dump").value);
@@ -304,6 +337,10 @@ async function readBrainDump(){
   try{
     const result=await api(`/api/onboarding/${token}/brain-dump`,{method:"POST",body:fd});
     state.data.brainDump=result.data.brainDump;
+    pendingFiles=[];
+    $("f_files").value="";
+    paintPending();
+    paintUploaded(result.data.brainDump.files||[]);
     paintExtraction(result.data.brainDump.extractedProfile,result.data.brainDump.proposedFacts);
   }catch(e){
     $("extractResult").innerHTML=`<div class="err">${esc(e.message)}</div>`;
