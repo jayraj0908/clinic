@@ -41,6 +41,13 @@ function load() {
   // (same approval flow the librarian already uses).
   if (!Array.isArray(db.teachFiles)) { db.teachFiles = []; migrated = true; }
   if (!Array.isArray(db.profileEdits)) { db.profileEdits = []; migrated = true; }
+  // Outbound Lead Engine: bulk-imported contact batches (server/leadImport.js)
+  // and the paced dialer that works them (server/dialer.js).
+  if (!Array.isArray(db.leadBatches)) { db.leadBatches = []; migrated = true; }
+  // Rolling log of dial-attempt timestamps, used only for the dialer's
+  // rolling-hour rate limit — pruned to the last 24h on every write so it
+  // never grows unbounded (server/dialer.js).
+  if (!Array.isArray(db.dialerAttempts)) { db.dialerAttempts = []; migrated = true; }
   // A live instance's db.integrations was seeded before "resend" existed as
   // an entry — add it in place rather than requiring a reseed (which would
   // wipe real accumulated data) just to pick up a newly-added integration.

@@ -337,11 +337,11 @@
     padding:3px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
   .calls-empty{padding:70px 20px;text-align:center;color:var(--dim);font:400 13px 'Inter'}
   /* ---------- call detail drawer (reuses the chat drawer's right slide-in) ---------- */
-  #callDrawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);z-index:60;
+  #callDrawer,#importDrawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);z-index:60;
     background:rgba(10,10,12,.94);border-left:1px solid rgba(240,234,216,.09);backdrop-filter:blur(22px);
     transform:translateX(103%);transition:transform .6s cubic-bezier(.22,1,.36,1);
     display:flex;flex-direction:column;overflow:hidden}
-  #callDrawer.show{transform:translateX(0)}
+  #callDrawer.show,#importDrawer.show{transform:translateX(0)}
   .call-drawer-body{flex:1;overflow-y:auto;padding:22px 24px 30px}
   .call-drawer-body audio{width:100%;margin:6px 0 4px;height:36px}
   .call-transcript{white-space:pre-wrap;font:400 11.5px 'JetBrains Mono',monospace;color:#b9b3a5;line-height:1.7;
@@ -434,6 +434,30 @@
   .teach-diff .dline{font:400 12px 'Inter';line-height:1.7;color:var(--ink)}
   .teach-diff .dline .from{color:#e08a7a;text-decoration:line-through}
   .teach-diff .dline .to{color:#7fd6b0}
+  /* ---------- lead import + batch scoreboard ---------- */
+  .import-select{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;
+    color:var(--ink);font:400 12px 'Inter';padding:8px 10px}
+  .import-field-label{display:block;font:600 9px 'Inter';letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:12px 0 5px}
+  .import-preview-wrap{overflow-x:auto;margin-top:4px;border:1px solid var(--line);border-radius:8px}
+  .import-preview{width:100%;border-collapse:collapse;font:400 11px 'Inter';white-space:nowrap}
+  .import-preview th{text-align:left;padding:7px 10px;color:var(--dim);border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
+  .import-preview td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--ink)}
+  .import-attest{display:flex;align-items:flex-start;gap:10px;margin-top:18px;font:400 12px 'Inter';color:var(--ink);line-height:1.5}
+  .import-attest input{margin-top:3px;flex:none;width:16px;height:16px;accent-color:var(--ink)}
+  .batch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:22px}
+  .batch-card{background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .2s}
+  .batch-card:hover{border-color:rgba(232,230,224,.22)}
+  .batch-card.active{border-color:var(--accent)}
+  .batch-card .bc-name{font:600 12px 'Inter';color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .batch-card .bc-meta{font:400 10.5px 'Inter';color:var(--dim);margin-top:3px}
+  .batch-card .bc-stats{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+  .bc-stat{font:600 8.5px 'Inter';letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--dim)}
+  .bc-stat.bc-queued{color:#e0904a}
+  .bc-stat.bc-calling{color:#8fb4e8}
+  .bc-stat.bc-booked{color:#7fd6b0}
+  .bc-stat.bc-declined{color:#77777c}
+  .bc-stat.bc-exhausted{color:#e08a7a}
+  .bc-stat.bc-dnc{color:#e08a7a}
   /* ---------- calendar page ---------- */
   .cal-toolbar{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
   .cal-week-label{font:600 11px 'Inter';letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
@@ -554,7 +578,7 @@
        becomes a full-screen sheet on mobile — same "click -> panel"
        pattern as desktop's drawers, just sized to the whole viewport
        instead of a fixed side panel a thumb can't reach across. */
-    #chatDrawer,#callDrawer,#memoryDrawer{width:100vw}
+    #chatDrawer,#callDrawer,#memoryDrawer,#importDrawer{width:100vw}
     .tip{max-width:70vw}
     .view h1{font-size:22px}
     .view-inner{padding:96px 16px calc(76px + env(safe-area-inset-bottom))}
@@ -725,9 +749,27 @@
     <button class="filter-pill" data-stage="contacted">Contacted</button>
     <button class="filter-pill" data-stage="booked">Booked</button>
     <button class="filter-pill" data-stage="lost">Lost</button>
+    <span style="flex:1"></span>
+    <button class="filter-pill" id="importLeadsBtn">+ Import leads</button>
   </div>
+  <div id="batchScoreboardWrap"></div>
   <div id="leadsWrap"></div>
 </div></div>
+
+<aside id="importDrawer">
+  <div class="chat-head">
+    <div class="chat-title">Import leads</div>
+    <div class="chat-close" id="importDrawerClose">✕</div>
+  </div>
+  <div class="call-drawer-body" id="importDrawerBody">
+    <div class="teach-filepick" id="importFilepick">
+      <input type="file" id="importFileInput" accept=".csv">
+      <div class="tp-t">Tap to attach a CSV</div>
+      <div class="tp-s">Column headers in row 1 — we'll map them next</div>
+    </div>
+    <div id="importMappingArea"></div>
+  </div>
+</aside>
 
 <div class="view" id="viewCalendar"><div class="view-inner">
   <h1>Calendar</h1><div class="vsub" id="calSub">this week</div>
@@ -2252,7 +2294,7 @@ async function boot(){
     document.getElementById('bottombar').classList.toggle('hide',v!=='map');
     if(v!=='map')closeSidebar();
     if(v==='calls')renderCalls();
-    if(v==='leads')renderLeads();
+    if(v==='leads'){renderLeads();renderBatchScoreboard();}
     if(v==='calendar'&&typeof renderCalendar==='function')renderCalendar();
     if(v==='orders'&&typeof renderOrders==='function')renderOrders();
     if(v==='teach'&&typeof renderTeach==='function')renderTeach();
@@ -2819,18 +2861,21 @@ async function boot(){
     const wrap=document.getElementById('leadsWrap');
     let leads=dash.leads||[];
     if(leadsStageFilter!=='all')leads=leads.filter(l=>LEAD_STAGE[l.status]===leadsStageFilter);
-    if(!leads.length){wrap.innerHTML=`<div class="calls-empty">${leadsStageFilter==='all'?"No leads yet — they'll show up here the moment one comes in.":'Nothing in this stage right now.'}</div>`;return}
+    if(batchFilter)leads=leads.filter(l=>l.batchId===batchFilter);
+    if(!leads.length){wrap.innerHTML=`<div class="calls-empty">${leadsStageFilter==='all'&&!batchFilter?"No leads yet — they'll show up here the moment one comes in.":'Nothing here right now.'}</div>`;return}
     wrap.innerHTML=leads.map(l=>{
       const m=leadStatusMeta(l.status);
       const stage=LEAD_STAGE[l.status]||'new';
       const speed=leadSpeedToLead(l);
       const isDone=stage==='booked'||stage==='lost';
+      const dialerBadge=l.batchId?`<span class="bc-stat bc-${esc(l.dialerState||'queued')}">${esc(l.dialerState||'queued')}${l.attempts?' · '+l.attempts+'x':''}</span>`:'';
       return `<div class="lead-card" data-leadcard="${esc(l.id)}">
         <div class="lc-main">
           <div class="lc-name">${esc(l.name||'Unknown caller')}</div>
           <div class="lc-meta">
             <span class="source-badge">${esc(l.source||'unknown')}</span>
             <span class="speed-badge">${speed?'contacted in '+esc(speed):(stage==='new'?'not yet contacted':'')}</span>
+            ${dialerBadge}
           </div>
         </div>
         <span class="lead-status-chip" style="color:${m.color}">${esc(m.label)}</span>
@@ -2865,6 +2910,108 @@ async function boot(){
       card.onclick=()=>openLeadSidebar(card.dataset.leadcard);
     });
   }
+
+  /* ------------------------------ import batches (outbound campaigns) ------------------------------ */
+  let batchFilter=null;
+  async function renderBatchScoreboard(){
+    const wrap=document.getElementById('batchScoreboardWrap');
+    let data;
+    try{data=await api('/api/lead-batches')}catch(e){wrap.innerHTML='';return}
+    const batches=data.batches||[];
+    if(!batches.length){wrap.innerHTML='';return}
+    wrap.innerHTML=`<div class="sec-t" style="margin:0 0 12px">Import batches — tap to filter</div><div class="batch-grid">${batches.map(b=>`
+      <div class="batch-card${batchFilter===b.id?' active':''}" data-batch="${esc(b.id)}">
+        <div class="bc-name">${esc(b.filename)}</div>
+        <div class="bc-meta">${esc(new Date(b.ts).toLocaleDateString())} · ${b.leadCount} contact${b.leadCount===1?'':'s'} · ${b.duplicates} dup · ${b.invalid} invalid</div>
+        <div class="bc-stats">${Object.entries(b.counts).map(([k,v])=>`<span class="bc-stat bc-${esc(k)}">${v} ${esc(k)}</span>`).join('')}</div>
+      </div>`).join('')}</div>`;
+    wrap.querySelectorAll('[data-batch]').forEach(card=>{
+      card.onclick=()=>{
+        batchFilter=batchFilter===card.dataset.batch?null:card.dataset.batch;
+        renderBatchScoreboard();renderLeads();
+      };
+    });
+  }
+
+  let importFile=null,importHeaders=[],importPreviewRows=[],importTotalRows=0;
+  const IMPORT_FIELDS=[{id:'name',label:'Name'},{id:'phone',label:'Phone (required)'},{id:'email',label:'Email'},{id:'company',label:'Company'},{id:'notes',label:'Notes'},{id:'timezone',label:'Timezone (optional)'}];
+  document.getElementById('importLeadsBtn').onclick=()=>{
+    importFile=null;
+    document.getElementById('importMappingArea').innerHTML='';
+    document.getElementById('importFileInput').value='';
+    document.getElementById('importDrawer').classList.add('show');
+  };
+  document.getElementById('importDrawerClose').onclick=()=>document.getElementById('importDrawer').classList.remove('show');
+  document.getElementById('importFilepick').onclick=()=>document.getElementById('importFileInput').click();
+  document.getElementById('importFileInput').onchange=async(e)=>{
+    const f=e.target.files[0];
+    if(!f)return;
+    importFile=f;
+    document.getElementById('importMappingArea').innerHTML='<div class="center-state" style="padding:30px"><span class="spinner"></span>Reading…</div>';
+    const fd=new FormData();
+    fd.append('mode','preview');
+    fd.append('file',f);
+    try{
+      const result=await api('/api/leads/import',{method:'POST',body:fd});
+      importHeaders=result.headers;importPreviewRows=result.previewRows;importTotalRows=result.totalRows;
+      paintImportMapping(result.suggestedMapping);
+    }catch(err){
+      document.getElementById('importMappingArea').innerHTML=`<div class="teach-fact-item" style="color:#e08a7a">${esc(err.message)}</div>`;
+    }
+  };
+  function paintImportMapping(suggested){
+    const opts=(selectedIdx)=>`<option value="">— none —</option>`+importHeaders.map((h,i)=>`<option value="${i}" ${i===selectedIdx?'selected':''}>${esc(h)}</option>`).join('');
+    document.getElementById('importMappingArea').innerHTML=`
+      <div class="k" style="font:600 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:16px 0 8px">${importTotalRows} row${importTotalRows===1?'':'s'} — map your columns</div>
+      ${IMPORT_FIELDS.map(f=>`
+        <label class="import-field-label">${esc(f.label)}</label>
+        <select class="import-select" data-import-field="${f.id}">${opts(suggested[f.id])}</select>
+      `).join('')}
+      <div class="k" style="font:600 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:16px 0 8px">Preview (first ${importPreviewRows.length})</div>
+      <div class="import-preview-wrap">
+        <table class="import-preview">
+          <thead><tr>${importHeaders.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${importPreviewRows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <label class="import-attest">
+        <input type="checkbox" id="importAttest">
+        <span>I confirm every contact on this list is an existing client or gave prior express consent to be called, and none are on the National DNC registry to my knowledge.</span>
+      </label>
+      <button class="teach-submit" id="importConfirmBtn">Import ${importTotalRows} contact${importTotalRows===1?'':'s'}</button>
+      <div id="importResultMsg" style="margin-top:12px"></div>
+    `;
+    document.getElementById('importConfirmBtn').onclick=confirmImport;
+  }
+  async function confirmImport(){
+    const mapping={};
+    document.querySelectorAll('[data-import-field]').forEach(sel=>{
+      if(sel.value!=='')mapping[sel.dataset.importField]=Number(sel.value);
+    });
+    const msg=document.getElementById('importResultMsg');
+    if(mapping.phone==null){msg.innerHTML='<div class="teach-fact-item" style="color:#e08a7a">Map a Phone column first.</div>';return}
+    if(!document.getElementById('importAttest').checked){msg.innerHTML='<div class="teach-fact-item" style="color:#e08a7a">Check the consent box to import.</div>';return}
+    const btn=document.getElementById('importConfirmBtn');
+    const origLabel=btn.textContent;
+    btn.disabled=true;btn.textContent='Importing…';
+    const fd=new FormData();
+    fd.append('mode','confirm');
+    fd.append('file',importFile);
+    fd.append('mapping',JSON.stringify(mapping));
+    fd.append('attest','1');
+    try{
+      const result=await api('/api/leads/import',{method:'POST',body:fd});
+      msg.innerHTML=`<div class="teach-fact-item" style="color:#7fd6b0">Imported ${result.added} contact${result.added===1?'':'s'} — ${result.duplicates} duplicate(s), ${result.invalid} invalid number(s) skipped.</div>`;
+      await refreshRealData();
+      renderLeads();
+      renderBatchScoreboard();
+    }catch(e){
+      msg.innerHTML=`<div class="teach-fact-item" style="color:#e08a7a">${esc(e.message)}</div>`;
+    }finally{
+      btn.disabled=false;btn.textContent=origLabel;
+    }
+  }
+
   function openOrderDrawer(orderId){
     const o=ordersData.find(x=>x.id===orderId);
     if(!o)return;

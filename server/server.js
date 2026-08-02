@@ -26,6 +26,7 @@ const { instance, profile } = require("./instance");
 const orders = require("./orders");
 const onboarding = require("./onboarding");
 const ingest = require("./ingest");
+const leadImport = require("./leadImport");
 const { diffProfileFragment, applyProfileEdit } = require("./profileEdits");
 const multer = require("multer");
 const catalog = require("./catalog");
@@ -1704,6 +1705,88 @@ app.post("/api/leads/:id/rfp/approve", auth, requireOwner, async (req, res) => {
   const result = await rfp.approveAndSend(req.params.id, req.user.id);
   if (!result.ok) return res.status(result.status).json({ error: result.error });
   res.json(result.lead);
+});
+
+// ---------- bulk lead import (owner only) ----------
+// CSV only — see server/leadImport.js's header comment for why XLSX was
+// dropped. Owner-gated: importing a list of real people to call is exactly
+// the kind of action that shouldn't be one staff-account click away.
+const leadImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter(req, file, cb) {
+    const ok = /\.csv$/i.test(file.originalname || "");
+    cb(ok ? null : new Error(`"${file.originalname}" isn't a CSV file.`), ok);
+  },
+});
+const leadImportLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+
+// mode=preview: parses and returns headers + first 5 rows + a guessed
+// column mapping, no DB write — lets the owner see and fix the mapping
+// before anything is imported. mode=confirm: requires attest="1" (the
+// consent checkbox) and a mapping, does the real import. Same route, same
+// parse code path, so preview and confirm can never see a different parse
+// of the same file.
+app.post("/api/leads/import", auth, requireOwner, leadImportLimiter, handleUpload(leadImportUpload.single("file")), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Attach a CSV file first." });
+  let rows;
+  try {
+    rows = leadImport.parseCSV(req.file.buffer.toString("utf8"));
+  } catch (e) {
+    return res.status(400).json({ error: `Couldn't read that CSV: ${e.message}` });
+  }
+  if (!rows.length) return res.status(400).json({ error: "That CSV looks empty." });
+  const headers = rows[0];
+  const dataRows = rows.slice(1);
+  const mode = req.body?.mode || "preview";
+
+  if (mode === "preview") {
+    return res.json({
+      headers,
+      previewRows: dataRows.slice(0, 5),
+      totalRows: dataRows.length,
+      suggestedMapping: leadImport.guessMapping(headers),
+    });
+  }
+
+  // mode === "confirm"
+  if (req.body?.attest !== "1") {
+    return res.status(400).json({ error: "Consent attestation is required to import contacts — check the box confirming consent before importing." });
+  }
+  let mapping;
+  try {
+    mapping = JSON.parse(req.body?.mapping || "{}");
+  } catch {
+    return res.status(400).json({ error: "Invalid column mapping." });
+  }
+  if (mapping.phone == null) return res.status(400).json({ error: "Map a Phone column before importing — every contact needs a callable number." });
+
+  const db = load();
+  const result = leadImport.importBatch(db, { dataRows, mapping, filename: req.file.originalname, attestedBy: req.user.id });
+  save();
+  log("system", `${req.user.id} imported ${result.added} lead(s) from "${req.file.originalname}" (${result.duplicates} duplicate(s), ${result.invalid} invalid) — attestation recorded`);
+  res.json(result);
+});
+
+app.get("/api/lead-batches", auth, (req, res) => {
+  const db = load();
+  const batches = db.leadBatches.slice().sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).map((b) => {
+    const leads = db.leads.filter((l) => l.batchId === b.id);
+    const counts = { queued: 0, calling: 0, booked: 0, declined: 0, exhausted: 0, dnc: 0 };
+    leads.forEach((l) => { if (counts[l.dialerState] !== undefined) counts[l.dialerState]++; });
+    return { ...b, leadCount: leads.length, counts };
+  });
+  res.json({ batches });
+});
+
+app.get("/api/lead-batches/:id", auth, (req, res) => {
+  const db = load();
+  const batch = db.leadBatches.find((b) => b.id === req.params.id);
+  if (!batch) return res.status(404).json({ error: "Batch not found" });
+  const leads = db.leads.filter((l) => l.batchId === batch.id);
+  const counts = { queued: 0, calling: 0, booked: 0, declined: 0, exhausted: 0, dnc: 0 };
+  leads.forEach((l) => { if (counts[l.dialerState] !== undefined) counts[l.dialerState]++; });
+  res.json({ batch, counts, leads });
 });
 
 // ---------- scheduler ----------
