@@ -81,6 +81,12 @@
   .rec-actions button{flex:1}
   .rec-toggle{font:500 11px 'Inter';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;text-align:center;margin-top:14px}
   .fstatus.pending{background:rgba(255,255,255,.08);color:var(--dim)}
+  /* goal chips (multi-select) */
+  .gchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+  .gchip{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:999px;padding:10px 16px;
+    font:500 12px 'Inter';color:var(--ink);cursor:pointer;transition:background .15s,border-color .15s;user-select:none}
+  .gchip.selected{background:rgba(201,160,102,.16);border-color:rgba(201,160,102,.55);color:var(--accent)}
+  .gchip-other-input{margin-top:10px}
   /* extraction review */
   .extract-sec{margin-top:18px}
   .extract-sec .k{font:600 9px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:16px 0 8px}
@@ -116,7 +122,7 @@
 <script>
 const $=(id)=>document.getElementById(id);
 const token=location.pathname.split('/').pop();
-const STEPS=["basics","hours","services","policies","brainDump","voice","interview","done"];
+const STEPS=["basics","goals","hours","services","policies","brainDump","voice","interview","done"];
 let state=null; // {clientName,status,currentStep,data}
 let stepIdx=0;
 
@@ -243,7 +249,7 @@ async function goTo(i){
 function renderStep(i){
   renderProgress();
   const step=STEPS[i];
-  const renderers={basics:renderBasics,hours:renderHours,services:renderServices,policies:renderPolicies,brainDump:renderBrainDump,voice:renderVoice,interview:renderInterview,done:renderDone};
+  const renderers={basics:renderBasics,goals:renderGoals,hours:renderHours,services:renderServices,policies:renderPolicies,brainDump:renderBrainDump,voice:renderVoice,interview:renderInterview,done:renderDone};
   renderers[step]();
 }
 
@@ -273,7 +279,51 @@ function renderBasics(){
   };
 }
 
-/* ---------------- Step 2: hours ---------------- */
+/* ---------------- Step 2: goals ---------------- */
+const GOAL_CHIPS=[
+  {id:"answer_calls",label:"answer every call"},
+  {id:"book_appointments",label:"book appointments/meetings"},
+  {id:"take_orders",label:"take orders"},
+  {id:"chase_leads",label:"chase leads fast"},
+  {id:"reminders_confirmations",label:"reminders & confirmations"},
+  {id:"reviews_followups",label:"reviews & follow-ups"},
+  {id:"paperwork_notes",label:"paperwork/notes"},
+  {id:"something_else",label:"something else"},
+];
+let selectedGoalChips=[];
+function renderGoals(){
+  const d=state.data.goals||{};
+  selectedGoalChips=(d.chips||[]).slice();
+  paintGoals(d);
+}
+function paintGoals(d){
+  $("card").innerHTML=nav(`
+    <h1>What should your brain take off your plate?</h1>
+    <p class="sub">Pick everything that applies — this shapes which AI agents we set up for you.</p>
+    <div class="gchips" id="goalChips">${GOAL_CHIPS.map(c=>`<div class="gchip${selectedGoalChips.includes(c.id)?' selected':''}" data-goal="${c.id}">${esc(c.label)}</div>`).join("")}</div>
+    <div class="gchip-other-input" id="otherWrap" style="display:${selectedGoalChips.includes('something_else')?'block':'none'}">
+      <input type="text" id="f_other" value="${esc(d.somethingElseText||"")}" placeholder="Tell us what else…">
+    </div>
+    <label>Describe a bad week at your business</label>
+    <textarea id="f_badweek" placeholder="What goes wrong when things are busy or short-staffed?">${esc(d.badWeekText||"")}</textarea>
+  `);
+  $("goalChips").querySelectorAll(".gchip").forEach(el=>{
+    el.onclick=()=>{
+      const id=el.dataset.goal;
+      const i=selectedGoalChips.indexOf(id);
+      if(i===-1) selectedGoalChips.push(id); else selectedGoalChips.splice(i,1);
+      el.classList.toggle("selected");
+      $("otherWrap").style.display=selectedGoalChips.includes("something_else")?"block":"none";
+    };
+  });
+  $("nextBtn").onclick=async()=>{
+    const data={chips:selectedGoalChips.slice(),somethingElseText:$("f_other")?$("f_other").value.trim():"",badWeekText:$("f_badweek").value.trim()};
+    await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"goals",data})});
+    state.data.goals=data; goTo(stepIdx+1);
+  };
+}
+
+/* ---------------- Step 3: hours ---------------- */
 function renderHours(){
   const d=state.data.hours||{};
   const rows=d.rows&&d.rows.length?d.rows:[{days:"Mon–Fri",open:"9:00 AM",close:"5:00 PM"},{days:"Sat",open:"",close:""},{days:"Sun",open:"",close:""}];
@@ -298,7 +348,7 @@ function renderHours(){
   };
 }
 
-/* ---------------- Step 3: services ---------------- */
+/* ---------------- Step 4: services ---------------- */
 let svcRows=[];
 function renderServices(){
   svcRows=(state.data.services&&state.data.services.length?state.data.services:[{name:"",priceRange:"",duration:""}]).map(s=>({...s}));
@@ -343,7 +393,7 @@ function syncSvcFromInputs(){
 function addSvc(){ syncSvcFromInputs(); svcRows.push({name:"",priceRange:"",duration:""}); paintServices(); }
 function removeSvc(i){ syncSvcFromInputs(); svcRows.splice(i,1); paintServices(); }
 
-/* ---------------- Step 4: policies ---------------- */
+/* ---------------- Step 5: policies ---------------- */
 function renderPolicies(){
   const d=state.data.policies||{};
   $("card").innerHTML=nav(`
@@ -363,7 +413,7 @@ function renderPolicies(){
   };
 }
 
-/* ---------------- Step 5: brain dump ---------------- */
+/* ---------------- Step 6: brain dump ---------------- */
 let pendingFiles=[];
 const FSTATUS_LABEL={parsed:"Parsed ✓",queued:"Queued",failed:"Failed"};
 function renderBrainDump(){
@@ -481,7 +531,7 @@ function paintExtraction(profile,facts){
   };
 }
 
-/* ---------------- Step 6: voice & tone ---------------- */
+/* ---------------- Step 7: voice & tone ---------------- */
 function renderVoice(){
   const d=state.data.voice||{};
   $("card").innerHTML=nav(`
@@ -503,7 +553,7 @@ function renderVoice(){
   };
 }
 
-/* ---------------- Step 7: interview ---------------- */
+/* ---------------- Step 8: interview ---------------- */
 let interviewQas=[];
 function renderInterview(){
   interviewQas=(state.data.interview&&state.data.interview.qas||[]).slice();
@@ -564,7 +614,7 @@ function paintDoneWithInterview(){
   document.getElementById("finishInterviewBtn").onclick=()=>goTo(stepIdx+1);
 }
 
-/* ---------------- Step 8: done ---------------- */
+/* ---------------- Step 9: done ---------------- */
 async function renderDone(){
   $("card").innerHTML=`<div class="center-state"><span class="spinner"></span>Preparing your brain…</div>`;
   try{

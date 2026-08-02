@@ -15,7 +15,7 @@ const { parseFrontmatter, AGENTS } = require("./brain");
 
 const hasKey = (k) => !!process.env[k];
 
-const STEP_ORDER = ["basics", "hours", "services", "policies", "brainDump", "voice", "interview", "done"];
+const STEP_ORDER = ["basics", "goals", "hours", "services", "policies", "brainDump", "voice", "interview", "done"];
 const MAX_INTERVIEW_QUESTIONS = 8;
 const INSTANCES_DIR = path.join(__dirname, "..", "instances");
 const ENGINE_RECEPTIONIST_MD = path.join(__dirname, "..", "brain", "agents", "receptionist.md");
@@ -55,14 +55,32 @@ const VERTICAL_RECOMMENDED_AGENTS = {
 };
 const DEFAULT_RECOMMENDED_AGENTS = ["receptionist", "leads", "librarian"];
 
-function recommendedAgentsFor(vertical) {
-  const list = VERTICAL_RECOMMENDED_AGENTS[vertical] || DEFAULT_RECOMMENDED_AGENTS;
-  return list.filter((id) => AGENTS[id]); // only ids the engine's catalog actually has
+// "What should your brain take off your plate?" goal chips (the "goals"
+// step, public/onboard.html) blended in on top of the vertical's default
+// set — a restaurant that picks "chase leads fast" still gets the leads
+// agent recommended even though it's not in restaurant's own default list.
+// Keys must match the chip ids the wizard sends.
+const GOAL_AGENT_MAP = {
+  answer_calls: ["receptionist"],
+  book_appointments: ["receptionist", "calling"],
+  take_orders: ["receptionist"],
+  chase_leads: ["leads", "calling"],
+  reminders_confirmations: ["receptionist", "calling"],
+  reviews_followups: ["calling", "librarian"],
+  paperwork_notes: ["audit", "billing"],
+};
+
+function recommendedAgentsFor(vertical, goalChips) {
+  const base = VERTICAL_RECOMMENDED_AGENTS[vertical] || DEFAULT_RECOMMENDED_AGENTS;
+  const fromGoals = (goalChips || []).flatMap((g) => GOAL_AGENT_MAP[g] || []);
+  const merged = [...new Set([...base, ...fromGoals])];
+  return merged.filter((id) => AGENTS[id]); // only ids the engine's catalog actually has
 }
 
 function emptyStepData() {
   return {
     basics: {},
+    goals: { chips: [], somethingElseText: "", badWeekText: "" },
     hours: {},
     services: [],
     policies: {},
@@ -421,6 +439,9 @@ function profileSoFarText(onboarding) {
   const d = onboarding.data;
   const lines = [];
   if (d.basics?.businessName) lines.push(`Business: ${d.basics.businessName} (${d.basics.businessType || "unspecified type"})`);
+  if (d.goals?.chips?.length || d.goals?.badWeekText) {
+    lines.push(`What they want their AI to take off their plate: ${(d.goals.chips || []).join(", ")}${d.goals.badWeekText ? `. A bad week looks like: "${d.goals.badWeekText}"` : ""}`);
+  }
   if (d.hours && Object.keys(d.hours).length) lines.push(`Hours: ${JSON.stringify(d.hours)}`);
   if (d.services?.length) lines.push(`Services: ${d.services.map((s) => `${s.name} (${s.priceRange || "?"}, ${s.duration || "?"})`).join("; ")}`);
   if (d.policies && Object.keys(d.policies).length) lines.push(`Policies: ${JSON.stringify(d.policies)}`);
@@ -495,10 +516,11 @@ function buildDraftFromOnboarding(onboarding) {
     vertical,
     brandColor: "#c9a066",
     timezone: basics.timezone || "America/New_York",
-    // Pre-checked per vertical on the review screen; the owner adjusts
-    // there before activating. See server/catalog.js's getActiveAgentIds —
-    // this becomes the new instance's default active set on first boot.
-    agents: recommendedAgentsFor(vertical),
+    // Pre-checked per vertical (blended with the goals step's chips) on
+    // the review screen; the owner adjusts there before activating. See
+    // server/catalog.js's getActiveAgentIds — this becomes the new
+    // instance's default active set on first boot.
+    agents: recommendedAgentsFor(vertical, d.goals?.chips),
   };
 
   const clinicProfileJson = {
@@ -536,7 +558,16 @@ function buildDraftFromOnboarding(onboarding) {
     memoryFacts.push({ type: "policy_correction", fact: bits.join(" "), source: "onboarding voice & tone" });
   }
 
-  return { instanceJson, clinicProfileJson, messagesJson, memoryFacts };
+  // Verbatim, not summarized — sales language comes from client language,
+  // and the review screen shows this as "what they said they want" exactly
+  // as typed/selected, alongside (not instead of) the agent picker it fed.
+  const clientGoals = {
+    chips: d.goals?.chips || [],
+    somethingElseText: d.goals?.somethingElseText || "",
+    badWeekText: d.goals?.badWeekText || "",
+  };
+
+  return { instanceJson, clinicProfileJson, messagesJson, memoryFacts, clientGoals };
 }
 
 async function completeOnboarding(token) {

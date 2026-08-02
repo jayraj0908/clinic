@@ -309,6 +309,29 @@ async function renderOnboardingList(){
   renderOnboardRows();
 }
 
+// Mirrors public/onboard.html's GOAL_CHIPS ids→labels — kept in sync by
+// hand since these are two separate static pages with no shared JS module.
+const GOAL_CHIP_LABELS={
+  answer_calls:"answer every call", book_appointments:"book appointments/meetings",
+  take_orders:"take orders", chase_leads:"chase leads fast",
+  reminders_confirmations:"reminders & confirmations", reviews_followups:"reviews & follow-ups",
+  paperwork_notes:"paperwork/notes", something_else:"something else",
+};
+// "What they said they want" — shown verbatim (sales language comes from
+// client language), not paraphrased, and separate from the agent picker it
+// fed (server/onboarding.js's recommendedAgentsFor blends these chips in).
+function renderClientGoals(g){
+  if(!g || (!g.chips?.length && !g.badWeekText && !g.somethingElseText)) return "";
+  return `
+    <div class="panel" style="margin-top:20px">
+      <h2>What they said they want</h2>
+      ${g.chips?.length?`<div class="template-note" style="background:none;border:0;padding:0;margin-bottom:10px">${g.chips.map(c=>esc(GOAL_CHIP_LABELS[c]||c)).join(" · ")}</div>`:""}
+      ${g.somethingElseText?`<div class="template-note">"${esc(g.somethingElseText)}"</div>`:""}
+      ${g.badWeekText?`<label>A bad week looks like</label><div class="template-note">"${esc(g.badWeekText)}"</div>`:""}
+    </div>
+  `;
+}
+
 // Every file the client has uploaded so far (brain dump + voice, during
 // onboarding or — same shape — later via the Teach surface), regardless of
 // whether the wizard's finished. audio/image files link to the raw-bytes
@@ -378,6 +401,7 @@ async function renderOnboardDetail(id){
       </div>
     </div>
 
+    ${renderClientGoals(draftState.clientGoals)}
     ${renderUploadedFiles(o)}
 
     <div class="panel" style="margin-top:20px">
