@@ -1023,7 +1023,25 @@ async function boot(){
     ...HUB_IDS.map(id=>api('/api/brain/agents/'+id)),
   ]);
   $("clinicSub").textContent=dash.settings?.clinicName||"";
-  if(dash.vertical==='restaurant'||dash.hasOrders)document.getElementById('ordersTabBtn').style.display='';
+  // Per-instance nav: instance.json's optional "tabs" array is
+  // authoritative when present (e.g. HQ showing only Map/Dashboards/
+  // Chart — no Calls/Leads/Calendar/Orders, none of which apply to an
+  // admin instance that doesn't take calls or bookings). "map" always
+  // shows regardless — there's always a map. No "tabs" declared at all
+  // -> every tab shows except Orders, gated by vertical/hasOrders same
+  // as always, so an instance that hasn't opted in sees zero change.
+  if(Array.isArray(dash.tabs)){
+    const allowed=new Set(['map',...dash.tabs]);
+    // Orders starts hidden in the HTML (display:none) — every other tab
+    // starts visible. An explicit "tabs" list must be able to both show
+    // Orders and hide anything else, not just hide, or a restaurant
+    // instance that opts in loses Orders entirely.
+    document.querySelectorAll('#tabs button[data-v]').forEach(b=>{
+      b.style.display=allowed.has(b.dataset.v)?'':'none';
+    });
+  }else if(dash.vertical==='restaurant'||dash.hasOrders){
+    document.getElementById('ordersTabBtn').style.display='';
+  }
   if(dash.demoMode)document.getElementById('demoBanner').style.display='block';
 
   // Mutated in place (never reassigned) so every closure that captured

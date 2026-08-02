@@ -5,5 +5,7 @@
   "vertical": "hq",
   "brandColor": "#c9a066",
   "timezone": "America/New_York",
-  "agents": ["librarian"]
+  "agents": ["librarian"],
+  "_tabsNote": "HQ doesn't take calls, capture leads, or book appointments — those tabs are meaningless here. Map stays (client-node visualization is a later HQ stage); Dashboards and Chart still show real librarian activity.",
+  "tabs": ["dash", "work"]
 }

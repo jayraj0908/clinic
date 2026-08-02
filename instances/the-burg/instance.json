@@ -4,5 +4,7 @@
   "vertical": "restaurant",
   "brandColor": "#e05545",
   "timezone": "America/New_York",
-  "agents": ["receptionist", "librarian"]
+  "agents": ["receptionist", "librarian"],
+  "_tabsNote": "Pickup orders, not calendar appointments — Calendar doesn't apply here.",
+  "tabs": ["dash", "calls", "leads", "orders", "work"]
 }

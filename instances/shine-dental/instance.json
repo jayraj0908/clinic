@@ -3,5 +3,6 @@
   "name": "Shine Dental Clinic",
   "vertical": "dental",
   "brandColor": "#c9a066",
-  "timezone": "America/New_York"
+  "timezone": "America/New_York",
+  "tabs": ["dash", "calls", "leads", "calendar", "work"]
 }

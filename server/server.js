@@ -330,6 +330,14 @@ app.get("/api/dashboard", auth, (req, res) => {
   res.json({
     settings: db.settings,
     vertical: instance.vertical || null,
+    // Optional per-instance nav override (instance.json's "tabs" array,
+    // e.g. ["map","dash","calls","leads","orders","work"] for a
+    // restaurant that doesn't book calendar appointments). null when the
+    // instance doesn't declare one — the frontend then falls back to
+    // showing every tab except Orders (gated by vertical/hasOrders
+    // below), the exact behavior every instance had before this field
+    // existed, so nothing changes for an instance that hasn't opted in.
+    tabs: instance.tabs || null,
     hasOrders: db.orders.length > 0,
     demoMode: process.env.DEMO_MODE === "1",
     funnel: {
