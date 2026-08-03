@@ -61,20 +61,41 @@ section, it's the whole reason to slow down before going live:
   vulnerabilities). Not a blocker; every spreadsheet tool exports CSV.
 
 ## Provisioning checklist
-- [ ] `instances/retirement-plan-resource-group/` — instance.json,
+- [x] `instances/retirement-plan-resource-group/` — instance.json,
       clinic-profile.json, messages.json, agents/calling.md,
       agents/receptionist.md, vapi-system-prompt.md, VAPI-SETUP.md,
       DEPLOY-CHECKLIST.md — all done, this build
-- [ ] Agent set: receptionist, calling, librarian. No leads agent (their
+- [x] Agent set: receptionist, calling, librarian. No leads agent (their
       two lead sources — Aman's list, web scraping — aren't Meta/Google
       form capture; leads arrive via CSV import instead)
-- [ ] New Railway service `retirement-plan-resource-group` from same
-      repo, own env, own volume
-- [ ] Two Vapi assistants (inbound + outbound) — see VAPI-SETUP.md
+- [x] New Railway service `rprg` from same repo, own env, own volume —
+      deployed 2026-08-03. Owner login: Aman Goel (Agoel14@outlook.com),
+      forced password change on first login.
+- [x] Vapi assistant configured — own inline tools (check_availability,
+      book_appointment, save_contact), own analysis schema, system prompt
+      = `agents/calling.md`'s full outbound script (this client is
+      primarily an outbound-calling business, per Aman's own onboarding
+      answers). Number +1 (202) 931-5252 confirmed attached. **Only one
+      assistant exists today, not the two VAPI-SETUP.md describes** — it's
+      currently serving double duty as both the outbound-dialer reference
+      and the number's fixed inbound answerer. Fine for now (inbound
+      isn't the focus and nothing dials automatically yet), but worth
+      splitting into a dedicated inbound assistant (composed via
+      `/api/vapi/preview-prompt`, per VAPI-SETUP.md's original design)
+      before inbound call volume matters.
+- [ ] `serverUrl`/`serverUrlSecret` on the Vapi assistant — Jay wiring
+      this directly himself, not done as of this deploy
 - [ ] Google Calendar wired to Aman's real calendar
 - [ ] Compliance sign-off (Mutual of America) + TCPA process review —
-      BEFORE any real dialing
+      BEFORE any real dialing. **Calling agent ships paused/dormant
+      (`on: false`, zero cron armed) — confirmed zero real calls placed
+      by anything in this deployment.**
 - [ ] First CSV import done with Aman/office admin present
+- [ ] DNS: `rprg.sailz.org` CNAME to the Railway service
+- [ ] Supervised QA session before any client demo: Jay's own test call +
+      the three "should I roll over my 401k?" phrasings (zero tolerance,
+      must deflect every time) + a dialer test dialing only Jay's own
+      number
 
 ## Pricing note
 Not yet discussed in onboarding — no pricing signal captured. Propose

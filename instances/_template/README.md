@@ -34,5 +34,20 @@
 7. Deploy: new Railway service (or your own host) from this same repo,
    with the env vars above. Point that client's Vapi Server URL at the
    new deployment's `/webhooks/vapi`.
+   - **Never share Vapi objects across clients.** This client's assistant
+     needs its OWN inline `model.tools` (composed via `toolsForVertical()`
+     — never a reference to a shared/reusable Vapi "Tool" object by ID)
+     and its OWN `serverUrl`/`serverUrlSecret` matching THIS deployment's
+     `VAPI_SERVER_SECRET`. A drifted/shared secret silently 403s every
+     tool-call and end-of-call report — see The Burg's and Retirement
+     Plan Resource Group's DEPLOY-CHECKLIST.md files for a real incident
+     this caused.
 8. `npm run seed` on first boot (or let the server's auto-seed-on-first-
    boot guard do it) to create the owner login and empty database.
+   - `server/instance.js`'s profile-edit replay only reads the db if
+     `db.json` already exists — don't remove that guard. Without it, on a
+     truly fresh volume this module (required before server.js's own
+     "seed if missing" check) creates an empty `db.json` as a side effect
+     of calling `load()`, permanently skipping the real seed. Bit
+     Retirement Plan Resource Group's first deploy silently — the owner
+     login simply never got created.

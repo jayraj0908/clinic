@@ -7,6 +7,23 @@ New service, same repo. Do after prompt 8 is merged + reviewed.
 no assistant yet — deferred until after prompt 4 + batch push.
 Pending on this number: add to A2P campaign once campaign is approved.
 
+## Vapi — never share objects across clients
+**Every client's Vapi assistant must use its OWN inline tool definitions
+(model.tools, composed via `toolsForVertical()`), never a reference to a
+shared/reusable Vapi "Tool" object by ID.** Same for `serverUrl`/
+`serverUrlSecret` — always this client's own service URL and this
+client's own `VAPI_SERVER_SECRET`, set directly on the assistant, never
+inherited from or shared with another client's config. Found live on
+2026-08-03: The Burg's `VAPI_SERVER_SECRET` drifted from what its
+assistant was actually sending, silently 403ing every tool-call and
+end-of-call report (a real customer's order never reached the kitchen,
+and never showed up anywhere in the dashboard either, since the SAME
+check gates both). Root cause that time was a plain secret mismatch, not
+actually a shared tool object — but the account does have orphaned
+reusable Tool objects sitting on it from earlier dashboard work, and
+nothing stops a future assistant from being wired to one by mistake, so
+treat this as a standing rule, not just a postmortem note.
+
 ## Railway
 - [ ] New service from the same GitHub repo (sailz-brain)
 - [ ] Volume attached at `/app/data` (BEFORE first boot)

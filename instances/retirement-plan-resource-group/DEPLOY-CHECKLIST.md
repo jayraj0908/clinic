@@ -20,6 +20,19 @@ writing before flipping on real dialing.**
       consent basis, frequency, quiet hours) — separate from the script
       review above
 
+## Vapi — never share objects across clients
+**Every client's Vapi assistant must use its OWN inline tool definitions
+(model.tools, composed via `toolsForVertical()`), never a reference to a
+shared/reusable Vapi "Tool" object by ID.** Same for `serverUrl`/
+`serverUrlSecret` — always this client's own service URL and this
+client's own `VAPI_SERVER_SECRET`, set directly on the assistant, never
+inherited from or shared with another client's config. Found live on
+2026-08-03 on The Burg's deployment (see that instance's own
+DEPLOY-CHECKLIST.md for the full incident) — the account has orphaned
+reusable Tool objects sitting on it from earlier dashboard work, so
+double-check a fresh assistant's `model.tools` array is fully inline
+before going live, not just working today.
+
 ## Railway
 - [ ] New service from the same GitHub repo (sailz-brain)
 - [ ] Volume attached at `/app/data` **BEFORE first boot** — do this
