@@ -30,6 +30,23 @@
   .status-in_progress{background:rgba(160,130,60,.18);color:#d4af6a}
   .status-completed{background:rgba(120,180,160,.18);color:#7fd6b0}
   .status-activated{background:rgba(90,140,220,.18);color:#8fb4e8}
+  .status-provisioned{background:rgba(90,140,220,.18);color:#8fb4e8}
+  .status-sandbox{background:rgba(160,130,60,.18);color:#d4af6a}
+  .status-approved{background:rgba(120,180,160,.18);color:#7fd6b0}
+  .status-suspended{background:rgba(200,90,90,.18);color:#e39a9a}
+  .status-pending{background:rgba(160,130,60,.18);color:#d4af6a}
+  .status-active{background:rgba(120,180,160,.18);color:#7fd6b0}
+  .status-failed{background:rgba(200,90,90,.18);color:#e39a9a}
+
+  /* ---------- TENANTS tab ---------- */
+  .tenant-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+  .tenant-row .tn{font-weight:700;flex:0 0 180px}
+  .tenant-row .tmeta{color:var(--dim);font-size:11px;flex:1}
+  .number-pick{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .number-pick button{font:600 11px 'Inter';padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+  .number-pick button:hover{border-color:var(--accent)}
+  .confirm-box{background:rgba(160,130,60,.08);border:1px solid rgba(160,130,60,.3);border-radius:10px;padding:14px;margin-top:10px}
+  .confirm-box .disclosure{color:var(--dim);font-size:11px;margin:8px 0;line-height:1.5}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
   @media (max-width:760px){.grid2{grid-template-columns:1fr}}
   .panel{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:20px}
@@ -166,18 +183,21 @@ function renderLogin(){
 let activeTab="clients";
 function renderShell(){
   const qsTab=new URLSearchParams(location.search).get("tab");
-  if(qsTab==="onboarding"||qsTab==="clients")activeTab=qsTab;
+  if(qsTab==="onboarding"||qsTab==="clients"||qsTab==="tenants")activeTab=qsTab;
   $("content").innerHTML=`
     <div class="tabbar">
       <button data-tab="clients" class="${activeTab==='clients'?'active':''}">Clients</button>
       <button data-tab="onboarding" class="${activeTab==='onboarding'?'active':''}">Onboarding</button>
+      <button data-tab="tenants" class="${activeTab==='tenants'?'active':''}">Tenants</button>
     </div>
     <div id="tabBody"><div class="empty"><span class="spinner"></span>Loading…</div></div>
   `;
   document.querySelectorAll('.tabbar button').forEach(b=>{
     b.onclick=()=>{ activeTab=b.dataset.tab; history.replaceState(null,'','?tab='+activeTab); renderShell(); };
   });
-  if(activeTab==="clients") renderClients(); else renderOnboardingList();
+  if(activeTab==="clients") renderClients();
+  else if(activeTab==="tenants") renderTenants();
+  else renderOnboardingList();
 }
 
 /* ============================ CLIENTS tab ============================== */
@@ -250,6 +270,113 @@ function paintClientGrid(){
   document.querySelectorAll('[data-mrr]').forEach(el=>{
     el.onchange=async()=>{ await api(`/api/hq/clients/${el.dataset.mrr}`,{method:"PATCH",body:JSON.stringify({mrr:Number(el.value)||0})}); renderClients(); };
   });
+}
+
+/* ============================ TENANTS tab ============================ */
+/* Talks to the platform service (Stages 2 & 4) via /api/hq/tenants*
+   proxy routes — server.js keeps PLATFORM_KEY server-side and forwards
+   these, since this static page can't hold that secret itself. Sandbox
+   tenants need Approve before a number can be provisioned; provisioning
+   is its own separate, explicit confirm step — approving never buys
+   anything by itself. */
+let tenantsData=null;
+let numberFlow=null; // { tenantId, results, picked }
+
+async function renderTenants(){
+  $("tabBody").innerHTML=`<div class="empty"><span class="spinner"></span>Loading…</div>`;
+  try{ tenantsData=await api("/api/hq/tenants"); }
+  catch(e){ $("tabBody").innerHTML=`<div class="empty">${esc(e.message)}</div>`; return; }
+  paintTenants();
+}
+
+function paintTenants(){
+  const rows=tenantsData.tenants;
+  $("tabBody").innerHTML=rows.length ? `<div id="tenantRows"></div>` : `<div class="empty">No tenants yet — they show up here the moment someone finishes the onboarding wizard.</div>`;
+  if(!rows.length) return;
+  $("tenantRows").innerHTML=rows.map(t=>`
+    <div class="tenant-row" data-row="${esc(t.id)}">
+      <div class="tn">${esc(t.name)}<div class="tmeta">${esc(t.slug)}.sailz.org · ${esc(t.vertical||"—")}</div></div>
+      ${statusChip(t.status)}
+      ${t.phone_number?`<div class="tmeta">${esc(t.phone_number)} ${statusChip(t.number_status)}</div>`:t.status==="approved"?`<div class="tmeta">No number yet</div>`:""}
+      <div class="actionbar" style="margin:0">
+        ${t.status==="sandbox"?`<button class="btn-primary" data-approve="${esc(t.id)}">Approve</button>`:""}
+        ${t.status==="approved"?`<button class="btn-ghost" data-suspend="${esc(t.id)}">Suspend</button>`:""}
+        ${t.status==="approved"&&t.number_status!=="active"?`<button class="btn-ghost" data-provision="${esc(t.id)}">${t.number_status==="failed"?"Retry number":"Provision number"}</button>`:""}
+      </div>
+    </div>
+    <div id="flow-${esc(t.id)}"></div>
+  `).join("");
+  document.querySelectorAll('[data-approve]').forEach(el=>{
+    el.onclick=async()=>{ el.disabled=true; try{ await api(`/api/hq/tenants/${el.dataset.approve}/approve`,{method:"POST"}); }catch(e){ alert(e.message); } renderTenants(); };
+  });
+  document.querySelectorAll('[data-suspend]').forEach(el=>{
+    el.onclick=async()=>{
+      if(!confirm("Suspend this tenant? Outbound calling and the phone number stop working immediately."))return;
+      el.disabled=true;
+      try{ await api(`/api/hq/tenants/${el.dataset.suspend}/suspend`,{method:"POST"}); }catch(e){ alert(e.message); }
+      renderTenants();
+    };
+  });
+  document.querySelectorAll('[data-provision]').forEach(el=>{
+    el.onclick=()=>{ numberFlow={tenantId:el.dataset.provision,results:null,picked:null}; paintNumberFlow(); };
+  });
+}
+
+function paintNumberFlow(){
+  if(!numberFlow) return;
+  const box=document.getElementById(`flow-${numberFlow.tenantId}`);
+  if(!box) return;
+  if(numberFlow.picked){
+    box.innerHTML=`
+      <div class="confirm-box">
+        <div><strong>Buy ${esc(numberFlow.picked.phoneNumber)}</strong> (${esc(numberFlow.picked.locality||"")}${numberFlow.picked.region?", "+esc(numberFlow.picked.region):""}) and wire it to this tenant's AI receptionist?</div>
+        <div class="disclosure">Real Twilio number, ~$1.15/mo, billed to Sailz's own account starting now. Voice answers immediately once this completes. Text messages from this number (confirmations/reminders) need a one-time carrier registration that takes a few business days — Sailz handles that separately; texting won't work until it's done.</div>
+        <div class="actionbar" style="margin:0">
+          <button class="btn-primary" id="nf_confirm">Confirm purchase</button>
+          <button class="btn-ghost" id="nf_cancel">Cancel</button>
+        </div>
+        <div id="nf_result"></div>
+      </div>`;
+    $("nf_confirm").onclick=async()=>{
+      $("nf_confirm").disabled=true; $("nf_confirm").textContent="Provisioning…";
+      try{
+        await api(`/api/hq/tenants/${numberFlow.tenantId}/provision-number`,{method:"POST",body:JSON.stringify({phoneNumber:numberFlow.picked.phoneNumber})});
+        numberFlow=null;
+        renderTenants();
+      }catch(e){
+        document.getElementById("nf_result").innerHTML=`<div class="msg err" style="margin-top:8px">${esc(e.message)}</div>`;
+        $("nf_confirm").disabled=false; $("nf_confirm").textContent="Confirm purchase";
+      }
+    };
+    $("nf_cancel").onclick=()=>{ numberFlow.picked=null; paintNumberFlow(); };
+    return;
+  }
+  box.innerHTML=`
+    <div class="confirm-box">
+      <label>Area code (optional)</label>
+      <input type="text" id="nf_area" placeholder="e.g. 704" maxlength="3" style="max-width:120px">
+      <div class="actionbar" style="margin-top:8px"><button class="btn-ghost" id="nf_search">Search available numbers</button><button class="btn-ghost" id="nf_close">Cancel</button></div>
+      <div id="nf_numbers"></div>
+    </div>`;
+  $("nf_close").onclick=()=>{ numberFlow=null; box.innerHTML=""; };
+  $("nf_search").onclick=async()=>{
+    $("nf_search").disabled=true; $("nf_search").textContent="Searching…";
+    try{
+      const areaCode=$("nf_area").value.trim();
+      const data=await api(`/api/hq/tenants/${numberFlow.tenantId}/available-numbers${areaCode?`?areaCode=${encodeURIComponent(areaCode)}`:""}`);
+      numberFlow.results=data.numbers;
+      document.getElementById("nf_numbers").innerHTML=data.numbers.length
+        ? `<div class="number-pick">${data.numbers.map((n,i)=>`<button data-pick="${i}">${esc(n.phoneNumber)}<br><span style="color:var(--dim);font-weight:400">${esc(n.locality||"")}</span></button>`).join("")}</div>`
+        : `<div class="empty">No numbers found for that area code — try another or leave it blank.</div>`;
+      document.querySelectorAll('[data-pick]').forEach(el=>{
+        el.onclick=()=>{ numberFlow.picked=numberFlow.results[Number(el.dataset.pick)]; paintNumberFlow(); };
+      });
+    }catch(e){
+      document.getElementById("nf_numbers").innerHTML=`<div class="msg err">${esc(e.message)}</div>`;
+    }finally{
+      $("nf_search").disabled=false; $("nf_search").textContent="Search available numbers";
+    }
+  };
 }
 
 /* ============================ ONBOARDING tab ============================ */

@@ -752,6 +752,62 @@ app.post("/api/hq/clients/:id/poll", requireHQ, auth, requireOwner, async (req, 
   res.json(snap);
 });
 
+// ---------- HQ ↔ platform service bridge (Stages 2 & 4) ----------
+// admin.html runs on the HQ instance, a separate deployment from the
+// multi-tenant platform service — it can't hold PLATFORM_KEY in browser
+// JS (anyone viewing the page could read it out of a network request),
+// so these routes proxy server-to-server exactly like hqClients.js
+// already does for polling client heartbeats, keeping the shared secret
+// server-side only. Env vars are new and HQ-instance-only: PLATFORM_BASE_URL
+// (the platform service's own URL) + PLATFORM_KEY (must match the value
+// configured on the platform service itself).
+const PLATFORM_BASE_URL = process.env.PLATFORM_BASE_URL;
+async function platformFetch(pathAndQuery, opts = {}) {
+  if (!PLATFORM_BASE_URL || !PLATFORM_KEY) throw new Error("PLATFORM_BASE_URL/PLATFORM_KEY not configured on this instance.");
+  const res = await fetch(`${PLATFORM_BASE_URL}${pathAndQuery}`, {
+    ...opts,
+    headers: { "x-sailz-platform-key": PLATFORM_KEY, "content-type": "application/json", ...(opts.headers || {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || `Platform request failed (${res.status})`), { status: res.status });
+  return data;
+}
+app.get("/api/hq/tenants", requireHQ, auth, requireOwner, async (req, res) => {
+  try {
+    res.json(await platformFetch(`/api/platform/tenants${req.query.status ? `?status=${encodeURIComponent(req.query.status)}` : ""}`));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+app.post("/api/hq/tenants/:id/approve", requireHQ, auth, requireOwner, async (req, res) => {
+  try {
+    res.json(await platformFetch(`/api/platform/tenants/${req.params.id}/approve`, { method: "POST" }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+app.post("/api/hq/tenants/:id/suspend", requireHQ, auth, requireOwner, async (req, res) => {
+  try {
+    res.json(await platformFetch(`/api/platform/tenants/${req.params.id}/suspend`, { method: "POST" }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+app.get("/api/hq/tenants/:id/available-numbers", requireHQ, auth, requireOwner, async (req, res) => {
+  try {
+    res.json(await platformFetch(`/api/platform/tenants/${req.params.id}/available-numbers${req.query.areaCode ? `?areaCode=${encodeURIComponent(req.query.areaCode)}` : ""}`));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+app.post("/api/hq/tenants/:id/provision-number", requireHQ, auth, requireOwner, async (req, res) => {
+  try {
+    res.json(await platformFetch(`/api/platform/tenants/${req.params.id}/provision-number`, { method: "POST", body: JSON.stringify({ phoneNumber: req.body?.phoneNumber }) }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 // ---------- attention inbox ----------
 // Computed entirely from data already in the store — no new infra. Each
 // item's action either maps to a real one-click route (method POST) or is
@@ -2073,10 +2129,16 @@ function requirePlatformKey(req, res, next) {
 }
 app.get("/api/platform/tenants", requirePlatformKey, async (req, res) => {
   const { pool } = require("./tenantStore");
+  // LEFT JOIN tenant_numbers so HQ's tenant list shows Stage 4's number-
+  // provisioning state (or lack of one) without a second round trip.
+  const base = `SELECT t.id, t.slug, t.name, t.vertical, t.status, t.created_at,
+                       n.phone_number, n.status AS number_status, n.error AS number_error
+                FROM tenants t LEFT JOIN tenant_numbers n ON n.tenant_id = t.id
+                WHERE t.id != '_platform'`;
   try {
     const result = req.query.status
-      ? await pool.query("SELECT id, slug, name, vertical, status, created_at FROM tenants WHERE status = $1 AND id != '_platform' ORDER BY created_at DESC", [req.query.status])
-      : await pool.query("SELECT id, slug, name, vertical, status, created_at FROM tenants WHERE id != '_platform' ORDER BY created_at DESC");
+      ? await pool.query(`${base} AND t.status = $1 ORDER BY t.created_at DESC`, [req.query.status])
+      : await pool.query(`${base} ORDER BY t.created_at DESC`);
     res.json({ tenants: result.rows });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2102,6 +2164,42 @@ app.post("/api/platform/tenants/:id/suspend", requirePlatformKey, async (req, re
     if (!result.rows[0]) return res.status(404).json({ error: "Tenant not found." });
     invalidateTenantRowCache(result.rows[0].slug);
     res.json({ ok: true, slug: result.rows[0].slug });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Stage 4 — number provisioning. Two routes: one read-only (search real
+// available numbers for the confirm screen to show), one that actually
+// spends money (buy + wire it up). Both require the tenant to already be
+// 'approved' — provisioning a number for a still-sandboxed tenant would
+// skip the one human review point this whole design is built around.
+app.get("/api/platform/tenants/:id/available-numbers", requirePlatformKey, async (req, res) => {
+  const { pool } = require("./tenantStore");
+  const numberProvision = require("./tenantNumberProvision");
+  if (!numberProvision.NUMBER_PROVISIONING) return res.status(404).end();
+  try {
+    const t = await pool.query("SELECT status FROM tenants WHERE id = $1", [req.params.id]);
+    if (!t.rows[0]) return res.status(404).json({ error: "Tenant not found." });
+    if (t.rows[0].status !== "approved") return res.status(403).json({ error: "Approve this tenant before searching for a number." });
+    const numbers = await numberProvision.searchAvailableNumbers(req.query.areaCode);
+    res.json({ numbers });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/api/platform/tenants/:id/provision-number", requirePlatformKey, async (req, res) => {
+  const { pool } = require("./tenantStore");
+  const numberProvision = require("./tenantNumberProvision");
+  if (!numberProvision.NUMBER_PROVISIONING) return res.status(404).end();
+  const phoneNumber = req.body?.phoneNumber;
+  if (!phoneNumber) return res.status(400).json({ error: "phoneNumber is required — pick one from available-numbers first." });
+  try {
+    const t = await pool.query("SELECT slug, status FROM tenants WHERE id = $1", [req.params.id]);
+    if (!t.rows[0]) return res.status(404).json({ error: "Tenant not found." });
+    if (t.rows[0].status !== "approved") return res.status(403).json({ error: "Approve this tenant before provisioning a number." });
+    const result = await numberProvision.provisionNumberForTenant(req.params.id, t.rows[0].slug, phoneNumber);
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

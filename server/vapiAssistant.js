@@ -304,4 +304,13 @@ module.exports = {
   composeAssistantConfig,
   toolsForVertical,
   ANALYSIS_SCHEMA,
+  // Pure functions of a profile object — no dependency on the legacy
+  // singleton `instance`/`profile`/load() globals above. Reused by
+  // server/tenantNumberProvision.js (Stage 4) to compose a tenant's own
+  // assistant prompt from its DB-stored profile instead of a file.
+  renderMenu,
+  renderHours,
+  renderPolicies,
+  DEFAULT_VOICE,
+  DEFAULT_MODEL,
 };

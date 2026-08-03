@@ -85,3 +85,24 @@ CREATE INDEX IF NOT EXISTS idx_tenant_collections_lookup ON tenant_collections(t
 -- Activity log entries (db.activity) grow unbounded in the legacy store
 -- (capped at 500 client-side by store.js's log()) — same cap enforced
 -- here at write time by server/tenantStore.js, not by the schema itself.
+
+-- Stage 4 — number provisioning state, tracked separately from `tenants`
+-- itself (rather than a few extra columns there) because provisioning is
+-- a multi-step external pipeline (buy Twilio number → create Vapi
+-- assistant → import number to Vapi) that can fail partway through —
+-- this row's `status`/`error` is what lets a failed attempt be retried
+-- cleanly and what an HQ confirm screen shows while it's in flight.
+-- One row per tenant: a tenant only ever has one active number under
+-- this pipeline (buying a second is out of scope — see the mission's
+-- own "no per-tenant custom domains beyond subdomains" style scoping).
+CREATE TABLE IF NOT EXISTS tenant_numbers (
+  tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  phone_number TEXT,
+  twilio_sid TEXT,
+  vapi_assistant_id TEXT,
+  vapi_phone_number_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'failed')),
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
