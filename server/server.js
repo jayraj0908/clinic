@@ -695,8 +695,11 @@ function hasFollowUpCall(db, missedCall) {
   return db.calls.some((c) => c.who === missedCall.who && new Date(c.ts) > new Date(missedCall.ts));
 }
 
-app.get("/api/attention", auth, (req, res) => {
-  const db = load();
+// Factored out so GET /api/simple (Simple Mode's "needs you" section) can
+// reuse the exact same items/severity logic instead of a second,
+// potentially-drifting copy — same reasoning as brainGraph.js's weekStats
+// being computed once, server-side, for every consumer.
+function buildAttentionItems(db) {
   const items = [];
   const TWO_HOURS = 2 * 60 * 60 * 1000;
 
@@ -838,7 +841,128 @@ app.get("/api/attention", auth, (req, res) => {
     });
   }
 
+  return items;
+}
+
+app.get("/api/attention", auth, (req, res) => {
+  const db = load();
+  const items = buildAttentionItems(db);
   res.json({ items, count: items.length });
+});
+
+// ---------- Simple Mode (the daily, non-technical owner surface) ----------
+// One payload, computed here so the plain-language numbers/copy are
+// trustworthy wherever shown — same reasoning as brainGraph.js's
+// weekStats and buildAttentionItems above. The frontend renders this
+// almost verbatim; no business logic lives in public/index.html for it.
+function isToday(ts) {
+  const d = new Date(ts);
+  return !Number.isNaN(d.getTime()) && d.toDateString() === new Date().toDateString();
+}
+
+// "$120–$180" -> 150 (midpoint) · "Free"/"0"/"" -> 0 · "$45" -> 45. Rough
+// on purpose — this powers an "est." figure on a screen whose whole point
+// is a plain-language gist, not a precise number (that's what the real
+// Calls/Orders/Calendar tables behind "More" are for).
+function parsePriceEstimate(str) {
+  const s = String(str || "").toLowerCase();
+  if (!s.trim() || s.includes("free")) return 0;
+  const nums = (s.match(/[\d,]+(\.\d+)?/g) || []).map((n) => parseFloat(n.replace(/,/g, ""))).filter((n) => !Number.isNaN(n));
+  if (!nums.length) return 0;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+const SEVERITY_RANK = { high: 0, medium: 1, low: 2 };
+
+app.get("/api/simple", auth, (req, res) => {
+  const db = load();
+  const vertical = (instance.vertical || "").toLowerCase();
+
+  // Status hero — whichever line actually answers "is my phone
+  // answered": receptionist (inbound) if this instance has one, else the
+  // outbound calling agent for an outbound-only client.
+  const activeIds = catalog.getActiveAgentIds(db);
+  let agentId = null, on = false;
+  if (activeIds.includes("receptionist")) {
+    agentId = "receptionist";
+    const row = db.agents.find((a) => a.id === "receptionist");
+    on = row ? !!row.on : true;
+  } else if (activeIds.includes("calling")) {
+    agentId = "calling";
+    const row = db.agents.find((a) => a.id === "setter");
+    on = row ? !!row.on : true;
+  }
+  const status = {
+    agentId,
+    on,
+    label: !agentId ? "Your AI isn't set up yet" : on ? "Your AI is answering" : "Your AI is paused",
+  };
+
+  // Today, in plain words.
+  const callsToday = db.calls.filter((c) => isToday(c.ts));
+  const ordersToday = (db.orders || []).filter((o) => isToday(o.ts));
+  const bookingsToday = callsToday.filter((c) => c.outcome === "booked").length;
+  const avgServicePrice = profile.services?.length
+    ? profile.services.reduce((sum, s) => sum + parsePriceEstimate(s.price), 0) / profile.services.length
+    : 0;
+  const estDollars = vertical === "restaurant"
+    ? ordersToday.reduce((sum, o) => sum + (o.total || 0), 0)
+    : bookingsToday * avgServicePrice;
+  const today = {
+    calls: callsToday.length,
+    bookings: bookingsToday,
+    orders: ordersToday.length,
+    estDollars: Math.round(estDollars),
+  };
+
+  // Needs you — same items as the bell, biggest first, capped at 3 so this
+  // never turns into another list to triage.
+  const needsYou = buildAttentionItems(db)
+    .sort((a, b) => (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9))
+    .slice(0, 3)
+    .map((i) => ({ title: i.title, action: i.action }));
+
+  // Today's feed — calls and orders merged into one reverse-chron,
+  // plain-language list. Booked calls try to describe the actual
+  // appointment (service + time) by joining on the linked appointment
+  // row, matching the existing vapiCallId link used elsewhere; falls
+  // back to a plain "booked {name}" if no linked row is found.
+  const feed = [];
+  for (const c of callsToday) {
+    let text;
+    if (c.outcome === "booked") {
+      const appt = db.appointments.find((a) => a.vapiCallId === c.vapiCallId || a.name === c.who);
+      text = appt
+        ? `Booked ${c.who}, ${appt.service || "a visit"}, ${new Date(appt.time).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+        : `Booked ${c.who}`;
+    } else if (c.outcome === "do_not_call") {
+      text = `${c.who} asked not to be called again`;
+    } else if (c.outcome === "not_interested") {
+      text = `${c.who} — not interested`;
+    } else if (c.outcome === "voicemail") {
+      text = `Left a voicemail for ${c.who}`;
+    } else if (c.outcome === "no_answer") {
+      text = `No answer — ${c.who}`;
+    } else if (c.dir === "inbound") {
+      text = `Your AI answered ${c.who}`;
+    } else {
+      text = `Called ${c.who}`;
+    }
+    feed.push({ ts: c.ts, text, kind: "call", callId: c.id, hasRecording: !!c.recordingUrl });
+  }
+  for (const o of ordersToday) {
+    feed.push({ ts: o.ts, text: `Order — $${(o.total || 0).toFixed(2)}, ${o.customer?.name || "a customer"}`, kind: "order", orderId: o.id });
+  }
+  feed.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+
+  // One primary action, matched to how this business actually makes money.
+  const primaryAction = vertical === "restaurant"
+    ? { label: "Today's orders", view: "orders" }
+    : vertical === "financial-services"
+    ? { label: "Scoreboard", view: "leads" }
+    : { label: "Today's schedule", view: "calendar" };
+
+  res.json({ status, today, needsYou, feed: feed.slice(0, 30), primaryAction, vertical: instance.vertical || null });
 });
 
 app.post("/api/leads/:id/queue-call", auth, (req, res) => {

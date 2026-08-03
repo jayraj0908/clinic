@@ -37,6 +37,38 @@
     align-items:center;justify-content:center;transition:color .2s}
   .theme-btn:hover{color:#f0ead8}
 
+  /* ---------- Simple Mode — the default daily surface ---------- */
+  #simpleMode{position:fixed;inset:0;z-index:100;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .simple-wrap{max-width:480px;margin:0 auto;padding:28px 18px 60px;width:100%;box-sizing:border-box}
+  .simple-brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}
+  .simple-brand-t{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:18px;letter-spacing:.25em;color:var(--ink)}
+  .simple-more-btn{appearance:none;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--dim);
+    font:600 10px 'Inter';letter-spacing:.1em;text-transform:uppercase;padding:9px 16px;border-radius:999px;cursor:pointer}
+  .simple-more-btn:hover{color:var(--ink);border-color:var(--ink)}
+  .simple-hero{background:var(--glass);border:1px solid var(--line);border-radius:18px;padding:26px 22px;
+    display:flex;align-items:center;gap:14px;cursor:pointer;margin-bottom:20px;transition:border-color .2s}
+  .simple-hero:hover{border-color:rgba(232,230,224,.2)}
+  .simple-hero-dot{width:14px;height:14px;border-radius:50%;flex:none;background:#7fd6b0;box-shadow:0 0 10px #7fd6b0}
+  .simple-hero-dot.off{background:#e08a7a;box-shadow:0 0 10px #e08a7a}
+  .simple-hero-label{font-family:'Cormorant Garamond',serif;font-size:20px;color:var(--ink)}
+  .simple-counts{text-align:center;font:500 15px 'Inter';color:var(--dim);margin-bottom:26px}
+  .simple-counts b{color:var(--ink);font-weight:600}
+  .simple-section{margin-bottom:24px}
+  .simple-section-t{font:600 10px 'Inter';letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:10px}
+  .simple-needsyou-btn{display:block;width:100%;text-align:left;appearance:none;border:1px solid rgba(224,138,122,.3);
+    background:rgba(224,138,122,.08);color:var(--ink);border-radius:12px;padding:14px 16px;font:500 13px 'Inter';
+    margin-bottom:8px;cursor:pointer}
+  .simple-needsyou-btn:disabled{opacity:.5}
+  .simple-primary-btn{display:block;width:100%;appearance:none;border:0;background:var(--ink);color:var(--bg);
+    border-radius:14px;padding:18px;font:600 13px 'Inter';letter-spacing:.06em;text-transform:uppercase;
+    cursor:pointer;margin-bottom:28px}
+  .simple-primary-btn:hover{opacity:.9}
+  .simple-feed-item{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);
+    font:400 13px 'Inter';color:var(--ink);cursor:pointer}
+  .simple-feed-item:last-child{border-bottom:0}
+  .simple-feed-time{color:var(--dim);font:400 11px 'Inter';flex:none;white-space:nowrap}
+  .simple-empty{text-align:center;color:var(--dim);font:400 12px 'Inter';padding:20px 0}
+
   /* ---------- top chrome ---------- */
   #topbar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;
     padding:16px 20px;pointer-events:none}
@@ -670,6 +702,29 @@
   </div>
 </div>
 
+<div id="simpleMode" class="hidden">
+  <div class="simple-wrap">
+    <div class="simple-brand">
+      <div class="simple-brand-t">SAILZ</div>
+      <button class="simple-more-btn" id="simpleMoreBtn">More ›</button>
+    </div>
+    <div class="simple-hero" id="simpleHero">
+      <div class="simple-hero-dot" id="simpleHeroDot"></div>
+      <div class="simple-hero-label" id="simpleHeroLabel">Loading…</div>
+    </div>
+    <div class="simple-counts" id="simpleCounts"></div>
+    <div class="simple-section" id="simpleNeedsYouSection" style="display:none">
+      <div class="simple-section-t">Needs you</div>
+      <div id="simpleNeedsYou"></div>
+    </div>
+    <button class="simple-primary-btn" id="simplePrimaryBtn">…</button>
+    <div class="simple-section">
+      <div class="simple-section-t">Today</div>
+      <div id="simpleFeed"></div>
+    </div>
+  </div>
+</div>
+
 <div id="app" class="hidden">
 <div class="vignette"></div>
 
@@ -688,6 +743,7 @@
     <button data-v="work">Chart</button>
   </div>
   <div class="tb-right">
+    <button class="theme-btn" id="simpleModeBtn" title="Simple view">⌂</button>
     <button class="theme-btn" id="themeBtn" title="Toggle light/dark">☾</button>
     <button class="bell-btn" id="memoryBtn" title="What the brain has learned">🧠</button>
     <button class="bell-btn" id="chatBtn" title="Chat with the brain">💬</button>
@@ -952,6 +1008,89 @@ async function api(path, opts={}){
   if(res.status===401){logout();throw new Error("auth")}
   return res.json();
 }
+
+/* ============================ Simple Mode — the default daily surface ==
+   One card stack: is my phone answered, what happened today, what needs
+   me. Shown on top of the full app (which keeps booting underneath,
+   unchanged) the moment auth succeeds; "More" reveals the full app,
+   the ⌂ icon in its topbar comes back here. All copy plain-language —
+   no jargon, dollars/counts not rates — per the server's own GET
+   /api/simple, which does the actual number-crunching so this stays a
+   pure render. */
+let simpleData=null;
+async function renderSimpleMode(){
+  document.getElementById('simpleMode').classList.remove('hidden');
+  try{
+    simpleData=await api('/api/simple');
+  }catch(e){
+    document.getElementById('simpleHeroLabel').textContent="Couldn't load — pull to refresh.";
+    return;
+  }
+  paintSimpleMode();
+}
+function hideSimpleMode(){ document.getElementById('simpleMode').classList.add('hidden'); }
+function paintSimpleMode(){
+  const d=simpleData;
+  if(!d)return;
+  const dot=document.getElementById('simpleHeroDot');
+  dot.classList.toggle('off',!d.status.on);
+  document.getElementById('simpleHeroLabel').textContent=d.status.label;
+  document.getElementById('simpleHero').onclick=async()=>{
+    if(!d.status.agentId||d.status.on)return; // only paused->resume is a meaningful one-tap fix here
+    const label=document.getElementById('simpleHeroLabel');
+    const prevText=label.textContent; label.textContent="Resuming…";
+    try{
+      await api(`/api/catalog/${d.status.agentId}/activate`,{method:'POST'});
+      await renderSimpleMode();
+    }catch(e){ label.textContent=prevText; }
+  };
+
+  const parts=[`<b>${d.today.calls}</b> call${d.today.calls===1?'':'s'}`];
+  if(d.vertical==='restaurant') parts.push(`<b>${d.today.orders}</b> order${d.today.orders===1?'':'s'}`);
+  else parts.push(`<b>${d.today.bookings}</b> booking${d.today.bookings===1?'':'s'}`);
+  if(d.today.estDollars>0) parts.push(`<b>$${d.today.estDollars.toLocaleString()}</b> est.`);
+  document.getElementById('simpleCounts').innerHTML=parts.join(' · ');
+
+  const nySection=document.getElementById('simpleNeedsYouSection');
+  if(d.needsYou.length){
+    nySection.style.display='block';
+    document.getElementById('simpleNeedsYou').innerHTML=d.needsYou.map((n,i)=>`<button class="simple-needsyou-btn" data-ny="${i}">${esc(n.title)}</button>`).join('');
+    document.querySelectorAll('[data-ny]').forEach(btn=>{
+      btn.onclick=async()=>{
+        const item=d.needsYou[Number(btn.dataset.ny)];
+        if(!item.action)return;
+        if(item.action.path==='memory'){ hideSimpleMode(); openMemoryDrawer(); return; }
+        if(item.action.method==='GET'){ hideSimpleMode(); setView(item.action.path); return; }
+        btn.disabled=true;
+        try{ await api(item.action.path,{method:item.action.method}); await renderSimpleMode(); }
+        catch(e){ btn.disabled=false; }
+      };
+    });
+  }else{
+    nySection.style.display='none';
+  }
+
+  const primaryBtn=document.getElementById('simplePrimaryBtn');
+  primaryBtn.textContent=d.primaryAction.label;
+  primaryBtn.onclick=()=>{ hideSimpleMode(); setView(d.primaryAction.view); };
+
+  const feedWrap=document.getElementById('simpleFeed');
+  if(!d.feed.length){
+    feedWrap.innerHTML='<div class="simple-empty">Nothing yet today.</div>';
+  }else{
+    feedWrap.innerHTML=d.feed.map((f,i)=>`<div class="simple-feed-item" data-feed="${i}"><span>${esc(f.text)}</span><span class="simple-feed-time">${esc(new Date(f.ts).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}))}</span></div>`).join('');
+    document.querySelectorAll('[data-feed]').forEach(row=>{
+      row.onclick=()=>{
+        const item=d.feed[Number(row.dataset.feed)];
+        if(item.kind==='call'){ hideSimpleMode(); setView('calls'); setTimeout(()=>{if(typeof openCallDrawer==='function')openCallDrawer(item.callId)},350); }
+        else if(item.kind==='order'){ hideSimpleMode(); setView('orders'); }
+      };
+    });
+  }
+}
+document.getElementById('simpleMoreBtn').onclick=hideSimpleMode;
+document.getElementById('simpleModeBtn').onclick=()=>renderSimpleMode();
+
 function hideAuthPanels(){
   ["login","forgotPanel","magicPanel","forceChangePw"].forEach(id=>$(id).classList.add("hidden"));
 }
@@ -970,7 +1109,7 @@ async function afterAuth(data){
   }
   clearAuthItem("mustChangePassword");
   hideAuthPanels(); $("app").classList.remove("hidden");
-  boot().catch(err=>console.error(err));
+  boot().catch(err=>console.error(err));renderSimpleMode().catch(err=>console.error(err));
 }
 async function doLogin(){
   $("loginErr").textContent="";
@@ -1006,7 +1145,7 @@ async function doForceChange(){
   if(!res.ok){$("forceChangeErr").textContent=data.error||"Couldn't set that password — try again.";return}
   clearAuthItem("mustChangePassword");
   hideAuthPanels(); $("app").classList.remove("hidden");
-  boot().catch(err=>console.error(err));
+  boot().catch(err=>console.error(err));renderSimpleMode().catch(err=>console.error(err));
 }
 function logout(){clearAuthItem("token");clearAuthItem("mustChangePassword");location.reload()}
 $("pw").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
@@ -3367,6 +3506,15 @@ async function boot(){
     applyCam();
     if(focused<0)fitAll();else focusCamTarget(depts[focused]);
   });
+
+  // setView/openCallDrawer/openMemoryDrawer are closures private to
+  // boot() (they capture `view`, `depts`, `catalogData`, etc.) — Simple
+  // Mode's top-level functions run outside that closure entirely, so
+  // exposing these three onto window is what lets "tap a feed item" /
+  // "tap a needs-you button" actually navigate the full app underneath.
+  window.setView=setView;
+  window.openCallDrawer=openCallDrawer;
+  window.openMemoryDrawer=openMemoryDrawer;
 }
 
 if(token){
@@ -3374,7 +3522,7 @@ if(token){
     showForceChange();
   }else{
     hideAuthPanels(); $("app").classList.remove("hidden");
-    boot().catch(err=>console.error(err));
+    boot().catch(err=>console.error(err));renderSimpleMode().catch(err=>console.error(err));
   }
 }
 
