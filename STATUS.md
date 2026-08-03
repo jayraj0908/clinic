@@ -23,6 +23,9 @@ order / wash), confirm it. The universal pain, sold to every vertical.
 | 11 | Mobile-first pass | ✅ done (audit + bottom-tab nav, map on touch, work surfaces, installable PWA, verified — see MOBILE-AUDIT.md) |
 | 13 | Vapi assistant-request (server/vapiAssistant.js) | ✅ done, flag off everywhere — see operator steps in vapiAssistant.js's file header before flipping VAPI_ASSISTANT_REQUEST=1 on either service |
 | 10 | Lead Engine v1 | ✅ done — RFP inbox agent (rfp-responder), speed-to-lead auto-queue (quiet hours + DNC), signal watcher (proposed leads, human-gated), mobile Leads pipeline tab. Both new agents dormant by default everywhere (fixed a real bug in catalog.js's fallback along the way — see commit `01f381a`). Myrtle hotels pitch unblocked. |
+| 14 | Onboarding v2 — Teach Your Brain | ✅ done — richer file types (images via Claude vision, audio w/ transcription), voice recording in the wizard, "what do you want" goals step, and a forever-on Teach tab on the client dashboard feeding the same memory/librarian pipeline + a new live-editable profile-overlay (proposed diffs, approved edits go live with no redeploy). |
+| 15 | Outbound Lead Engine v1 | ✅ done — bulk CSV lead import (consent attestation required, server-enforced), a new paced dialer (server/dialer.js: concurrency/hourly caps, per-lead quiet hours, attempts cap, weekend-skipping retry, one-voicemail-then-silent) fully separate from the existing setter() cron, batch scoreboard, and owner-editable pacing on the Calling Agent panel. |
+| 16 | First outbound-dialer client build (Retirement Plan Resource Group) | ✅ instance built, pending Railway deploy + Mutual of America compliance sign-off. Found + fixed two real engine bugs along the way (not client-specific hacks): `scripts/pull-onboarding.mjs` was reading the wrong draft field names (every past pull silently under-wrote instance files); Vapi's `ANALYSIS_SCHEMA` outcome enum didn't include do_not_call/no_answer/voicemail/callback_requested, meaning the DNC opt-out guardrail could never actually fire from a real call. Both fixed in shared engine code. Open engine gap (documented, not hacked around): dialer.js's first-attempt voicemail script is hardcoded/generic, not yet per-instance. |
 | 5 | Case threads | 🗂 parked (docs/queue/) |
 
 Executed prompts: `docs/archive/` · Strategy docs: `docs/` ·
@@ -35,6 +38,7 @@ Instance config: `instances/`
 |---|---|---|
 | Shine Dental | LIVE | keep librarian approvals flowing; case-study stats |
 | The Burg | Vapi wired, menu items in | fill $TBC prices → 5 test calls → demo + pilot signing |
+| Retirement Plan Resource Group | Instance built (prompt 16), not deployed | Mutual of America compliance + TCPA sign-off FIRST, then Railway service per instances/retirement-plan-resource-group/DEPLOY-CHECKLIST.md |
 | Car wash | discovery | book discovery call; instance is ~an afternoon |
 | Myrtle hotels | proposal | Lead Engine (prompt 10) shipped — RFP pitch unblocked, ready to send |
 

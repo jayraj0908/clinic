@@ -1,0 +1,6 @@
+{
+  "bookingConfirmationSMS": "You're confirmed with Aman Goel — {service}, {date} {time}. A calendar invite is on the way. Reply here or call {number} to reschedule.",
+  "bookingConfirmationEmailSubject": "Your consultation with Aman Goel is confirmed",
+  "bookingConfirmationEmailHTML": "<p>Hi {patient},</p><p>You're confirmed for a <strong>{service}</strong> with Aman Goel — {date} {time}. A calendar invite is on its way (in person or a Webex link, per what you asked for).</p><p>Reply to this email or call {number} to reschedule — no problem at all.</p>",
+  "reminderSMS": "Reminder: your consultation with Aman Goel is tomorrow — {service}, {date} {time}. Call {number} if you need to reschedule."
+}

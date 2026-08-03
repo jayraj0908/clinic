@@ -24,6 +24,7 @@ this folder — it is the single source of truth for scope, status, and setup.
 |---|---|---|---|---|
 | Shine Dental (Richmond) | Dental | LIVE | shine-dental | TBD |
 | The Burg (Richmond) | Restaurant | Discovery → Provisioning | the-burg | TBD |
+| Retirement Plan Resource Group (Aman Goel / Mutual of America) | Financial services — outbound retirement-plan consulting | Onboarded → Instance built, pending compliance sign-off + Railway deploy | retirement-plan-resource-group | TBD |
 | Myrtle Beach hotel group | Hospitality | Discovery → Proposal | TBD | TBD (100-hotel upside) |
 
 ## Rules

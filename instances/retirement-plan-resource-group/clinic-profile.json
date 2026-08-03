@@ -1,0 +1,35 @@
+{
+  "name": "Retirement Plan Resource Group",
+  "timezone": "America/New_York",
+  "hours": [
+    { "days": "Mon–Fri", "open": "9:00 AM", "close": "5:00 PM" },
+    { "days": "Sat", "open": null, "close": null },
+    { "days": "Sun", "open": null, "close": null }
+  ],
+  "_hoursNote": "Onboarding didn't give real business hours — this is the wizard's generic default. Aman himself takes every meeting M–F and weekends per his own onboarding answers (see clinic-profile's services entry below) — these 'hours' only govern the inbound receptionist line's quiet-hours framing, not when meetings can be booked. Confirm with the client before go-live.",
+  "services": [
+    {
+      "name": "Complimentary Retirement Plan Consultation",
+      "price": "Free",
+      "duration": "15–20 min",
+      "_note": "The wizard had dumped the entire description paragraph into this field's 'name' — moved the substance below and into agents/calling.md's business-knowledge section; nothing was dropped, it's the same content the onboarding-memory-seed.json facts already carry."
+    }
+  ],
+  "insuranceAccepted": [],
+  "_insuranceNote": "N/A for this vertical — cleared from the wizard's dental-template default of ['NA'] rather than surfacing a meaningless 'Insurance accepted: NA' line if this profile is ever rendered generically.",
+  "selfPay": "This is a complimentary service — free introductory consultation, no obligation to purchase or change a plan.",
+  "policies": [
+    "Rescheduling is easy — just let us know, no problem at all.",
+    "All resources and consultations offered through Retirement Plan Resource Group are free to employers.",
+    "Consultations include benchmarking so the employer can see how their plan compares to others in cost and performance, and to check whether their plan is integrated with payroll and identify any pain points.",
+    "Meetings can be in person or virtual (a Webex invite is sent for virtual) — coffee, lunch, dinner, happy hour, or the employer's office all work. Monday–Friday, and flexible on weekends.",
+    "Consultations run 15–20 minutes and are conducted by Aman Goel himself, not a team member.",
+    "Available to employer-sponsored retirement plans generally $500k+ in plan assets. The employer must already have a retirement plan in place — if they'd like to start one instead, say Aman can help with that too.",
+    "Serving the East Coast.",
+    "After booking: ask when they're free, then send a calendar invite and an email — no other confirmation steps needed.",
+    "If asked how their contact info was obtained: it's from their company's Form 5500 filing, a public document available via the Department of Labor's EFAST system.",
+    "Holidays: closed major holidays."
+  ],
+  "_policiesNote": "Customer-facing facts only — things the assistant can say ON a call. The onboarding voice/tone answer also contained a long list of compliance NEVER-SAY rules (what NOT to say, how to redirect investment questions, opt-out handling, FINRA/TCPA references) — those are agent BEHAVIOR, not spoken policy, so they live in agents/calling.md's Guardrails section instead, not duplicated here.",
+  "aiDisclosure": "This call is being made by an AI-powered scheduling assistant on behalf of Retirement Plan Resource Group, calling about a complimentary retirement-plan consultation with Aman Goel. If asked, always confirm clearly that you are an AI, never imply you are human. FINRA/TCPA note: the client's own onboarding flagged that AI-generated voices count as artificial/prerecorded under the TCPA — the calling PROCESS (consent basis, calling-list sourcing) needs legal review before launch, not just this disclosure line. See DEPLOY-CHECKLIST.md."
+}
