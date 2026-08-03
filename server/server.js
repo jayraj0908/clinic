@@ -35,6 +35,12 @@ const { AGENTS } = require("./brain");
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
+// Multi-tenant platform mode — a parallel path, never touching how Shine/
+// The Burg/HQ run today (see server/store.js's own MULTI_TENANT branch).
+// Only ever set on the new platform service, never on a legacy dedicated
+// client deployment.
+const MULTI_TENANT = process.env.MULTI_TENANT === "1";
+
 // HQ admin gate — Sailz's own provisioning/onboarding console (who gets
 // onboarded, draft review, activation) must never exist on a client
 // deployment, not even behind a login. Set SAILZ_ADMIN=1 only on Sailz's
@@ -63,13 +69,28 @@ function requireHQ(req, res, next) {
 // First boot (e.g. a fresh Railway deploy with no persistent volume yet):
 // seed so the owner login exists. Skipped whenever a database already
 // exists, so a restart/redeploy never wipes real accumulated data.
-if (!fs.existsSync(DB_PATH)) {
+// Legacy single-tenant only — DB_PATH is meaningless in multi-tenant mode
+// (there is no single db.json; tenants are created by Stage 2's
+// provisioning pipeline, or seeded directly against Postgres), and this
+// check runs at module-load time, before any request/tenant context
+// exists, so calling it in tenant mode would crash on the very first
+// require of server/tenantStore.js's load().
+if (!MULTI_TENANT && !fs.existsSync(DB_PATH)) {
   console.log("No database found — running first-time seed...");
   require("./seed");
 }
 
 const app = express();
 app.set("trust proxy", 1); // Railway sits behind a proxy — needed for express-rate-limit to see the real client IP
+
+// Absolute first thing in the chain in multi-tenant mode: resolves
+// req.tenant from the Host header and hydrates that tenant's data before
+// anything else runs. See server/tenantResolve.js's header for the full
+// isolation rationale. No-op entirely in legacy single-tenant mode.
+if (MULTI_TENANT) {
+  const { tenantResolveMiddleware } = require("./tenantResolve");
+  app.use(tenantResolveMiddleware());
+}
 
 // helmet with a CSP compatible with brain.html's design system: inline
 // <script type="module">/<style> blocks (this app has no build step, so
@@ -191,14 +212,31 @@ app.post("/api/auth/login", loginLimiter, (req, res) => {
   // — otherwise response timing itself is a user-exists oracle.
   const ok = bcrypt.compareSync(password || "", u ? u.passHash : DUMMY_HASH);
   if (!u || !ok) return res.status(401).json({ error: "Invalid email or password" });
-  res.json({ token: jwt.sign({ id: u.id, role: u.role }, SECRET, { expiresIn: "7d" }), name: u.name, mustChangePassword: !!u.mustChangePassword });
+  // MULTI_TENANT: the token itself carries which tenant it was issued for
+  // — this is "the authed user's tenant" the isolation guarantee refers
+  // to, checked on every subsequent request in auth() below. A token
+  // minted on tenant A's subdomain is only ever valid there.
+  const payload = MULTI_TENANT ? { id: u.id, role: u.role, tenantId: req.tenant.id } : { id: u.id, role: u.role };
+  res.json({ token: jwt.sign(payload, SECRET, { expiresIn: "7d" }), name: u.name, mustChangePassword: !!u.mustChangePassword });
 });
 
 function auth(req, res, next) {
+  let payload;
   try {
-    req.user = jwt.verify((req.headers.authorization || "").replace("Bearer ", ""), SECRET);
-    next();
-  } catch { res.status(401).json({ error: "Sign in required" }); }
+    payload = jwt.verify((req.headers.authorization || "").replace("Bearer ", ""), SECRET);
+  } catch {
+    return res.status(401).json({ error: "Sign in required" });
+  }
+  // A valid token minted for a DIFFERENT tenant than the one this request
+  // resolved to (req.tenant, set by tenantResolve middleware from the
+  // Host header) is a cross-tenant access attempt — 404, not 401/403, so
+  // the response reveals nothing about whether the token itself is valid
+  // or whether the requested resource exists on the right tenant.
+  if (MULTI_TENANT && payload.tenantId !== req.tenant?.id) {
+    return res.status(404).end();
+  }
+  req.user = payload;
+  next();
 }
 
 function requireOwner(req, res, next) {
@@ -1944,13 +1982,25 @@ app.get("/api/health", (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Clinic suite running → http://localhost:${PORT}`);
-  bootSchedules();
-  bootReminderCron();
-  bootBackupCron();
-  bootVapiSyncCron();
-  bootDialerLoop();
-  warnUnsetWebhookSecrets();
-  // Only HQ ever polls other deployments — a plain client instance just
-  // answers /api/heartbeat requests and never calls startPolling() at all.
-  if (SAILZ_ADMIN) hqClients.startPolling();
+  // Every one of these boot-time jobs assumes a single db to call load()
+  // against, with no tenant context (they run outside any request, at
+  // server startup) — a KNOWN, DELIBERATE Stage-1 gap, not an oversight:
+  // making agent scheduling/reminders/backups/the dialer loop/weekly
+  // Vapi sync run correctly PER TENANT (iterate all tenants, run each
+  // job inside that tenant's own AsyncLocalStorage context) is real,
+  // separate work for a later stage, not something Stage 1's tenant-core
+  // proof needs to solve. Skipped entirely in multi-tenant mode for now
+  // rather than crashing on the first load() call with no tenant in
+  // scope — see server/tenantStore.js's currentTenantId().
+  if (!MULTI_TENANT) {
+    bootSchedules();
+    bootReminderCron();
+    bootBackupCron();
+    bootVapiSyncCron();
+    bootDialerLoop();
+    warnUnsetWebhookSecrets();
+    // Only HQ ever polls other deployments — a plain client instance just
+    // answers /api/heartbeat requests and never calls startPolling() at all.
+    if (SAILZ_ADMIN) hqClients.startPolling();
+  }
 });

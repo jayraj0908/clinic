@@ -1,13 +1,23 @@
 // Simple persistent JSON store. Zero native deps — deploys anywhere.
 // For multi-clinic scale, swap this module for Postgres; the API surface is tiny.
+//
+// MULTI_TENANT=1 delegates load()/save()/log() to server/tenantStore.js's
+// Postgres-backed, per-tenant versions instead (see that file's header
+// for why the two share this exact synchronous zero-argument signature).
+// Every legacy single-tenant service (Shine, The Burg, HQ) never sets
+// this env var, so every line below this comment behaves identically to
+// before multi-tenant mode existed — this is the whole safety guarantee.
 const fs = require("fs");
 const path = require("path");
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "..", "data", "db.json");
+const MULTI_TENANT = process.env.MULTI_TENANT === "1";
+const tenantStore = MULTI_TENANT ? require("./tenantStore") : null;
 
 let db = null;
 
 function load() {
+  if (MULTI_TENANT) return tenantStore.load();
   if (db) return db;
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   if (fs.existsSync(DB_PATH)) {
@@ -60,12 +70,14 @@ function load() {
 }
 
 function save() {
+  if (MULTI_TENANT) return tenantStore.save();
   const tmp = DB_PATH + ".tmp";
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, DB_PATH); // atomic on same filesystem
 }
 
 function log(type, message, meta = {}) {
+  if (MULTI_TENANT) return tenantStore.log(type, message, meta);
   load().activity.unshift({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), ts: new Date().toISOString(), type, message, meta });
   db.activity = db.activity.slice(0, 500);
   save();
