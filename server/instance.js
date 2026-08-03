@@ -70,14 +70,25 @@ const profile = profilePath ? readJSONSafe(profilePath, DEFAULT_PROFILE) : DEFAU
 // redeploy — see server/profileEdits.js), and this replay is what makes
 // that survive an actual process restart, since `profile` above is
 // otherwise re-read fresh from the static file on every boot.
+// Skip entirely (not just try/catch) when db.json doesn't exist yet — a
+// truly fresh boot has zero approved edits to replay by definition, and
+// calling load() here would create an empty db.json as a side effect,
+// racing ahead of server.js's own "seed if missing" check (which runs
+// AFTER this module is required) and permanently short-circuiting it.
+// See server/seed.js — this bit Retirement Plan Resource Group's first
+// deploy silently (real owner login never got created) before this guard
+// existed.
 try {
-  const { load } = require("./store");
-  const { applyProfileEdit } = require("./profileEdits");
-  const db = load();
-  (db.profileEdits || [])
-    .filter((e) => e.status === "approved")
-    .forEach((e) => { try { applyProfileEdit(profile, e.diff); } catch { /* skip a bad overlay entry, don't fail boot */ } });
-} catch { /* db not ready yet on a truly fresh boot — profile stays file-only until the first edit is approved */ }
+  const { DB_PATH } = require("./store");
+  if (fs.existsSync(DB_PATH)) {
+    const { load } = require("./store");
+    const { applyProfileEdit } = require("./profileEdits");
+    const db = load();
+    (db.profileEdits || [])
+      .filter((e) => e.status === "approved")
+      .forEach((e) => { try { applyProfileEdit(profile, e.diff); } catch { /* skip a bad overlay entry, don't fail boot */ } });
+  }
+} catch { /* defensive — should be unreachable now that the existsSync guard above prevents load()'s own fresh-boot side effect */ }
 
 const inboundPromptPath = resolveFile("inbound-receptionist-prompt.md");
 const outboundPromptPath = resolveFile("outbound-setter-prompt.md");
