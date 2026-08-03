@@ -235,13 +235,30 @@ function toolsForVertical(vertical) {
 // handler already reads analysis.structuredData.outcome and
 // .unansweredQuestions (see the "Coverage-gap learning" comment there);
 // this is what tells Vapi's own analysis step to actually populate them.
+//
+// The outcome enum MUST match exactly what server/dialer.js's
+// applyOutcome() checks for string-by-string — found and fixed as a
+// genuine (not instance-specific) engine bug while building the
+// outbound Lead Engine's first real client: this enum still only had
+// the pre-dialer set (booked/callback/not_interested/completed), so
+// Vapi's own structured-data extraction could never actually OUTPUT
+// "do_not_call", "no_answer", or "voicemail" — meaning the DNC
+// guardrail (a hard compliance requirement, not a nice-to-have) could
+// never fire from a real call no matter how well the assistant's own
+// prompt told it to end the call and remember the request. Also fixed
+// "callback" → "callback_requested" (dialer.js has always checked the
+// latter; the two were silently never matching).
 const ANALYSIS_SCHEMA = {
   type: "object",
   properties: {
     outcome: {
       type: "string",
-      enum: ["booked", "callback", "not_interested", "completed"],
-      description: "How the call ended.",
+      enum: ["booked", "callback_requested", "not_interested", "no_answer", "do_not_call", "voicemail", "completed"],
+      description: "How the call ended. Use do_not_call whenever the person asks not to be called again, in any phrasing — this permanently suppresses future dialing, so it must be set whenever that intent is expressed, not just for an exact 'do not call' phrase.",
+    },
+    callbackTime: {
+      type: "string",
+      description: "If outcome is callback_requested and the person named a specific day/time to be called back, the ISO 8601 timestamp for that — omit if they didn't give a specific time.",
     },
     unansweredQuestions: {
       type: "array",
