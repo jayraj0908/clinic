@@ -269,6 +269,8 @@ function renderBasics(){
     <p class="sub">Tell us about the business — this becomes your AI receptionist's home base.</p>
     <label>Business name</label><input type="text" id="f_name" value="${esc(d.businessName||"")}" placeholder="Shine Dental Clinic">
     <label>What kind of business?</label><input type="text" id="f_type" value="${esc(d.businessType||"")}" placeholder="dental, restaurant, salon…">
+    <label>Owner email</label><input type="email" id="f_owner_email" value="${esc(d.ownerEmail||"")}" placeholder="you@yourbusiness.com">
+    <div class="hint">Your dashboard login goes here.</div>
     <div class="row2">
       <div><label>Phone</label><input type="tel" id="f_phone" value="${esc(d.phone||"")}" placeholder="(555) 123-4567"></div>
       <div><label>Timezone</label><input type="text" id="f_tz" value="${esc(d.timezone||"America/New_York")}" placeholder="America/New_York"></div>
@@ -276,8 +278,9 @@ function renderBasics(){
     <label>Address</label><input type="text" id="f_addr" value="${esc(d.address||"")}" placeholder="1 Main St, Richmond, VA">
   `,{back:false});
   $("nextBtn").onclick=async()=>{
-    const data={businessName:$("f_name").value.trim(),businessType:$("f_type").value.trim(),phone:$("f_phone").value.trim(),timezone:$("f_tz").value.trim()||"America/New_York",address:$("f_addr").value.trim()};
+    const data={businessName:$("f_name").value.trim(),businessType:$("f_type").value.trim(),ownerEmail:$("f_owner_email").value.trim(),phone:$("f_phone").value.trim(),timezone:$("f_tz").value.trim()||"America/New_York",address:$("f_addr").value.trim()};
     if(!data.businessName){alert("Business name is required.");return}
+    if(!data.ownerEmail||!data.ownerEmail.includes("@")){alert("A valid owner email is required — that's where your dashboard login goes.");return}
     await api(`/api/onboarding/${token}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({step:"basics",data})});
     state.data.basics=data; goTo(stepIdx+1);
   };
@@ -639,13 +642,29 @@ function paintDoneWithInterview(){
 /* ---------------- Step 9: done ---------------- */
 async function renderDone(){
   $("card").innerHTML=`<div class="center-state"><span class="spinner"></span>Preparing your brain…</div>`;
+  let result;
   try{
-    await api(`/api/onboarding/${token}/complete`,{method:"POST"});
+    result=await api(`/api/onboarding/${token}/complete`,{method:"POST"});
   }catch(e){
     if(e.status!==410){ $("card").innerHTML=`<div class="center-state"><div class="glyph">!</div><p class="sub">${esc(e.message)}</p></div>`; return; }
-    // 410 = already completed on a prior visit to this step — fine, fall through to the confirmation view
+    // 410 = already completed on a prior visit to this step — fine, fall through to the confirmation view below (no tenant/bootstrap info on a re-visit, so this always shows the "Sailz is reviewing" copy in that case)
   }
   $("progress").innerHTML=STEPS.map(()=>`<i class="done"></i>`).join("");
+  // Multi-tenant mode: the dashboard already exists — redirect straight
+  // into it, signed in, instead of making them wait for a human. The
+  // bootstrap token is single-purpose and expires in 10 minutes; the
+  // platform's own index.html exchanges it for a real session on load.
+  if(result?.tenant?.redirectUrl){
+    $("card").innerHTML=`
+      <div class="center-state">
+        <div class="glyph">✦</div>
+        <h1>Your brain is ready</h1>
+        <p class="sub">Taking you to your dashboard now…</p>
+      </div>
+    `;
+    location.href=result.tenant.redirectUrl;
+    return;
+  }
   $("card").innerHTML=`
     <div class="center-state">
       <div class="glyph">✦</div>

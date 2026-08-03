@@ -126,7 +126,7 @@ function findLiveByToken(token) {
   const db = load();
   const o = db.onboardings.find((x) => x.token === token);
   if (!o) return { ok: false, status: 404, error: "This link isn't valid." };
-  if (o.status === "completed" || o.status === "activated") {
+  if (o.status === "completed" || o.status === "activated" || o.status === "provisioned") {
     return { ok: false, status: 410, error: "This link has already been used." };
   }
   return { ok: true, db, onboarding: o };
@@ -344,7 +344,14 @@ function buildDraftFromOnboarding(onboarding) {
     badWeekText: d.goals?.badWeekText || "",
   };
 
-  return { instanceJson, clinicProfileJson, messagesJson, memoryFacts, clientGoals };
+  // Not part of any instance file (there's no "owner email" field in
+  // instance.json) — carried on the draft itself so tenant mode's
+  // instant-provisioning (server/tenantProvision.js) has somewhere to
+  // send the new owner's login. Legacy mode's human-reviewed activation
+  // flow doesn't need this at all; it's ignored there.
+  const ownerEmail = basics.ownerEmail || "";
+
+  return { instanceJson, clinicProfileJson, messagesJson, memoryFacts, clientGoals, ownerEmail };
 }
 
 async function completeOnboarding(token) {
@@ -353,6 +360,36 @@ async function completeOnboarding(token) {
   const { onboarding } = found;
 
   onboarding.draft = buildDraftFromOnboarding(onboarding);
+
+  // MULTI_TENANT: instant tenancy — no human in the loop for the
+  // dashboard to exist. Provisions immediately (new tenant row, config,
+  // memory seed, owner user, credential email, bootstrap session) and
+  // starts the tenant in "sandbox" status: dashboard/Teach/memory usable,
+  // no phone number and no outbound until HQ reviews and flips it to
+  // "approved" — the human gate moves to the phone, where the real risk
+  // lives, per the mission's own framing. Legacy mode is completely
+  // unchanged below: build the draft, wait for a human to review and
+  // explicitly activate it later.
+  if (process.env.MULTI_TENANT === "1") {
+    const tenantProvision = require("./tenantProvision");
+    let tenantResult;
+    try {
+      tenantResult = await tenantProvision.provisionTenantFromDraft(onboarding.draft, onboarding.clientName);
+    } catch (e) {
+      log("error", `Instant provisioning failed for ${onboarding.clientName}: ${e.message}`);
+      return { ok: false, status: 500, error: "Something went wrong setting up your dashboard — Sailz has been notified." };
+    }
+    onboarding.status = "provisioned";
+    onboarding.currentStep = "done";
+    onboarding.completedAt = new Date().toISOString();
+    onboarding.updatedAt = new Date().toISOString();
+    onboarding.tenantSlug = tenantResult.slug;
+    onboarding.tenantId = tenantResult.tenantId;
+    save();
+    log("system", `Instant-provisioned tenant "${tenantResult.slug}" for ${onboarding.clientName} — sandbox status, awaiting HQ approval before any phone number/outbound`);
+    return { ok: true, onboarding: publicView(onboarding), tenant: { slug: tenantResult.slug, redirectUrl: tenantResult.redirectUrl } };
+  }
+
   onboarding.status = "completed";
   onboarding.currentStep = "done";
   onboarding.completedAt = new Date().toISOString();

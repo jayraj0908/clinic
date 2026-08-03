@@ -204,6 +204,14 @@ const loginLimiter = rateLimit({
 // a real comparison (see the login route below).
 const DUMMY_HASH = bcrypt.hashSync("no-such-user-timing-decoy", 10);
 
+// Bootstrap tokens are meant to be single-use (a magic link, not a
+// reusable credential) — the JWT itself only proves it was minted for
+// this tenant and hasn't expired, so replay protection has to live here.
+// Tracking raw tokens in-memory is enough given their own short (10min)
+// lifetime; each entry self-evicts at the token's own exp so this never
+// grows unbounded.
+const consumedBootstrapTokens = new Set();
+
 app.post("/api/auth/login", loginLimiter, (req, res) => {
   const { email, password } = req.body || {};
   const u = load().users.find((x) => x.email === email);
@@ -220,11 +228,52 @@ app.post("/api/auth/login", loginLimiter, (req, res) => {
   res.json({ token: jwt.sign(payload, SECRET, { expiresIn: "7d" }), name: u.name, mustChangePassword: !!u.mustChangePassword });
 });
 
+// Exchanges a short-lived bootstrap token (minted by tenantProvision.js
+// right after instant provisioning) for a real session — this is the
+// "before you put your phone down" moment: the wizard's last step
+// redirects the browser straight to https://<slug>.sailz.org/?bootstrap=
+// <token>, and the platform's index.html trades it in here before
+// showing the dashboard. Only ever valid once the tenant it names
+// actually exists and the request has landed on THAT tenant's own
+// resolved host (checked below) — never usable to bootstrap into a
+// different tenant than the one it was minted for.
+app.post("/api/auth/bootstrap", loginLimiter, (req, res) => {
+  if (!MULTI_TENANT) return res.status(404).end();
+  const rawToken = req.body?.token || "";
+  let payload;
+  try {
+    payload = jwt.verify(rawToken, SECRET);
+  } catch {
+    return res.status(401).json({ error: "This link has expired or already been used." });
+  }
+  if (payload.purpose !== "bootstrap" || payload.tenantId !== req.tenant?.id) {
+    return res.status(401).json({ error: "This link has expired or already been used." });
+  }
+  if (consumedBootstrapTokens.has(rawToken)) {
+    return res.status(401).json({ error: "This link has expired or already been used." });
+  }
+  const u = load().users.find((x) => x.id === payload.id);
+  if (!u) return res.status(401).json({ error: "This link has expired or already been used." });
+  consumedBootstrapTokens.add(rawToken);
+  setTimeout(() => consumedBootstrapTokens.delete(rawToken), Math.max(0, payload.exp * 1000 - Date.now()) + 1000).unref();
+  const sessionPayload = { id: u.id, role: u.role, tenantId: req.tenant.id };
+  res.json({ token: jwt.sign(sessionPayload, SECRET, { expiresIn: "7d" }), name: u.name, mustChangePassword: !!u.mustChangePassword });
+});
+
 function auth(req, res, next) {
   let payload;
   try {
     payload = jwt.verify((req.headers.authorization || "").replace("Bearer ", ""), SECRET);
   } catch {
+    return res.status(401).json({ error: "Sign in required" });
+  }
+  // A bootstrap token (minted by tenantProvision.js right after instant
+  // provisioning) is single-purpose — good for exactly one exchange at
+  // POST /api/auth/bootstrap, never valid as a normal API credential,
+  // even though it's structurally a real JWT signed with the same
+  // secret. Defense in depth: the exchange route is what actually
+  // enforces one-time-use-ish behavior (short 10-minute expiry).
+  if (payload.purpose === "bootstrap") {
     return res.status(401).json({ error: "Sign in required" });
   }
   // A valid token minted for a DIFFERENT tenant than the one this request
@@ -236,6 +285,23 @@ function auth(req, res, next) {
     return res.status(404).end();
   }
   req.user = payload;
+  next();
+}
+
+// Sandbox tenants (instant-provisioned, not yet HQ-approved) get the full
+// dashboard/Teach/memory experience but no outbound capability — the
+// human gate moved from "before the dashboard exists" to "before the
+// phone/dialer can do anything", per the multi-tenant mission. No-op in
+// legacy mode (no such thing as tenant status there). This is one
+// concrete enforcement point (import is the first step of any outbound
+// campaign); the fuller guarantee — a sandbox tenant's dialer literally
+// never ticks — depends on the per-tenant scheduling work Stage 1
+// deliberately deferred (see server.js's app.listen callback comment).
+function requireApprovedTenant(req, res, next) {
+  if (!MULTI_TENANT) return next();
+  if (req.tenant?.status !== "approved") {
+    return res.status(403).json({ error: "This account is still in review — outbound calling unlocks once Sailz approves your number." });
+  }
   next();
 }
 
@@ -1257,6 +1323,19 @@ app.post("/api/onboarding/create", requireHQ, auth, requireOwner, (req, res) => 
   res.json({ token: entry.token, id: entry.id, url: `${req.protocol}://${req.get("host")}/onboard/${entry.token}` });
 });
 
+// Multi-tenant only: the "fill this out for ten minutes and your
+// dashboard is live" entry point — a real prospective client, not Jay,
+// starts this, so there's no owner/HQ login to require and no existing
+// tenant to authenticate against yet. Legacy mode keeps requireHQ above
+// as the only way to mint a link (a dedicated single-tenant deployment
+// IS a specific, already-known client — self-serve doesn't apply there).
+app.post("/api/onboarding/start", onboardingLimiter, (req, res) => {
+  if (!MULTI_TENANT) return res.status(404).end();
+  const { clientName } = req.body || {};
+  const entry = onboarding.createOnboarding({ clientName: clientName || "New client", createdBy: "self-serve" });
+  res.json({ token: entry.token, url: `/onboard/${entry.token}` });
+});
+
 app.get("/onboard/:token", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "onboard.html"));
 });
@@ -1358,7 +1437,12 @@ app.post("/api/onboarding/:token/complete", onboardingLimiter, async (req, res) 
   try {
     const result = await onboarding.completeOnboarding(req.params.token);
     if (!result.ok) return res.status(result.status).json({ error: result.error });
-    res.json(result.onboarding);
+    // MULTI_TENANT: result.tenant (slug/redirectUrl) is how the wizard's
+    // last step knows to bounce straight into the new live dashboard
+    // instead of showing the "Sailz is reviewing this" copy — dropped
+    // entirely by the old `res.json(result.onboarding)` shape, which only
+    // ever needed to carry the onboarding object back in legacy mode.
+    res.json(result.tenant ? { ...result.onboarding, tenant: result.tenant } : result.onboarding);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1894,7 +1978,7 @@ const leadImportLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHead
 // consent checkbox) and a mapping, does the real import. Same route, same
 // parse code path, so preview and confirm can never see a different parse
 // of the same file.
-app.post("/api/leads/import", auth, requireOwner, leadImportLimiter, handleUpload(leadImportUpload.single("file")), (req, res) => {
+app.post("/api/leads/import", auth, requireOwner, requireApprovedTenant, leadImportLimiter, handleUpload(leadImportUpload.single("file")), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Attach a CSV file first." });
   let rows;
   try {
@@ -1963,12 +2047,64 @@ app.get("/api/dialer/pacing", auth, (req, res) => {
   const db = load();
   res.json({ pacing: dialer.getPacing(db), max: dialer.PACING_MAX, min: dialer.PACING_MIN });
 });
-app.post("/api/dialer/pacing", auth, requireOwner, (req, res) => {
+app.post("/api/dialer/pacing", auth, requireOwner, requireApprovedTenant, (req, res) => {
   const db = load();
   const pacing = dialer.setPacing(db, req.body || {});
   save();
   log("system", `${req.user.id} updated dialer pacing: ${JSON.stringify(pacing)}`);
   res.json({ pacing });
+});
+
+// ---------- platform admin (multi-tenant mode only — HQ's review surface,
+// moved from BEFORE tenant existence to AFTER it: instant provisioning
+// creates the tenant immediately in "sandbox" status; this is where a
+// human approves the one thing that actually carries real-world risk —
+// the phone number and outbound calling, not the dashboard itself) ----------
+// Shared-secret auth, like /api/heartbeat's HEARTBEAT_KEY — this is
+// cross-tenant by nature (HQ needs to see every tenant, not one), so a
+// per-tenant JWT can never be the right credential here; tenantResolve.js
+// already routes /api/platform/* around tenant-context resolution
+// entirely (no req.tenant, no ALS) for exactly this reason.
+const PLATFORM_KEY = process.env.PLATFORM_KEY;
+function requirePlatformKey(req, res, next) {
+  if (!MULTI_TENANT) return res.status(404).end();
+  if (!PLATFORM_KEY || req.headers["x-sailz-platform-key"] !== PLATFORM_KEY) return res.status(403).end();
+  next();
+}
+app.get("/api/platform/tenants", requirePlatformKey, async (req, res) => {
+  const { pool } = require("./tenantStore");
+  try {
+    const result = req.query.status
+      ? await pool.query("SELECT id, slug, name, vertical, status, created_at FROM tenants WHERE status = $1 AND id != '_platform' ORDER BY created_at DESC", [req.query.status])
+      : await pool.query("SELECT id, slug, name, vertical, status, created_at FROM tenants WHERE id != '_platform' ORDER BY created_at DESC");
+    res.json({ tenants: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/api/platform/tenants/:id/approve", requirePlatformKey, async (req, res) => {
+  const { pool } = require("./tenantStore");
+  const { invalidateTenantRowCache } = require("./tenantResolve");
+  try {
+    const result = await pool.query("UPDATE tenants SET status = 'approved' WHERE id = $1 AND status = 'sandbox' RETURNING slug", [req.params.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: "Tenant not found, or not awaiting approval." });
+    invalidateTenantRowCache(result.rows[0].slug); // takes effect on the very next request, not after the row-cache TTL
+    res.json({ ok: true, slug: result.rows[0].slug });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/api/platform/tenants/:id/suspend", requirePlatformKey, async (req, res) => {
+  const { pool } = require("./tenantStore");
+  const { invalidateTenantRowCache } = require("./tenantResolve");
+  try {
+    const result = await pool.query("UPDATE tenants SET status = 'suspended' WHERE id = $1 RETURNING slug", [req.params.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: "Tenant not found." });
+    invalidateTenantRowCache(result.rows[0].slug);
+    res.json({ ok: true, slug: result.rows[0].slug });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ---------- scheduler ----------

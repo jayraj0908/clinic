@@ -18,6 +18,38 @@ const { tenantContext, hydrateTenant, pool } = require("./tenantStore");
 
 const RESERVED_SUBDOMAINS = new Set(["www", "hq", "admin", "api"]);
 
+// The onboarding wizard runs BEFORE any real tenant exists — there's no
+// subdomain to resolve a brand-new client to yet, that's the whole point
+// of "instant tenancy". Rather than build a second, parallel async
+// storage layer just for in-progress onboarding drafts, those requests
+// run under one fixed, never-subdomain-routable sentinel tenant row
+// ("_platform") — this lets server/onboarding.js's existing load()/
+// save()-based code work completely UNCHANGED in tenant mode: it just
+// happens to be reading/writing the "_platform" tenant's own
+// `onboardings` collection instead of a real client's. Platform-admin
+// routes (HQ listing/approving new tenants) need the opposite — NO
+// tenant context at all, since they legitimately query the tenants
+// table across every tenant; those are matched here too and skip
+// straight to next() with no ALS context set.
+const PLATFORM_TENANT_ID = "_platform";
+// Deliberately excludes /api/auth/bootstrap: that route exchanges a
+// token for a session on the tenant the token was ISSUED for, which
+// means it needs the real Host-resolved tenant (so it can check
+// payload.tenantId against req.tenant.id), not the "_platform" sentinel.
+const ONBOARDING_PATH_RE = /^\/(onboard\/|api\/onboarding\/)/;
+const PLATFORM_ADMIN_PATH_RE = /^\/api\/platform\//;
+
+let platformTenantEnsured = false;
+async function ensurePlatformTenant() {
+  if (platformTenantEnsured) return;
+  await pool.query(
+    `INSERT INTO tenants (id, slug, name, vertical, status) VALUES ($1, $1, 'Sailz Platform', 'platform', 'approved')
+     ON CONFLICT (id) DO NOTHING`,
+    [PLATFORM_TENANT_ID]
+  );
+  platformTenantEnsured = true;
+}
+
 function subdomainFromHost(host) {
   if (!host) return null;
   const bare = String(host).split(":")[0].toLowerCase();
@@ -66,6 +98,23 @@ function sendMarketingPlaceholder(res) {
 
 function tenantResolveMiddleware() {
   return async (req, res, next) => {
+    if (PLATFORM_ADMIN_PATH_RE.test(req.path)) {
+      // Cross-tenant by design (HQ's own new-tenant review) — these routes
+      // authenticate via their own shared secret (see server.js), never a
+      // per-tenant JWT, and must never run inside any tenant's ALS context.
+      return next();
+    }
+    if (ONBOARDING_PATH_RE.test(req.path)) {
+      try {
+        await ensurePlatformTenant();
+        await hydrateTenant(PLATFORM_TENANT_ID);
+      } catch (e) {
+        console.error(`[tenantResolve] platform tenant hydrate failed: ${e.message}`);
+        return res.status(503).json({ error: "Temporarily unavailable." });
+      }
+      req.tenant = { id: PLATFORM_TENANT_ID, slug: PLATFORM_TENANT_ID, name: "Sailz Platform", vertical: "platform", status: "approved" };
+      return tenantContext.run({ tenantId: PLATFORM_TENANT_ID }, () => next());
+    }
     const slug = subdomainFromHost(req.headers.host);
     if (!slug || RESERVED_SUBDOMAINS.has(slug)) {
       return sendMarketingPlaceholder(res);

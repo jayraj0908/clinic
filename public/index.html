@@ -3517,14 +3517,42 @@ async function boot(){
   window.openMemoryDrawer=openMemoryDrawer;
 }
 
-if(token){
-  if(getAuthItem("mustChangePassword")==="1"){
-    showForceChange();
-  }else{
-    hideAuthPanels(); $("app").classList.remove("hidden");
-    boot().catch(err=>console.error(err));renderSimpleMode().catch(err=>console.error(err));
+// Multi-tenant "instant tenancy": the onboarding wizard's last step
+// redirects straight here with ?bootstrap=<short-lived token> instead of
+// making the client wait for a human — exchanged for a real session
+// before anything else happens, so "fill out the wizard" and "land on
+// your live dashboard, signed in" are the same ten minutes. Stripped
+// from the URL immediately either way, so it never lingers in the
+// address bar/browser history even if the exchange fails.
+(async function initialBoot(){
+  const bootstrapToken=new URLSearchParams(location.search).get('bootstrap');
+  if(bootstrapToken){
+    history.replaceState({},'',location.pathname);
+    try{
+      const res=await fetch('/api/auth/bootstrap',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:bootstrapToken})});
+      const data=await res.json().catch(()=>({}));
+      if(res.ok){
+        token=data.token; setAuthItem('token',token,true);
+        if(data.mustChangePassword){ setAuthItem('mustChangePassword','1',true); showForceChange(); return; }
+        clearAuthItem('mustChangePassword');
+        hideAuthPanels(); $("app").classList.remove("hidden");
+        boot().catch(err=>console.error(err)); renderSimpleMode().catch(err=>console.error(err));
+        return;
+      }
+    }catch(e){ console.error('Bootstrap exchange failed:',e); }
+    // Falls through to the normal token-in-storage check below if the
+    // exchange failed (expired/already used) — worst case, the login
+    // screen shows instead of a dashboard, never a broken blank page.
   }
-}
+  if(token){
+    if(getAuthItem("mustChangePassword")==="1"){
+      showForceChange();
+    }else{
+      hideAuthPanels(); $("app").classList.remove("hidden");
+      boot().catch(err=>console.error(err));renderSimpleMode().catch(err=>console.error(err));
+    }
+  }
+})();
 
 // PWA shell caching — see public/sw.js's own header for what this does
 // and, just as importantly, what it deliberately never touches (/api/*).
