@@ -197,6 +197,7 @@ async function placeCall(db, lead, vapiKey) {
   lead.attempts += 1;
   lead.lastAttemptAt = new Date().toISOString();
   lead.status = "call_scheduled";
+  lead.priorityCall = false;
   if (!lead.firstContactAt) lead.firstContactAt = new Date().toISOString();
   recordAttempt(db, lead.id);
   log("agent", `Dialer: calling ${lead.name} (attempt ${lead.attempts}/${getPacing(db).maxAttempts})`);
@@ -226,9 +227,14 @@ async function tick() {
   if (!vapiKey) { save(); return; } // graceful no-op, same as setter()
 
   const now = Date.now();
+  // priorityCall (set by POST /api/leads/:id/queue-call, the dashboard's
+  // "call" button and the attention inbox's "call back" action) jumps a
+  // batch lead to the front of THIS queue — the non-batch equivalent is
+  // agents.js's setter(), which deliberately excludes batchId leads so
+  // the two systems never both try to call the same person.
   const eligible = db.leads
     .filter((l) => l.batchId && l.dialerState === "queued" && (!l.nextAttemptAt || new Date(l.nextAttemptAt).getTime() <= now))
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    .sort((a, b) => (b.priorityCall ? 1 : 0) - (a.priorityCall ? 1 : 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   // Per-lead quiet hours (contact-local if this lead has a timezone from
   // import, else instance-local) — a lead outside its own calling window

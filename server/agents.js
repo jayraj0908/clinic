@@ -133,8 +133,17 @@ const agents = {
     const db = load();
     // priorityCall (set by POST /api/leads/:id/queue-call, the attention
     // inbox's "call back" action) jumps a lead to the front of the queue.
+    // Excludes batchId leads deliberately — those belong exclusively to
+    // server/dialer.js's own paced tick() loop (hourly caps, quiet hours,
+    // DNC, retry scheduling, attempt caps), which independently polls the
+    // exact same "setter" on/off row every 30s. A batch lead pressed
+    // "call" on would otherwise be eligible for BOTH systems at once —
+    // this cron every 10min AND that loop every 30s — risking two real
+    // calls to the same person. priorityCall still works for batch leads;
+    // it just gets honored by dialer.js's own queue instead (see its
+    // eligible-sort), never by this cron.
     const queue = db.leads
-      .filter((l) => l.status === "qualified")
+      .filter((l) => l.status === "qualified" && !l.batchId)
       .sort((a, b) => (b.priorityCall ? 1 : 0) - (a.priorityCall ? 1 : 0));
     if (!queue.length) { log("agent", "Appointment Setter: queue empty"); return "queue empty"; }
 
