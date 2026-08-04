@@ -1060,6 +1060,7 @@ function paintSimpleMode(){
         const item=d.needsYou[Number(btn.dataset.ny)];
         if(!item.action)return;
         if(item.action.path==='memory'){ hideSimpleMode(); openMemoryDrawer(); return; }
+        if(item.action.path.startsWith('onboarding/')){ hideSimpleMode(); window.location.href='/admin.html?tab=onboarding&id='+item.action.path.slice('onboarding/'.length); return; }
         if(item.action.method==='GET'){ hideSimpleMode(); setView(item.action.path); return; }
         btn.disabled=true;
         try{ await api(item.action.path,{method:item.action.method}); await renderSimpleMode(); }
@@ -3293,7 +3294,14 @@ async function boot(){
         if(!item.action)return;
         if(item.action.method==='GET'){
           $("bellDrop").classList.remove('show');
-          if(item.action.path==='memory')openMemoryDrawer();else setView(item.action.path);
+          // "onboarding/<id>" isn't a view this dashboard has (only HQ's
+          // own instance ever produces this item, since db.onboardings is
+          // always empty on a real client's own database) — the real
+          // review surface is admin.html's dedicated Onboarding tab, not
+          // a setView() this app recognizes.
+          if(item.action.path==='memory')openMemoryDrawer();
+          else if(item.action.path.startsWith('onboarding/'))window.location.href='/admin.html?tab=onboarding&id='+item.action.path.slice('onboarding/'.length);
+          else setView(item.action.path);
           return;
         }
         btn.disabled=true;btn.textContent='…';
