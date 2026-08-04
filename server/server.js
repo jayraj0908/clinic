@@ -179,6 +179,28 @@ app.get("/manifest.json", (req, res) => {
     ],
   });
 });
+
+// SMS Privacy Policy / Terms — templated per-client, not a plain static
+// file, since these are real legal/compliance documents (TCPA opt-in
+// disclosure) that must actually name the real business texting the
+// customer, not whichever client's info happened to be hardcoded when
+// the file was first written. public/sms-privacy.html and
+// public/sms-terms.html are the template source of truth (still plain,
+// readable HTML — just with {{CLINIC_NAME}}/{{PHONE}} tokens instead of
+// a real client's info baked in); this substitutes real values at
+// request time from THIS deployment's own settings, same pattern as
+// /manifest.json above. Registered before express.static() below so
+// these routes win over the raw template files sitting in public/.
+function renderSmsLegalTemplate(filename, res) {
+  const db = load();
+  const name = (db.settings && db.settings.clinicName) || instance.name || "Sailz";
+  const phone = (db.settings && db.settings.receptionistNumber) || "the number on file";
+  const raw = fs.readFileSync(path.join(__dirname, "..", "public", filename), "utf8");
+  const html = raw.replaceAll("{{CLINIC_NAME}}", name).replaceAll("{{PHONE}}", phone);
+  res.type("html").send(html);
+}
+app.get("/sms-privacy.html", (req, res) => renderSmsLegalTemplate("sms-privacy.html", res));
+app.get("/sms-terms.html", (req, res) => renderSmsLegalTemplate("sms-terms.html", res));
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 if (!process.env.JWT_SECRET) {
