@@ -116,6 +116,12 @@ function importBatch(db, { dataRows, mapping, filename, attestedBy }) {
       batchId: null, // filled in below once the batch id exists
       status: "new",
       dialerState: "queued",
+      // The attestation this route already requires (attest="1", checked
+      // by the caller before importBatch() ever runs) IS this lead's
+      // consent basis — recorded explicitly so server/dialer.js's consent
+      // gate has a real, auditable value to point to instead of just
+      // inferring it from batchId being present.
+      consentBasis: "batch_attestation",
       attempts: 0,
       nextAttemptAt: null,
       createdAt: new Date().toISOString(),

@@ -10,7 +10,7 @@ const cron = require("node-cron");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { load, save, log, DB_PATH } = require("./store");
-const { runAgent, isSameFact } = require("./agents");
+const { runAgent, isSameFact, claude, systemPromptFor } = require("./agents");
 const calendarApi = require("./calendar");
 const brainGraph = require("./brainGraph");
 const notify = require("./notify");
@@ -61,6 +61,19 @@ const SAILZ_ADMIN = process.env.SAILZ_ADMIN === "1" || process.env.SAILZ_ADMIN =
 // are done. The dashboard assistant stays attached as Vapi's own fallback
 // the whole time; this flag never removes or requires removing it.
 const VAPI_ASSISTANT_REQUEST = process.env.VAPI_ASSISTANT_REQUEST === "1" || process.env.VAPI_ASSISTANT_REQUEST === "true";
+
+// Lets the owner place a real, immediate test call to any number through
+// the SAME dialer path (server/dialer.js's placeCallForLead) production
+// calls use — same assistant, same guardrails, same pacing/DNC/
+// calling-hours/consent checks. Off by default everywhere; enabled
+// per-deployment (currently just rprg).
+const TEST_CALL_ENABLED = process.env.TEST_CALL_ENABLED === "1";
+// Lets the owner request public-business-info research on a lead's
+// company (server/researcher.js) — never personal contact data, never a
+// dialable number. Off by default everywhere; enabled per-deployment
+// (currently just rprg).
+const ENRICHMENT_ENABLED = process.env.ENRICHMENT_ENABLED === "1";
+
 function requireHQ(req, res, next) {
   if (!SAILZ_ADMIN) return res.status(404).end();
   next();
@@ -1910,6 +1923,12 @@ app.post("/webhooks/vapi", webhookLimiter, async (req, res) => {
     recordingUrl: m.recordingUrl ?? m.artifact?.recordingUrl ?? null,
     transcript: m.transcript ?? m.artifact?.transcript ?? null,
     durationSeconds: typeof durationSeconds === "number" && !Number.isNaN(durationSeconds) ? durationSeconds : null,
+    // Carried straight from the call-creation metadata (server/dialer.js's
+    // placeCallForLead) rather than looked up via the lead record — stays
+    // correct even if the lead were somehow removed before this report
+    // lands. Shows up in Calls (so it can be reviewed/taught from) but
+    // excluded from weekStats/scoreboards (brainGraph.js, heartbeat.js).
+    test: !!m.call?.metadata?.test,
   };
   db.calls.unshift(call);
   const leadId = m.call?.metadata?.leadId;
@@ -2131,6 +2150,110 @@ app.post("/api/dialer/pacing", auth, requireOwner, requireApprovedTenant, (req, 
   save();
   log("system", `${req.user.id} updated dialer pacing: ${JSON.stringify(pacing)}`);
   res.json({ pacing });
+});
+
+// Test call — an immediate, real outbound call to any number the owner
+// types in, through the exact same server/dialer.js path (assistant,
+// prompt, guardrails, pacing/DNC/consent/calling-hours checks) production
+// calls use. Deliberately synchronous (awaits placeCallForLead directly,
+// not just "enqueue and wait for the next tick") so the UI can give
+// honest, immediate feedback instead of a 30s guessing game.
+const testCallLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 3, standardHeaders: true, legacyHeaders: false, message: { error: "Test call limit reached — 3 per hour. Try again later." } });
+app.post("/api/dialer/test-call", auth, requireOwner, testCallLimiter, async (req, res) => {
+  if (!TEST_CALL_ENABLED) return res.status(404).end();
+  const phone = leadImport.normalizePhoneE164(req.body?.phone);
+  if (!phone) return res.status(400).json({ error: "Enter a valid phone number, e.g. (804) 555-0100." });
+  const name = String(req.body?.name || "Test call").slice(0, 80);
+
+  const db = load();
+  const lead = {
+    id: "L" + Date.now() + Math.random().toString(36).slice(2, 6),
+    name,
+    phone,
+    email: "",
+    company: "",
+    notes: "Owner-initiated test call.",
+    timezone: null,
+    source: "test_call",
+    batchId: null,
+    status: "new",
+    dialerState: "queued",
+    test: true,
+    consentBasis: "owner_test",
+    priorityCall: true,
+    attempts: 0,
+    nextAttemptAt: null,
+    createdAt: new Date().toISOString(),
+  };
+  db.leads.push(lead);
+
+  let result;
+  try {
+    result = await dialer.placeCallForLead(db, lead);
+  } catch (e) {
+    save();
+    return res.status(500).json({ error: `Couldn't reach Vapi: ${e.message}` });
+  }
+  save();
+  if (!result.ok) {
+    const REASON_MESSAGES = {
+      calling_agent_paused: "The calling agent is paused — turn it on first.",
+      concurrency_limit: "Already at the max concurrent calls — try again shortly.",
+      hourly_cap: "Hit this hour's call cap — try again next hour.",
+      vapi_not_configured: "Vapi isn't connected on this deployment.",
+      dnc: "That number is on the do-not-call list.",
+      no_consent_basis: "No consent basis on file for that number.",
+      outside_calling_hours: "Outside allowed calling hours (8am–8pm) — try again during the day.",
+      vapi_rejected: `Vapi rejected the call: ${result.detail || "no detail returned"}`,
+    };
+    return res.status(422).json({ error: REASON_MESSAGES[result.reason] || result.reason, reason: result.reason, leadId: lead.id });
+  }
+  log("system", `${req.user.id} placed a test call to ${maskPhone(phone)}`);
+  res.json({ ok: true, leadId: lead.id, vapiCallId: result.vapiCallId });
+});
+
+// "Teach from this call" — runs ONE call's transcript through the exact
+// same fact-extraction prompt/dedup logic agents.js's librarian() uses
+// for its nightly 24h sweep, scoped to just this call. Lets an owner
+// react to a test call immediately (approve a correction into Memory)
+// instead of waiting for the nightly run to maybe pick it up.
+app.post("/api/calls/:id/teach", auth, requireOwner, async (req, res) => {
+  const db = load();
+  const call = db.calls.find((c) => c.id === req.params.id);
+  if (!call) return res.status(404).json({ error: "Call not found" });
+  if (!call.transcript) return res.status(400).json({ error: "No transcript available for this call yet." });
+  if (!catalog.resolveKey(db, "anthropic")) return res.status(400).json({ error: "Connect Claude (Anthropic) to teach from calls." });
+
+  const activityText = `CALL:\n- ${call.who} · ${call.dir} · outcome: ${call.outcome} · "${call.summary || ""}"\n\nTRANSCRIPT:\n${call.transcript}`;
+  const out = await claude(
+    db,
+    `Review this ONE call's transcript. Extract ONLY durable, generalizable facts worth remembering long-term — not one-off noise, not anything already obvious from the business profile.\n\n` +
+      `Type each fact exactly one of:\n` +
+      `- faq_gap: the assistant couldn't answer something it was asked\n` +
+      `- policy_correction: the assistant said something wrong or outdated\n` +
+      `- preference: a specific caller's stated preference (name who)\n` +
+      `- signal: a business-level pattern/insight, not phone-prompt material\n\n` +
+      `Output strict JSON: {"facts":[{"type":"...","fact":"...","source":"..."}]}. ` +
+      `source = brief context (caller name). ` +
+      `Return {"facts":[]} if nothing durable stands out — don't manufacture facts from a single ordinary call.\n\n${activityText}`,
+    systemPromptFor("librarian", "Silence (an empty facts array) is a valid and often correct output — you are a careful curator, not an eager pattern-matcher.")
+  );
+
+  let extracted = [];
+  try { extracted = JSON.parse((out || "{}").replace(/```json|```/g, "")).facts || []; } catch { extracted = []; }
+  const VALID_TYPES = new Set(["faq_gap", "policy_correction", "preference", "signal"]);
+  const existing = db.memory.filter((m) => m.status === "proposed" || m.status === "approved");
+  const added = [];
+  for (const f of extracted) {
+    if (!f || !f.fact || !VALID_TYPES.has(f.type)) continue;
+    if (existing.some((e) => isSameFact(e, f)) || added.some((a) => isSameFact(a, f))) continue;
+    const entry = { id: "M" + Date.now() + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), type: f.type, fact: f.fact, source: f.source || call.who || "", status: "proposed" };
+    db.memory.push(entry);
+    added.push(entry);
+  }
+  save();
+  log("system", `${req.user.id} taught the agent from a call — ${added.length} proposed fact(s)`);
+  res.json({ added, count: added.length });
 });
 
 // ---------- platform admin (multi-tenant mode only — HQ's review surface,

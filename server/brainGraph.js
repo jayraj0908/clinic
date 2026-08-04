@@ -172,7 +172,11 @@ function weekStats(db, hubId) {
   if (hubId === "calling") {
     // The scoreboard IS the sell here — every number a client evaluating
     // the outbound Lead Engine actually cares about, front and center.
-    const outboundWeek = db.calls.filter((c) => c.dir === "outbound" && inLastWeek(c.ts));
+    // test:true calls (from /api/dialer/test-call) are deliberately
+    // excluded — they're the owner poking at their own agent, not real
+    // outbound performance, and would silently inflate/deflate the book
+    // rate otherwise.
+    const outboundWeek = db.calls.filter((c) => c.dir === "outbound" && !c.test && inLastWeek(c.ts));
     const booked = outboundWeek.filter((c) => c.outcome === "booked").length;
     // A "connect" = a live human actually picked up — everything except
     // no_answer/voicemail (which never reached a person) counts, including

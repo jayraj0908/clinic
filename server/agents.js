@@ -128,53 +128,24 @@ const agents = {
     return `${promoted} qualified`;
   },
 
-  // 2 ─ Appointment setter: launches outbound calls through Vapi.
+  // 2 ─ Appointment setter: DEPRECATED as a calling path, 2026-08-04.
+  // server/dialer.js's tick() (via placeCallForLead()) is now the ONLY
+  // place in this engine that ever places a real outbound call — for
+  // every lead, batch-imported or not, test or real. This used to be a
+  // second, independent calling system for non-batch "qualified" leads
+  // (webhook/RFP-sourced), which meant a lead could in principle become
+  // eligible for BOTH this cron (every 10min) and dialer.js's loop
+  // (every 30s) at once — two unrelated systems race-capable of placing
+  // two real calls to the same person. Kept as a no-op (not deleted) so
+  // this agent's existing on/off toggle, cron schedule, and "Run now"
+  // button don't 404 or crash — it just reports what it would have done
+  // and points at the real path instead.
   async setter() {
     const db = load();
-    // priorityCall (set by POST /api/leads/:id/queue-call, the attention
-    // inbox's "call back" action) jumps a lead to the front of the queue.
-    // Excludes batchId leads deliberately — those belong exclusively to
-    // server/dialer.js's own paced tick() loop (hourly caps, quiet hours,
-    // DNC, retry scheduling, attempt caps), which independently polls the
-    // exact same "setter" on/off row every 30s. A batch lead pressed
-    // "call" on would otherwise be eligible for BOTH systems at once —
-    // this cron every 10min AND that loop every 30s — risking two real
-    // calls to the same person. priorityCall still works for batch leads;
-    // it just gets honored by dialer.js's own queue instead (see its
-    // eligible-sort), never by this cron.
-    const queue = db.leads
-      .filter((l) => l.status === "qualified" && !l.batchId)
-      .sort((a, b) => (b.priorityCall ? 1 : 0) - (a.priorityCall ? 1 : 0));
-    if (!queue.length) { log("agent", "Appointment Setter: queue empty"); return "queue empty"; }
-
-    const vapiKey = catalog.resolveKey(db, "vapi");
-    if (!vapiKey) {
-      log("agent", `Appointment Setter: ${queue.length} lead(s) ready — connect Vapi to start calling`);
-      return `${queue.length} waiting on Vapi`;
-    }
-    let placed = 0;
-    for (const lead of queue.slice(0, 5)) {
-      const res = await fetch("https://api.vapi.ai/call", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${vapiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          assistantId: process.env.VAPI_OUTBOUND_ASSISTANT_ID,
-          phoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
-          customer: { number: lead.phone, name: lead.name },
-          metadata: { leadId: lead.id, service: lead.service },
-        }),
-      });
-      if (res.ok) {
-        lead.status = "call_scheduled"; lead.priorityCall = false; lead.deferredMorning = false;
-        // firstContactAt: the speed-to-lead metric the Lead Engine sells —
-        // never overwritten if a call was somehow already placed before.
-        if (!lead.firstContactAt) lead.firstContactAt = new Date().toISOString();
-        placed++;
-      }
-    }
-    save();
-    log("agent", `Appointment Setter: placed ${placed} call(s)`);
-    return `${placed} calls placed`;
+    const queue = db.leads.filter((l) => l.status === "qualified" && !l.batchId && !l.test);
+    if (!queue.length) { log("agent", "Appointment Setter: queue empty (this agent no longer places calls — see server/dialer.js)"); return "queue empty"; }
+    log("agent", `Appointment Setter: ${queue.length} lead(s) marked qualified but this agent no longer calls anyone — use the leads tab's "Call" button (server/dialer.js) instead.`);
+    return `${queue.length} lead(s) — use the dialer, not this agent`;
   },
 
   // 3 ─ Visit audit: structures raw notes into SOAP via Claude.

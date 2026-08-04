@@ -1,16 +1,19 @@
-// The paced outbound dialer for bulk-imported lead batches (server/
-// leadImport.js). Deliberately separate from agents.js's setter() — that
-// cron keeps handling real-time, one-at-a-time "qualified" leads from
-// inbound sources (webhooks/RFPs) on its own 2-hour schedule, exactly as
-// before; this module ONLY ever picks up leads with a batchId (i.e.
-// imported campaign contacts), on its own much-tighter interval, because
-// hour/concurrency pacing can't be enforced on a 2-hour cron.
+// The paced outbound dialer — the ONE and ONLY system that ever places a
+// real outbound call in this engine. Historically agents.js's setter()
+// cron was a second, parallel calling path for non-batch "qualified"
+// leads; as of 2026-08-04 that path is fully retired (see agents.js's
+// own setter() — it no longer calls anyone, just logs and returns) and
+// every outbound call, batch-imported or not, test or real, goes through
+// placeCallForLead() below. This is a hard architectural rule, not a
+// convention: a second calling path means two independent systems that
+// could both try to call the same person, which is exactly the bug this
+// consolidation closes.
 //
 // Everything here is server-enforced, not prompt-enforced: pacing caps,
-// quiet hours, attempt caps, and DNC are all checked in code before a call
-// is ever placed — the calling agent's own prompt (brain/agents/calling.md
-// or an instance override) still carries the guardrail in words too, but
-// this module is the one that can't be talked out of it.
+// calling-hours, attempt caps, DNC, and consent are all checked in code
+// before a call is ever placed — the calling agent's own prompt (brain/
+// agents/calling.md or an instance override) still carries the guardrail
+// in words too, but this module is the one that can't be talked out of it.
 const { load, save, log } = require("./store");
 const { instance } = require("./instance");
 const catalog = require("./catalog");
@@ -98,6 +101,14 @@ function reclaimStuckCalls(db) {
   db.leads.forEach((l) => {
     if (l.dialerState === "calling" && l.lastAttemptAt && now - new Date(l.lastAttemptAt).getTime() > STUCK_CALL_TIMEOUT_MS) {
       applyOutcome(db, l, "no_answer");
+      // applyOutcome's retry/exhaust logic only applies to leads dialer.js
+      // actually owns a state machine for (batchId or test) — a one-off
+      // individual lead (webhook/RFP-sourced, no retry campaign by
+      // design, matching the retired setter()'s original one-attempt
+      // behavior) has no terminal state to fall into there, and would
+      // otherwise sit at "calling" forever, permanently occupying a
+      // concurrency slot. Give it one directly.
+      if (!l.batchId && !l.test && l.dialerState === "calling") l.dialerState = "no_answer";
       reclaimed++;
     }
   });
@@ -110,32 +121,32 @@ function reclaimStuckCalls(db) {
 // place this logic can drift.
 //
 // booked/declined/do_not_call update lead.status (the existing pipeline
-// vocabulary every lead already uses) for ANY lead, batch or not — DNC in
-// particular must be universal, not just a dialer-batch concept, since
-// "do not call me" can happen on any call, inbound or outbound. The
-// dialer-specific state machine (dialerState/attempts/nextAttemptAt) only
-// applies to leads that actually came from an import batch — a plain
-// webhook-sourced "qualified" lead the OLD setter() cron calls doesn't
-// carry those fields at all, and shouldn't start growing them here.
+// vocabulary every lead already uses) for ANY lead — DNC in particular
+// must be universal, not just a dialer-batch concept, since "do not call
+// me" can happen on any call, inbound or outbound. The dialer-specific
+// state machine (dialerState/attempts/nextAttemptAt) only applies to
+// leads dialer.js actually owns (batchId or test leads) — a plain
+// webhook-sourced "qualified" lead never carries those fields at all and
+// shouldn't start growing them here.
 function applyOutcome(db, lead, outcome, extra = {}) {
   if (outcome === "booked") {
     lead.status = "booked";
-    if (lead.batchId) lead.dialerState = "booked";
+    if (lead.batchId || lead.test) lead.dialerState = "booked";
     return;
   }
   if (outcome === "not_interested" || outcome === "declined") {
     lead.status = "closed_lost";
-    if (lead.batchId) lead.dialerState = "declined";
+    if (lead.batchId || lead.test) lead.dialerState = "declined";
     return;
   }
   if (outcome === "do_not_call") {
     leadQueue.addToDNC(db, lead.phone);
     lead.status = "closed_lost";
-    if (lead.batchId) lead.dialerState = "dnc";
+    if (lead.batchId || lead.test) lead.dialerState = "dnc";
     log("system", `${lead.name}: asked not to be called — added to the do-not-call list permanently`);
     return;
   }
-  if (!lead.batchId) return; // retry scheduling is a dialer-batch-only concept
+  if (!lead.batchId && !lead.test) return; // retry scheduling is a dialer-owned-lead-only concept
 
   const pacing = getPacing(db);
   const tz = lead.timezone || instance.timezone;
@@ -161,103 +172,148 @@ function applyOutcome(db, lead, outcome, extra = {}) {
 
 // Best-effort scripted voicemail for a lead's first attempt only — kept
 // for whenever this gets properly wired (see the CONFIRMED BUG note in
-// placeCall() below), so the wording exists in one place, not lost.
+// placeCallForLead() below), so the wording exists in one place, not lost.
 function firstAttemptVoicemailScript() {
   return `Hi, this is ${instance.name}. We tried to reach you — call us back whenever works, or we'll try again soon. Thanks!`;
 }
 
-async function placeCall(db, lead, vapiKey) {
+// A lead is only ever callable with a real basis for having consented to
+// be contacted. Batch-imported leads already passed the attestation gate
+// at import time (server/leadImport.js requires attest="1" — the owner
+// confirming every contact in the batch is an existing client or gave
+// prior consent) — that IS their consent basis, so a batchId alone still
+// satisfies this for leads imported before the explicit field existed.
+// Anything else (test calls, any future non-batch entry point) must set
+// lead.consentBasis explicitly — no implicit consent for those.
+function hasConsentBasis(lead) {
+  return !!(lead.consentBasis || lead.batchId);
+}
+
+// The single call-placement path — every guard a real outbound call must
+// pass, then the actual Vapi request, for exactly one lead. Used by
+// tick() below (the real paced batch/priority queue) AND directly by
+// server.js's POST /api/dialer/test-call (immediate, synchronous
+// feedback for a one-off test call) — same function, same guards, same
+// assistant, so a test call proves exactly what a real one would do.
+// Returns { ok:true, vapiCallId } or { ok:false, reason, detail? } —
+// never throws for an expected refusal (paused/pacing/DNC/consent/hours/
+// Vapi-rejected); only a genuine network/unexpected error throws, left
+// for the caller to catch.
+async function placeCallForLead(db, lead) {
+  const settRow = db.agents.find((a) => a.id === "setter");
+  if (!settRow || !settRow.on) return { ok: false, reason: "calling_agent_paused" };
+
+  const pacing = getPacing(db);
+  const inFlight = db.leads.filter((l) => l.dialerState === "calling").length;
+  if (inFlight >= pacing.maxConcurrent) return { ok: false, reason: "concurrency_limit" };
+  if (attemptsInLastHour(db) >= pacing.maxPerHour) return { ok: false, reason: "hourly_cap" };
+
+  const vapiKey = catalog.resolveKey(db, "vapi");
+  if (!vapiKey) return { ok: false, reason: "vapi_not_configured" };
+
+  if (leadQueue.isDNC(db, lead.phone)) return { ok: false, reason: "dnc" };
+  if (!hasConsentBasis(lead)) return { ok: false, reason: "no_consent_basis" };
+  if (!leadQueue.isWithinCallingHours(new Date(), lead.timezone || instance.timezone)) return { ok: false, reason: "outside_calling_hours" };
+
   const body = {
     assistantId: process.env.VAPI_OUTBOUND_ASSISTANT_ID,
     phoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
     customer: { number: lead.phone, name: lead.name },
-    metadata: { leadId: lead.id, batchId: lead.batchId },
+    metadata: { leadId: lead.id, batchId: lead.batchId, test: !!lead.test },
   };
   // CONFIRMED BUG, fixed 2026-08-03: a top-level `voicemailMessage` field
   // is not a real field in Vapi's current call-creation schema — Vapi
   // rejects the ENTIRE request with 400 ("property voicemailMessage
-  // should not exist") whenever it's present. Since every brand-new lead
-  // is a first attempt, this silently broke 100% of outbound dialing on
-  // Retirement Plan Resource Group's real deployment — placeCall() just
-  // returned false on every single call, with the lead sitting at
-  // dialerState "queued" forever and nothing logged anywhere. Removed
-  // outright rather than guessing at the correct nested location — the
-  // custom first-attempt voicemail message is off until someone verifies
-  // the real field against Vapi's current docs and re-adds it properly
-  // (with a live test call, not another guess).
+  // should not exist") whenever it's present. Removed outright rather
+  // than guessing at the correct nested location — the custom
+  // first-attempt voicemail message is off until someone verifies the
+  // real field against Vapi's current docs and re-adds it properly.
 
   const res = await fetch("https://api.vapi.ai/call", {
     method: "POST",
     headers: { Authorization: `Bearer ${vapiKey}`, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) return false;
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    return { ok: false, reason: "vapi_rejected", detail: detail.slice(0, 500) };
+  }
+  const data = await res.json().catch(() => ({}));
 
   lead.dialerState = "calling";
-  lead.attempts += 1;
+  // Individual (webhook/RFP-sourced) leads never had attempts/dialerState
+  // initialized before reaching this function — defensively default
+  // rather than let `undefined + 1` produce NaN.
+  lead.attempts = (Number.isFinite(lead.attempts) ? lead.attempts : 0) + 1;
   lead.lastAttemptAt = new Date().toISOString();
   lead.status = "call_scheduled";
   lead.priorityCall = false;
   if (!lead.firstContactAt) lead.firstContactAt = new Date().toISOString();
   recordAttempt(db, lead.id);
-  log("agent", `Dialer: calling ${lead.name} (attempt ${lead.attempts}/${getPacing(db).maxAttempts})`);
-  return true;
+  log("agent", `Dialer: calling ${lead.name} (attempt ${lead.attempts}/${pacing.maxAttempts})${lead.test ? " [TEST]" : ""}`);
+  return { ok: true, vapiCallId: data.id };
 }
 
 // One tick = at most one call placed. Ticks run frequently (server.js's
 // bootDialerLoop, ~every 30s) so the effective pacing over an hour is a
 // smooth trickle toward maxPerHour, not a burst — and so pausing the
-// calling agent takes effect within one tick, always: the very first
-// thing every tick does is re-read the agent's on/off row fresh from disk
-// and bail immediately if it's off, exactly like bootSchedules()'s cron
-// jobs already do for every other agent.
+// calling agent takes effect within one tick, always: placeCallForLead's
+// very first check is the agent's on/off row read fresh from disk.
 async function tick() {
   const db = load();
-  const settRow = db.agents.find((a) => a.id === "setter");
-  if (!settRow || !settRow.on) return;
-
   reclaimStuckCalls(db);
 
-  const pacing = getPacing(db);
-  const inFlight = db.leads.filter((l) => l.dialerState === "calling").length;
-  if (inFlight >= pacing.maxConcurrent) { save(); return; }
-  if (attemptsInLastHour(db) >= pacing.maxPerHour) { save(); return; }
-
-  const vapiKey = catalog.resolveKey(db, "vapi");
-  if (!vapiKey) { save(); return; } // graceful no-op, same as setter()
-
   const now = Date.now();
-  // priorityCall (set by POST /api/leads/:id/queue-call, the dashboard's
-  // "call" button and the attention inbox's "call back" action) jumps a
-  // batch lead to the front of THIS queue — the non-batch equivalent is
-  // agents.js's setter(), which deliberately excludes batchId leads so
-  // the two systems never both try to call the same person.
+  // Three lead pools, all owned by this one loop (the only calling path
+  // in the engine):
+  //  - batch: CSV-imported campaign contacts, full retry/pacing state
+  //    machine via dialerState/attempts (RPRG's primary lead source).
+  //  - test: one-off test calls from /api/dialer/test-call — same
+  //    dialerState tracking as a batch lead, just no batchId.
+  //  - individual: webhook/RFP-sourced leads auto-queued by
+  //    leadQueue.js's maybeAutoQueueLead() (Shine/Burg's speed-to-lead
+  //    feature) or manually prioritized via the leads tab's "Call"
+  //    button — these never get a dialerState until picked up here, so
+  //    they're matched by status==="qualified" instead; applyOutcome()
+  //    intentionally does no retry scheduling for this pool (one attempt
+  //    only, matching the retired setter()'s original behavior).
+  // priorityCall (set by the "call" button, the attention inbox's "call
+  // back" action, auto-queue, and always true for a freshly-created test
+  // call) jumps a lead to the front of the queue.
+  const isBatchOrTestQueued = (l) => (l.batchId || l.test) && l.dialerState === "queued" && (!l.nextAttemptAt || new Date(l.nextAttemptAt).getTime() <= now);
+  const isIndividualQualified = (l) => !l.batchId && !l.test && l.status === "qualified" && !l.dialerState;
   const eligible = db.leads
-    .filter((l) => l.batchId && l.dialerState === "queued" && (!l.nextAttemptAt || new Date(l.nextAttemptAt).getTime() <= now))
+    .filter((l) => isBatchOrTestQueued(l) || isIndividualQualified(l))
     .sort((a, b) => (b.priorityCall ? 1 : 0) - (a.priorityCall ? 1 : 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Per-lead quiet hours (contact-local if this lead has a timezone from
-  // import, else instance-local) — a lead outside its own calling window
-  // right now is skipped in favor of the next eligible one, rather than
-  // blocking the whole tick on one lead in a different timezone.
-  const lead = eligible.find((l) => leadQueue.isQuietHours(new Date(), l.timezone || instance.timezone));
-  if (!lead) { save(); return; }
-
-  try {
-    const placed = await placeCall(db, lead, vapiKey);
-    if (!placed) log("error", `Dialer: Vapi rejected the call-creation request for ${lead.name} — check server logs/Vapi dashboard for the real reason (not retried automatically).`);
-  } catch (e) {
-    log("error", `Dialer: call to ${lead.name} failed to place: ${e.message}`);
+  for (const lead of eligible) {
+    let result;
+    try {
+      result = await placeCallForLead(db, lead);
+    } catch (e) {
+      log("error", `Dialer: call to ${lead.name} failed to place: ${e.message}`);
+      continue;
+    }
+    if (result.ok) break; // one call per tick, done
+    if (result.reason === "vapi_rejected") {
+      log("error", `Dialer: Vapi rejected the call-creation request for ${lead.name}: ${result.detail || "no detail"} — not retried automatically.`);
+      continue; // this lead's request was bad; another lead's might not be
+    }
+    if (result.reason === "dnc" || result.reason === "no_consent_basis" || result.reason === "outside_calling_hours") continue; // try the next lead
+    break; // tick-level blocker (paused/concurrency/hourly cap/no vapi key) — no point trying other leads this tick
   }
   save();
 }
 
 module.exports = {
   tick,
+  placeCallForLead,
+  hasConsentBasis,
   applyOutcome,
   getPacing,
   setPacing,
   nextBusinessDay,
+  firstAttemptVoicemailScript,
   PACING_MIN,
   PACING_MAX,
 };

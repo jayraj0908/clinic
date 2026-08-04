@@ -28,9 +28,10 @@ if (!GIT_SHA) {
 }
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-function countSince(arr, tsField) {
+function countSince(arr, tsField, { excludeTest = false } = {}) {
   const since = Date.now() - SEVEN_DAYS;
   return (arr || []).filter((x) => {
+    if (excludeTest && x.test) return false;
     const t = new Date(x[tsField]).getTime();
     return !Number.isNaN(t) && t >= since;
   }).length;
@@ -65,7 +66,7 @@ function buildSnapshot() {
     name: instance.name,
     version: GIT_SHA,
     counts: {
-      callsThisWeek: countSince(db.calls, "ts"),
+      callsThisWeek: countSince(db.calls, "ts", { excludeTest: true }),
       ordersThisWeek: countSince(db.orders, "ts"),
       leadsThisWeek: countSince(db.leads, "createdAt"),
       apptsUpcomingThisWeek: apptsUpcoming,

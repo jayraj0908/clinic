@@ -1,8 +1,9 @@
 // Speed-to-lead auto-queue guardrails. Every automated outbound contact
-// this triggers still goes through the existing calling agent (setter())
-// on its own schedule/cron — this module only decides whether a brand-new
-// lead gets bumped to the front of that queue (priorityCall) or deferred
-// to the next morning, never places a call itself.
+// this triggers goes through server/dialer.js's tick() — the only
+// calling path in this engine (agents.js's setter() is deprecated as of
+// 2026-08-04, kept only as a no-op) — this module only decides whether a
+// brand-new lead gets bumped to the front of that queue (priorityCall) or
+// deferred to the next morning, never places a call itself.
 const { log } = require("./store");
 const { instance } = require("./instance");
 
@@ -14,7 +15,16 @@ const QUIET_END_HOUR = 20; // 8pm — matches the hard constraint in the
 // only governs whether a lead gets marked priorityCall=true right now,
 // not whether a call can be physically placed this second.
 
-function isQuietHours(date = new Date(), timeZone = instance.timezone || "America/New_York") {
+// Named for what it returns, not the constant it's built from: TRUE means
+// "within the allowed 8am-8pm calling window right now" (i.e. safe/legal
+// to call), the opposite of what "isQuietHours" would suggest in plain
+// English. Renamed from isQuietHours 2026-08-04 after that name caused a
+// real confusion — a caller elsewhere had it backwards in a log message
+// (said "inside quiet hours" for a call that was actually happening
+// because it was NOT quiet hours). QUIET_START_HOUR/QUIET_END_HOUR keep
+// their names since the CONSTANTS genuinely mark the boundary of the
+// quiet period — it's only the boolean's direction that was confusing.
+function isWithinCallingHours(date = new Date(), timeZone = instance.timezone || "America/New_York") {
   const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone }).format(date));
   return hour >= QUIET_START_HOUR && hour < QUIET_END_HOUR;
 }
@@ -57,14 +67,21 @@ function maybeAutoQueueLead(db, lead) {
   if (!callingRow || !callingRow.on) return; // calling agent must be active, per spec
 
   if (lead.status === "new") lead.status = "qualified";
-  if (isQuietHours()) {
+  // This lead reached out to US first (a web form, an RFP email) — that
+  // inbound contact is its consent basis for a prompt callback, checked
+  // by server/dialer.js's hasConsentBasis() before it's ever dialed.
+  // Stamped here (the moment it becomes dialer-eligible) rather than at
+  // creation, so any lead that predates this field still gets one the
+  // first time it's actually queued for a call.
+  if (!lead.consentBasis) lead.consentBasis = "inbound_inquiry";
+  if (isWithinCallingHours()) {
     lead.priorityCall = true;
-    log("system", `${lead.name}: auto-queued for an immediate callback (inside quiet hours)`);
+    log("system", `${lead.name}: auto-queued for an immediate callback`);
   } else {
     lead.priorityCall = false;
     lead.deferredMorning = true;
-    log("system", `${lead.name}: outside quiet hours — queued for a morning callback`);
+    log("system", `${lead.name}: outside calling hours — queued for a morning callback`);
   }
 }
 
-module.exports = { isQuietHours, isDNC, addToDNC, maybeAutoQueueLead, QUIET_START_HOUR, QUIET_END_HOUR };
+module.exports = { isWithinCallingHours, isDNC, addToDNC, maybeAutoQueueLead, QUIET_START_HOUR, QUIET_END_HOUR };
