@@ -6,8 +6,8 @@
   "brandColor": "#c9a066",
   "_brandColorNote": "Still the engine default placeholder — no real brand color/logo was captured during onboarding. Ask the client before go-live.",
   "timezone": "America/New_York",
-  "_agentsNote": "receptionist (inbound line, for anyone who calls back) + calling (the actual product — outbound dialer working Aman's provided lead lists, per server/dialer.js) + librarian. Deliberately NOT leads: that agent polls Meta/Google Lead Ads, and this client's own two lead sources — a list Aman provides, and 'web scraping' — are neither of those; leads arrive via the Lead Engine's CSV import (Leads tab), not this agent. Deliberately NOT audit/billing (no clinical visits/claims here) or rfp-responder/signal-watcher (not mentioned in onboarding). Add leads back later if they ever want Meta/Google form capture.",
-  "agents": ["receptionist", "calling", "librarian"],
+  "_agentsNote": "receptionist (inbound line, for anyone who calls back) + calling (the actual product — outbound dialer working Aman's provided lead lists, per server/dialer.js) + librarian. Deliberately NOT leads: that agent polls Meta/Google Lead Ads, and this client's own two lead sources — a list Aman provides, and 'web scraping' — are neither of those; leads arrive via the Lead Engine's CSV import (Leads tab), not this agent. Deliberately NOT audit/billing (no clinical visits/claims here) or rfp-responder/signal-watcher (not mentioned in onboarding). Add leads back later if they ever want Meta/Google form capture. researcher added 2026-08-04 (dormantByDefault — shows in catalog, not auto-active) for company-enrichment on uploaded leads, per the client's own onboarding-adjacent ask to research the companies they upload; gated behind ENRICHMENT_ENABLED and a real BRAVE_API_KEY/SERPER_API_KEY, neither configured yet.",
+  "agents": ["receptionist", "calling", "librarian", "researcher"],
   "_tabsNote": "Outbound calling + calendar-booked consultations, no orders.",
   "tabs": ["dash", "calls", "leads", "calendar", "teach", "work"],
   "vapi": {

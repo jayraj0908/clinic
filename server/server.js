@@ -1133,6 +1133,37 @@ app.post("/api/leads/:id/queue-call", auth, (req, res) => {
   res.json(lead);
 });
 
+// Company research/enrichment (server/researcher.js) — public business
+// info only, never personal contact data, never a source of dialable
+// numbers. Nothing here auto-dials anything; it only attaches context to
+// a lead record for a human (or, once live-verified, the calling
+// agent's opener) to use.
+app.post("/api/leads/:id/enrich", auth, requireOwner, async (req, res) => {
+  if (!ENRICHMENT_ENABLED) return res.status(404).end();
+  const db = load();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  const enrichment = await require("./researcher").enrichLead(db, lead);
+  save();
+  res.json({ enrichment });
+});
+app.post("/api/lead-batches/:id/enrich", auth, requireOwner, async (req, res) => {
+  if (!ENRICHMENT_ENABLED) return res.status(404).end();
+  const db = load();
+  const batch = db.leadBatches.find((b) => b.id === req.params.id);
+  if (!batch) return res.status(404).json({ error: "Batch not found" });
+  const leads = db.leads.filter((l) => l.batchId === batch.id && !l.enrichment);
+  const researcher = require("./researcher");
+  let done = 0;
+  for (const lead of leads) {
+    await researcher.enrichLead(db, lead);
+    done++;
+  }
+  save();
+  log("system", `${req.user.id} enriched ${done} lead(s) in batch ${batch.id}`);
+  res.json({ enriched: done, total: leads.length });
+});
+
 // One-tap pipeline actions for the mobile Leads tab — the same "new ->
 // contacted -> booked -> won/lost" stage grouping index.html's LEAD_STAGE
 // computes for display maps onto the real status vocabulary other code
