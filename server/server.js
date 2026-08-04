@@ -483,6 +483,8 @@ app.get("/api/dashboard", auth, (req, res) => {
     tabs: instance.tabs || null,
     hasOrders: db.orders.length > 0,
     demoMode: process.env.DEMO_MODE === "1",
+    testCallEnabled: TEST_CALL_ENABLED,
+    enrichmentEnabled: ENRICHMENT_ENABLED,
     funnel: {
       leads: leadsToday.length || db.leads.length,
       calls: callsToday.length,
@@ -1122,15 +1124,40 @@ app.get("/api/simple", auth, (req, res) => {
   res.json({ status, today, needsYou, feed: feed.slice(0, 30), primaryAction, vertical: instance.vertical || null });
 });
 
-app.post("/api/leads/:id/queue-call", auth, (req, res) => {
+// "Call now" from the Leads tab — an immediate, real outbound call to this
+// lead, through the exact same dialer.js path (and same on-purpose bypass
+// of the calling agent's pause toggle) as /api/dialer/test-call. Owner
+// presses a button, owner hears/sees a result now — not "queued, maybe in
+// 30s if a background loop happens to be on."
+app.post("/api/leads/:id/queue-call", auth, async (req, res) => {
   const db = load();
   const lead = db.leads.find((l) => l.id === req.params.id);
   if (!lead) return res.status(404).json({ error: "Lead not found" });
   if (lead.status === "new") lead.status = "qualified";
   lead.priorityCall = true;
+
+  let result;
+  try {
+    result = await dialer.placeCallForLead(db, lead);
+  } catch (e) {
+    save();
+    return res.status(500).json({ error: `Couldn't reach Vapi: ${e.message}` });
+  }
   save();
-  log("system", `${lead.name} queued for a priority callback by ${req.user.id}`);
-  res.json(lead);
+  if (!result.ok) {
+    const REASON_MESSAGES = {
+      concurrency_limit: "Already at the max concurrent calls — try again shortly.",
+      hourly_cap: "Hit this hour's call cap — try again next hour.",
+      vapi_not_configured: "Vapi isn't connected on this deployment.",
+      dnc: "That number is on the do-not-call list.",
+      no_consent_basis: "No consent basis on file for that number.",
+      outside_calling_hours: "Outside allowed calling hours (8am–8pm) — try again during the day.",
+      vapi_rejected: `Vapi rejected the call: ${result.detail || "no detail returned"}`,
+    };
+    return res.status(422).json({ error: REASON_MESSAGES[result.reason] || result.reason, reason: result.reason, lead });
+  }
+  log("system", `${lead.name} called by ${req.user.id} (Call now)`);
+  res.json({ ok: true, lead, vapiCallId: result.vapiCallId });
 });
 
 // Company research/enrichment (server/researcher.js) — public business
@@ -2228,7 +2255,6 @@ app.post("/api/dialer/test-call", auth, requireOwner, testCallLimiter, async (re
   save();
   if (!result.ok) {
     const REASON_MESSAGES = {
-      calling_agent_paused: "The calling agent is paused — turn it on first.",
       concurrency_limit: "Already at the max concurrent calls — try again shortly.",
       hourly_cap: "Hit this hour's call cap — try again next hour.",
       vapi_not_configured: "Vapi isn't connected on this deployment.",

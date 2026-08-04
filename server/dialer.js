@@ -192,17 +192,24 @@ function hasConsentBasis(lead) {
 // The single call-placement path — every guard a real outbound call must
 // pass, then the actual Vapi request, for exactly one lead. Used by
 // tick() below (the real paced batch/priority queue) AND directly by
-// server.js's POST /api/dialer/test-call (immediate, synchronous
-// feedback for a one-off test call) — same function, same guards, same
-// assistant, so a test call proves exactly what a real one would do.
+// server.js's POST /api/dialer/test-call and POST /api/leads/:id/
+// queue-call (immediate, synchronous feedback for an owner-initiated
+// call) — same function, same guards, same assistant, so a manual call
+// proves exactly what an automated one would do.
+//
+// Deliberately does NOT check the calling agent's on/off row — that
+// switch pauses the AUTOMATED dialer loop (tick(), below) specifically;
+// a human explicitly pressing "call this person now" or placing a test
+// call is a separate, deliberate action and must still go through, same
+// as a car's manual override isn't disabled by cruise control being off.
+// Every REAL safety guardrail (pacing, DNC, consent, calling-hours)
+// still applies regardless — this only affects the automation switch.
+//
 // Returns { ok:true, vapiCallId } or { ok:false, reason, detail? } —
-// never throws for an expected refusal (paused/pacing/DNC/consent/hours/
+// never throws for an expected refusal (pacing/DNC/consent/hours/
 // Vapi-rejected); only a genuine network/unexpected error throws, left
 // for the caller to catch.
 async function placeCallForLead(db, lead) {
-  const settRow = db.agents.find((a) => a.id === "setter");
-  if (!settRow || !settRow.on) return { ok: false, reason: "calling_agent_paused" };
-
   const pacing = getPacing(db);
   const inFlight = db.leads.filter((l) => l.dialerState === "calling").length;
   if (inFlight >= pacing.maxConcurrent) return { ok: false, reason: "concurrency_limit" };
@@ -257,10 +264,16 @@ async function placeCallForLead(db, lead) {
 // One tick = at most one call placed. Ticks run frequently (server.js's
 // bootDialerLoop, ~every 30s) so the effective pacing over an hour is a
 // smooth trickle toward maxPerHour, not a burst — and so pausing the
-// calling agent takes effect within one tick, always: placeCallForLead's
-// very first check is the agent's on/off row read fresh from disk.
+// calling agent takes effect within one tick, always: the on/off row is
+// read fresh from disk first thing, every tick. This check lives HERE,
+// not in placeCallForLead() — it gates the AUTOMATED loop only; a manual
+// test call or "Call now" press still works while paused (see
+// placeCallForLead's own header comment for why).
 async function tick() {
   const db = load();
+  const settRow = db.agents.find((a) => a.id === "setter");
+  if (!settRow || !settRow.on) return;
+
   reclaimStuckCalls(db);
 
   const now = Date.now();

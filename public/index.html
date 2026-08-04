@@ -1196,7 +1196,13 @@ const DEPT_DEFS_BASE=[
 // Where each catalog agent lives, by department name above — every agent
 // server/brain.js can ever load gets a home here (not just the ones
 // currently active), so a dormant one still has somewhere to render.
-const AGENT_DEPT={leads:'SALES',calling:'SALES',receptionist:'CUSTOMER',audit:'BACK OFFICE',billing:'BACK OFFICE',librarian:'INTELLIGENCE'};
+// Every catalog agent (brain/agents/*.md) needs an entry here — a missing
+// one crashes renderDash() (hex(undefined) at deptColorByHubId lookup)
+// the moment that agent shows up in ANY instance's graph, active or just
+// dormant-but-in-the-allowlist. Found live 2026-08-04 adding "researcher"
+// to RPRG's instance.json — signal-watcher/rfp-responder had the exact
+// same latent gap already, just never hit by an instance that uses them.
+const AGENT_DEPT={leads:'SALES',calling:'SALES','rfp-responder':'SALES',receptionist:'CUSTOMER',audit:'BACK OFFICE',billing:'BACK OFFICE',librarian:'INTELLIGENCE','signal-watcher':'INTELLIGENCE',researcher:'INTELLIGENCE'};
 
 function blendGray(colorInt,factor){
   const r=(colorInt>>16)&255,g=(colorInt>>8)&255,b=colorInt&255;
@@ -2297,7 +2303,18 @@ async function boot(){
         <div class="eyebrow">DIALER PACING — IMPORTED BATCHES</div>
         <div class="sb-desc">Caps how fast the dialer works an imported list. Enforced server-side, not by a prompt — these hard ceilings can't be configured away.</div>
         <div id="pacingForm"><div class="center-state" style="padding:14px"><span class="spinner"></span></div></div>
-      </div>`:''}
+      </div>
+      ${dash.testCallEnabled?`
+      <div class="sb-section">
+        <div class="eyebrow">TEST CALL</div>
+        <div class="sb-desc">Places a real call, right now, through this exact agent — same prompt, same guardrails you'll hear in production. Goes through the same pacing/quiet-hours/do-not-call checks as any other call. Limited to 3 per hour.</div>
+        <label style="display:block;font:600 9px 'Inter';letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:10px 0 5px">Phone number</label>
+        <input type="tel" class="import-select" id="testCallPhone" placeholder="(804) 555-0100">
+        <label style="display:block;font:600 9px 'Inter';letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:10px 0 5px">Name <span style="text-transform:none;letter-spacing:0">(optional)</span></label>
+        <input type="text" class="import-select" id="testCallName" placeholder="Test call">
+        <button class="toggle-btn activate" id="testCallBtn" style="margin-top:12px;width:100%">Place test call</button>
+        <div id="testCallStatus" style="margin-top:8px"></div>
+      </div>`:''}`:''}
       ${isOnOrPaused&&h&&h.recentActivity&&h.recentActivity.length?`
       <div class="sb-section">
         <div class="eyebrow">LATEST ACTIVITY</div>
@@ -2367,6 +2384,34 @@ async function boot(){
       }
     };
     if(agentId==='calling'&&document.getElementById('pacingForm'))loadPacingForm();
+    if(agentId==='calling'&&document.getElementById('testCallBtn'))wireTestCallForm();
+  }
+
+  function wireTestCallForm(){
+    const btn=document.getElementById('testCallBtn');
+    btn.onclick=async()=>{
+      const phone=document.getElementById('testCallPhone').value.trim();
+      const name=document.getElementById('testCallName').value.trim();
+      const statusEl=document.getElementById('testCallStatus');
+      if(!phone){ statusEl.innerHTML='<div class="catalog-msg err">Enter a phone number first.</div>'; return; }
+      btn.disabled=true; btn.textContent='Calling…';
+      statusEl.innerHTML='<div class="catalog-msg">Placing the call…</div>';
+      try{
+        // api() only throws on 401 — a 422 refusal (paused agent, DNC,
+        // hours, caps) resolves normally with {error}, so it has to be
+        // checked explicitly instead of relying on a thrown exception.
+        const result=await api('/api/dialer/test-call',{method:'POST',body:JSON.stringify({phone,name})});
+        if(result&&result.error){
+          statusEl.innerHTML=`<div class="catalog-msg err">${esc(result.error)}</div>`;
+        }else{
+          statusEl.innerHTML=`<div class="catalog-msg ok">Call placed. It'll show up in Calls once it ends — outcome, recording, and transcript included.</div>`;
+        }
+      }catch(e){
+        statusEl.innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;
+      }finally{
+        btn.disabled=false; btn.textContent='Place test call';
+      }
+    };
   }
 
   const PACING_FIELDS=[
@@ -2445,12 +2490,61 @@ async function boot(){
         <div class="eyebrow">CALLS — TAP FOR RECORDING/TRANSCRIPT</div>
         ${linkedCalls.map(c=>`<div class="sb-item" style="cursor:pointer" data-open-call="${esc(c.id)}"><span class="ts">${esc(fmtRelative(c.ts))}</span>${esc(c.summary||'Call')}${c.outcome?' · '+esc(c.outcome):''}${c.recordingUrl?' · 🎙':''}</div>`).join('')}
       </div>`:''}
+      ${dash.enrichmentEnabled?renderEnrichmentSection(lead):''}
     `);
     openPanel();
     document.getElementById('sbBack').onclick=()=>sbReturnTo&&sbReturnTo();
     document.querySelectorAll('[data-open-call]').forEach(row=>{
       row.onclick=()=>openCallDrawer(row.dataset.openCall);
     });
+    const enrichBtn=document.getElementById('enrichLeadBtn');
+    if(enrichBtn)enrichBtn.onclick=async()=>{
+      enrichBtn.disabled=true;enrichBtn.textContent='Researching…';
+      try{
+        await api(`/api/leads/${lead.id}/enrich`,{method:'POST'});
+        await refreshRealData();
+        openLeadSidebar(leadId); // re-render with the new enrichment attached
+      }catch(e){
+        document.getElementById('enrichResult').innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;
+        enrichBtn.disabled=false;enrichBtn.textContent='Research this company';
+      }
+    };
+  }
+
+  const ENRICHMENT_UNAVAILABLE_REASONS={
+    no_company_name:"No company name on this lead to research.",
+    no_anthropic_key:"Connect Claude (Anthropic) to enable research.",
+    no_search_provider:"No web search connected yet — ask Sailz to add one.",
+    search_failed:"The search failed — try again shortly.",
+    no_results:"No public results found for this company.",
+    summarize_failed:"Couldn't summarize the results — try again.",
+  };
+  function renderEnrichmentSection(lead){
+    const e=lead.enrichment;
+    if(!e){
+      return `<div class="sb-section">
+        <div class="eyebrow">ABOUT THIS COMPANY</div>
+        <div class="sb-desc">Public business info only — sourced, never guessed.</div>
+        <button class="toggle-btn activate" id="enrichLeadBtn" style="margin-top:8px">Research this company</button>
+        <div id="enrichResult"></div>
+      </div>`;
+    }
+    if(e.unavailable){
+      return `<div class="sb-section">
+        <div class="eyebrow">ABOUT THIS COMPANY</div>
+        <div class="sb-desc">${esc(ENRICHMENT_UNAVAILABLE_REASONS[e.reason]||'Unavailable.')}</div>
+      </div>`;
+    }
+    return `<div class="sb-section">
+      <div class="eyebrow">ABOUT THIS COMPANY${e.fromCache?' · CACHED':''}</div>
+      <div class="sb-desc">${esc(e.summary)}</div>
+      ${e.industry||e.sizeBand?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        ${e.industry?`<span class="bc-stat" style="background:rgba(154,140,105,.14);color:var(--dim)">${esc(e.industry)}</span>`:''}
+        ${e.sizeBand?`<span class="bc-stat" style="background:rgba(154,140,105,.14);color:var(--dim)">${esc(e.sizeBand)}</span>`:''}
+      </div>`:''}
+      ${e.signals&&e.signals.length?`<ul style="margin:10px 0 0;padding-left:18px;font:500 11px 'Inter';color:var(--ink);line-height:1.6">${e.signals.map(s=>`<li>${esc(s)}</li>`).join('')}</ul>`:''}
+      ${e.sources&&e.sources.length?`<div style="margin-top:10px;font:500 10px 'Inter';color:var(--dim)">Sources: ${e.sources.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--dim)">${esc(new URL(u).hostname)}</a>`).join(', ')}</div>`:''}
+    </div>`;
   }
   function openPanel(){
     sidebar.classList.add('show');sbOpen=true;sbShiftT=1;
@@ -2639,9 +2733,11 @@ async function boot(){
         <div class="call-transcript" id="callTranscript" style="display:none">${esc(c.transcript)}</div>
       </div>`:''}
       <div class="call-drawer-actions">
-        ${lead?`<button id="callQueueBtn">Queue callback</button>`:''}
+        ${lead?`<button id="callQueueBtn">Call back now</button>`:''}
         <button id="callBookBtn">Book</button>
+        ${c.transcript?`<button id="callTeachBtn">Teach from this call</button>`:''}
       </div>
+      <div id="callTeachResult"></div>
     `;
     document.getElementById('callDrawer').classList.add('show');
     const tt=document.getElementById('transcriptToggle');
@@ -2655,12 +2751,36 @@ async function boot(){
     if(leadLink)leadLink.onclick=()=>{document.getElementById('callDrawer').classList.remove('show');setView('map');/* lead detail needs a focused dept context; surfaced via search instead of a direct jump for now */};
     const queueBtn=document.getElementById('callQueueBtn');
     if(queueBtn)queueBtn.onclick=async()=>{
-      queueBtn.disabled=true;queueBtn.textContent='…';
-      try{await api(`/api/leads/${lead.id}/queue-call`,{method:'POST'});queueBtn.textContent='✓ Queued';refreshAttention()}
-      catch(e){queueBtn.disabled=false;queueBtn.textContent='Queue callback'}
+      queueBtn.disabled=true;queueBtn.textContent='Calling…';
+      try{
+        // api() only throws on 401 — a 422 refusal resolves normally with
+        // {error}, so it has to be checked explicitly.
+        const result=await api(`/api/leads/${lead.id}/queue-call`,{method:'POST'});
+        if(result&&result.error){
+          queueBtn.disabled=false;queueBtn.textContent='Call back now';
+          alert(result.error);
+        }else{
+          queueBtn.textContent='✓ Called';refreshAttention();
+        }
+      }catch(e){queueBtn.disabled=false;queueBtn.textContent='Call back now';alert(e.message||'Could not place the call.')}
     };
     const bookBtn=document.getElementById('callBookBtn');
     if(bookBtn)bookBtn.onclick=()=>{document.getElementById('callDrawer').classList.remove('show');setView('calendar')};
+    const teachBtn=document.getElementById('callTeachBtn');
+    if(teachBtn)teachBtn.onclick=async()=>{
+      teachBtn.disabled=true;teachBtn.textContent='Reviewing…';
+      const resultEl=document.getElementById('callTeachResult');
+      try{
+        const result=await api(`/api/calls/${c.id}/teach`,{method:'POST'});
+        resultEl.innerHTML=result.count
+          ? `<div class="catalog-msg ok" style="margin-top:8px">Learned ${result.count} thing${result.count>1?'s':''} from this call — review in Memory.</div>`
+          : `<div class="catalog-msg" style="margin-top:8px">Nothing durable enough to learn from this specific call.</div>`;
+      }catch(e){
+        resultEl.innerHTML=`<div class="catalog-msg err" style="margin-top:8px">${esc(e.message)}</div>`;
+      }finally{
+        teachBtn.disabled=false;teachBtn.textContent='Teach from this call';
+      }
+    };
   }
   document.getElementById('callDrawerClose').onclick=()=>{document.getElementById('callDrawer').classList.remove('show')};
 
@@ -3052,6 +3172,11 @@ async function boot(){
     // dash.leads is already fetched at boot and kept live by refreshRealData()
     // (same object every other lead-driven view already reads from) — no
     // dedicated endpoint needed for a display-only pipeline view.
+    // "Call now" is never disabled for the calling agent being paused —
+    // that toggle only pauses the automated dialer loop (server/dialer.js
+    // tick()); a human pressing this button places a real call through the
+    // same placeCallForLead() path regardless. Any refusal (DNC, hours,
+    // pacing caps) still surfaces from the response after pressing it.
     const wrap=document.getElementById('leadsWrap');
     let leads=dash.leads||[];
     if(leadsStageFilter!=='all')leads=leads.filter(l=>LEAD_STAGE[l.status]===leadsStageFilter);
@@ -3082,8 +3207,14 @@ async function boot(){
     }).join('');
     wrap.querySelectorAll('[data-call]').forEach(btn=>{btn.onclick=async(e)=>{
       e.stopPropagation();btn.disabled=true;
-      try{await api(`/api/leads/${btn.dataset.call}/queue-call`,{method:'POST'});await refreshRealData();renderLeads()}
-      catch(err){btn.disabled=false}
+      try{
+        // api() only throws on 401 — every other status (422 refusal, 500,
+        // etc.) resolves normally, so a real failure has to be read out of
+        // the body instead of relying on a thrown exception.
+        const result=await api(`/api/leads/${btn.dataset.call}/queue-call`,{method:'POST'});
+        if(result&&result.error){alert(result.error);btn.disabled=false;return}
+        await refreshRealData();renderLeads();
+      }catch(err){alert(err.message||'Could not place the call.');btn.disabled=false}
     }});
     wrap.querySelectorAll('[data-book]').forEach(btn=>{btn.onclick=async(e)=>{
       e.stopPropagation();btn.disabled=true;
@@ -3118,11 +3249,30 @@ async function boot(){
         <div class="bc-name">${esc(b.filename)}</div>
         <div class="bc-meta">${esc(new Date(b.ts).toLocaleDateString())} · ${b.leadCount} contact${b.leadCount===1?'':'s'} · ${b.duplicates} dup · ${b.invalid} invalid</div>
         <div class="bc-stats">${Object.entries(b.counts).map(([k,v])=>`<span class="bc-stat bc-${esc(k)}">${v} ${esc(k)}</span>`).join('')}</div>
+        ${dash.enrichmentEnabled?`<div class="bc-enrich"><button class="lc-lost" style="background:transparent;border:1px solid var(--line);color:var(--dim)" data-enrich-batch="${esc(b.id)}">Enrich batch — company research</button><span data-enrich-status="${esc(b.id)}"></span></div>`:''}
       </div>`).join('')}</div>`;
     wrap.querySelectorAll('[data-batch]').forEach(card=>{
-      card.onclick=()=>{
+      card.onclick=(e)=>{
+        if(e.target.closest('[data-enrich-batch]'))return;
         batchFilter=batchFilter===card.dataset.batch?null:card.dataset.batch;
         renderBatchScoreboard();renderLeads();
+      };
+    });
+    wrap.querySelectorAll('[data-enrich-batch]').forEach(btn=>{
+      btn.onclick=async(e)=>{
+        e.stopPropagation();
+        const batchId=btn.dataset.enrichBatch;
+        const statusEl=wrap.querySelector(`[data-enrich-status="${batchId}"]`);
+        btn.disabled=true;btn.textContent='Researching…';
+        try{
+          const result=await api(`/api/lead-batches/${batchId}/enrich`,{method:'POST'});
+          statusEl.textContent=` ${result.enriched}/${result.total} researched`;
+          await refreshRealData();
+        }catch(err){
+          statusEl.textContent=` ${err.message}`;
+        }finally{
+          btn.disabled=false;btn.textContent='Enrich batch — company research';
+        }
       };
     });
   }
