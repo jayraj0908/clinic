@@ -369,11 +369,11 @@
     padding:3px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
   .calls-empty{padding:70px 20px;text-align:center;color:var(--dim);font:400 13px 'Inter'}
   /* ---------- call detail drawer (reuses the chat drawer's right slide-in) ---------- */
-  #callDrawer,#importDrawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);z-index:60;
+  #callDrawer,#importDrawer,#leadsTestCallDrawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);z-index:60;
     background:rgba(10,10,12,.94);border-left:1px solid rgba(240,234,216,.09);backdrop-filter:blur(22px);
     transform:translateX(103%);transition:transform .6s cubic-bezier(.22,1,.36,1);
     display:flex;flex-direction:column;overflow:hidden}
-  #callDrawer.show,#importDrawer.show{transform:translateX(0)}
+  #callDrawer.show,#importDrawer.show,#leadsTestCallDrawer.show{transform:translateX(0)}
   .call-drawer-body{flex:1;overflow-y:auto;padding:22px 24px 30px}
   .call-drawer-body audio{width:100%;margin:6px 0 4px;height:36px}
   .call-transcript{white-space:pre-wrap;font:400 11.5px 'JetBrains Mono',monospace;color:#b9b3a5;line-height:1.7;
@@ -610,7 +610,7 @@
        becomes a full-screen sheet on mobile — same "click -> panel"
        pattern as desktop's drawers, just sized to the whole viewport
        instead of a fixed side panel a thumb can't reach across. */
-    #chatDrawer,#callDrawer,#memoryDrawer,#importDrawer{width:100vw}
+    #chatDrawer,#callDrawer,#memoryDrawer,#importDrawer,#leadsTestCallDrawer{width:100vw}
     .tip{max-width:70vw}
     .view h1{font-size:22px}
     .view-inner{padding:96px 16px calc(76px + env(safe-area-inset-bottom))}
@@ -799,6 +799,9 @@
 
 <div class="view" id="viewLeads"><div class="view-inner">
   <h1>Leads</h1><div class="vsub">every lead, from every source, one pipeline</div>
+  <button id="leadsTestCallBtn" style="display:none;width:100%;appearance:none;border:1px solid rgba(201,160,102,.5);background:rgba(201,160,102,.14);color:var(--ink);border-radius:12px;padding:14px 16px;font:700 13px 'Inter';letter-spacing:.02em;cursor:pointer;margin-bottom:14px;text-align:left;align-items:center;justify-content:space-between;gap:10px">
+    <span>📞 Test call — dial any number through this exact agent, right now</span><span style="font:600 10px 'Inter';letter-spacing:.08em;color:var(--dim);text-transform:uppercase">Try it →</span>
+  </button>
   <div class="calls-toolbar" id="leadsFilterBar">
     <button class="filter-pill active" data-stage="all">All</button>
     <button class="filter-pill" data-stage="new">New</button>
@@ -824,6 +827,22 @@
       <div class="tp-s">Column headers in row 1 — we'll map them next</div>
     </div>
     <div id="importMappingArea"></div>
+  </div>
+</aside>
+
+<aside id="leadsTestCallDrawer">
+  <div class="chat-head">
+    <div class="chat-title">Test call</div>
+    <div class="chat-close" id="leadsTestCallDrawerClose">✕</div>
+  </div>
+  <div class="call-drawer-body">
+    <div class="sb-desc" style="margin-bottom:14px">Places a real call, right now, through this exact agent — same prompt, same guardrails production calls use. Limited to 3 per hour.</div>
+    <label style="display:block;font:600 9px 'Inter';letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:10px 0 5px">Phone number</label>
+    <input type="tel" class="import-select" id="leadsTestCallPhone" placeholder="(804) 555-0100">
+    <label style="display:block;font:600 9px 'Inter';letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:10px 0 5px">Name <span style="text-transform:none;letter-spacing:0">(optional)</span></label>
+    <input type="text" class="import-select" id="leadsTestCallName" placeholder="Test call">
+    <button class="toggle-btn activate" id="leadsTestCallBtnGo" style="margin-top:12px;width:100%">Place test call</button>
+    <div id="leadsTestCallStatus" style="margin-top:8px"></div>
   </div>
 </aside>
 
@@ -2304,7 +2323,7 @@ async function boot(){
         <div class="sb-desc">Caps how fast the dialer works an imported list. Enforced server-side, not by a prompt — these hard ceilings can't be configured away.</div>
         <div id="pacingForm"><div class="center-state" style="padding:14px"><span class="spinner"></span></div></div>
       </div>
-      ${dash.testCallEnabled?`
+      ${`
       <div class="sb-section">
         <div class="eyebrow">TEST CALL</div>
         <div class="sb-desc">Places a real call, right now, through this exact agent — same prompt, same guardrails you'll hear in production. Goes through the same pacing/quiet-hours/do-not-call checks as any other call. Limited to 3 per hour.</div>
@@ -2314,7 +2333,7 @@ async function boot(){
         <input type="text" class="import-select" id="testCallName" placeholder="Test call">
         <button class="toggle-btn activate" id="testCallBtn" style="margin-top:12px;width:100%">Place test call</button>
         <div id="testCallStatus" style="margin-top:8px"></div>
-      </div>`:''}`:''}
+      </div>`}`:''}
       ${isOnOrPaused&&h&&h.recentActivity&&h.recentActivity.length?`
       <div class="sb-section">
         <div class="eyebrow">LATEST ACTIVITY</div>
@@ -3177,6 +3196,8 @@ async function boot(){
     // tick()); a human pressing this button places a real call through the
     // same placeCallForLead() path regardless. Any refusal (DNC, hours,
     // pacing caps) still surfaces from the response after pressing it.
+    const testCallBtn=document.getElementById('leadsTestCallBtn');
+    if(testCallBtn)testCallBtn.style.display=dash.testCallEnabled?'flex':'none';
     const wrap=document.getElementById('leadsWrap');
     let leads=dash.leads||[];
     if(leadsStageFilter!=='all')leads=leads.filter(l=>LEAD_STAGE[l.status]===leadsStageFilter);
@@ -3286,6 +3307,34 @@ async function boot(){
     document.getElementById('importDrawer').classList.add('show');
   };
   document.getElementById('importDrawerClose').onclick=()=>document.getElementById('importDrawer').classList.remove('show');
+  document.getElementById('leadsTestCallBtn').onclick=()=>{
+    document.getElementById('leadsTestCallStatus').innerHTML='';
+    document.getElementById('leadsTestCallDrawer').classList.add('show');
+  };
+  document.getElementById('leadsTestCallDrawerClose').onclick=()=>document.getElementById('leadsTestCallDrawer').classList.remove('show');
+  document.getElementById('leadsTestCallBtnGo').onclick=async()=>{
+    const btn=document.getElementById('leadsTestCallBtnGo');
+    const phone=document.getElementById('leadsTestCallPhone').value.trim();
+    const name=document.getElementById('leadsTestCallName').value.trim();
+    const statusEl=document.getElementById('leadsTestCallStatus');
+    if(!phone){statusEl.innerHTML='<div class="catalog-msg err">Enter a phone number first.</div>';return}
+    btn.disabled=true;btn.textContent='Calling…';
+    statusEl.innerHTML='<div class="catalog-msg">Placing the call…</div>';
+    try{
+      // api() only throws on 401 — a 422 refusal (DNC, hours, caps) resolves
+      // normally with {error}, so it has to be checked explicitly.
+      const result=await api('/api/dialer/test-call',{method:'POST',body:JSON.stringify({phone,name})});
+      if(result&&result.error){
+        statusEl.innerHTML=`<div class="catalog-msg err">${esc(result.error)}</div>`;
+      }else{
+        statusEl.innerHTML=`<div class="catalog-msg ok">Call placed. It'll show up in Calls once it ends — outcome, recording, and transcript included.</div>`;
+      }
+    }catch(e){
+      statusEl.innerHTML=`<div class="catalog-msg err">${esc(e.message)}</div>`;
+    }finally{
+      btn.disabled=false;btn.textContent='Place test call';
+    }
+  };
   document.getElementById('importFilepick').onclick=()=>document.getElementById('importFileInput').click();
   document.getElementById('importFileInput').onchange=async(e)=>{
     const f=e.target.files[0];
