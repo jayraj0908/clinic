@@ -159,28 +159,32 @@ function applyOutcome(db, lead, outcome, extra = {}) {
   if (outcome === "voicemail") lead.voicemailLeft = true;
 }
 
-// Best-effort scripted voicemail for a lead's first attempt only — the
-// exact Vapi field name/shape for a pre-recorded/TTS voicemail message on
-// call creation should be double-checked against Vapi's current API docs
-// before a real financial-services (or any) client goes live with this;
-// documented here rather than silently assumed correct, since this repo
-// has no live Vapi account to verify the payload shape against.
+// Best-effort scripted voicemail for a lead's first attempt only — kept
+// for whenever this gets properly wired (see the CONFIRMED BUG note in
+// placeCall() below), so the wording exists in one place, not lost.
 function firstAttemptVoicemailScript() {
   return `Hi, this is ${instance.name}. We tried to reach you — call us back whenever works, or we'll try again soon. Thanks!`;
 }
 
 async function placeCall(db, lead, vapiKey) {
-  const isFirstAttempt = lead.attempts === 0;
   const body = {
     assistantId: process.env.VAPI_OUTBOUND_ASSISTANT_ID,
     phoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
     customer: { number: lead.phone, name: lead.name },
     metadata: { leadId: lead.id, batchId: lead.batchId },
   };
-  // Only the FIRST attempt gets a voicemail message — every guardrail's
-  // wording ("ONE voicemail... then silent retries") means retries must
-  // NOT set this field at all, not just reuse the same message.
-  if (isFirstAttempt) body.voicemailMessage = firstAttemptVoicemailScript();
+  // CONFIRMED BUG, fixed 2026-08-03: a top-level `voicemailMessage` field
+  // is not a real field in Vapi's current call-creation schema — Vapi
+  // rejects the ENTIRE request with 400 ("property voicemailMessage
+  // should not exist") whenever it's present. Since every brand-new lead
+  // is a first attempt, this silently broke 100% of outbound dialing on
+  // Retirement Plan Resource Group's real deployment — placeCall() just
+  // returned false on every single call, with the lead sitting at
+  // dialerState "queued" forever and nothing logged anywhere. Removed
+  // outright rather than guessing at the correct nested location — the
+  // custom first-attempt voicemail message is off until someone verifies
+  // the real field against Vapi's current docs and re-adds it properly
+  // (with a live test call, not another guess).
 
   const res = await fetch("https://api.vapi.ai/call", {
     method: "POST",
@@ -234,7 +238,8 @@ async function tick() {
   if (!lead) { save(); return; }
 
   try {
-    await placeCall(db, lead, vapiKey);
+    const placed = await placeCall(db, lead, vapiKey);
+    if (!placed) log("error", `Dialer: Vapi rejected the call-creation request for ${lead.name} — check server logs/Vapi dashboard for the real reason (not retried automatically).`);
   } catch (e) {
     log("error", `Dialer: call to ${lead.name} failed to place: ${e.message}`);
   }
