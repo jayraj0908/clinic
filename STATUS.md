@@ -54,6 +54,31 @@ Instance config: `instances/`
 | Car wash | discovery | book discovery call; instance is ~an afternoon |
 | Myrtle hotels | proposal | Lead Engine (prompt 10) shipped — RFP pitch unblocked, ready to send |
 
+## Infrastructure (Railway, verified 5 Aug)
+
+| Service | Domain | Volume | State |
+|---|---|---|---|
+| `sailz-hq` | hq.sailz.org **+ sailz.org** | sailz-hq-volume | Online |
+| `clinic` | shine.sailz.org | clinic-volume | Online |
+| `the-burg` | theburg.sailz.org | the-burg-volume | Online |
+| `rprg` | rprg.sailz.org | **rprg-volume (attached 5 Aug)** | Online |
+
+**rprg volume fixed.** It was the only service with no volume, which is why
+every redeploy wiped the client's imported leads: `DB_PATH=/app/data/db.json`
+was writing to an ephemeral container filesystem. A volume is now mounted at
+`/app/data` (us-west2, matching the service region). Nothing was lost in the
+fix, because the redeploy an hour earlier had already cleared that container.
+
+Two follow-ups for Jay:
+
+1. **The leads still need re-importing.** The volume stops it happening
+   again; it does not bring back what was already gone.
+2. **Aman's password may have reset.** A fresh volume means an empty
+   `/app/data`, so the first boot re-seeds the owner login from
+   `OWNER_EMAIL` / `OWNER_PASSWORD`. If he had set his own password in the
+   dashboard, it is back to the environment one. Worth telling him before
+   he tries to log in.
+
 ## Founder checklist (non-code)
 
 - [x] SECURITY DEBT closed 7/31: VAPI_SERVER_SECRET set on both Shine
