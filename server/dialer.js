@@ -219,6 +219,12 @@ async function placeCallForLead(db, lead) {
   if (!vapiKey) return { ok: false, reason: "vapi_not_configured" };
 
   if (leadQueue.isDNC(db, lead.phone)) return { ok: false, reason: "dnc" };
+  // Set only by server/research.js's HQ lead sourcing, for a number no
+  // phone-type lookup could positively confirm as a business landline —
+  // never set by any other lead source, so this is a no-op for every
+  // client instance. No override, no manual bypass: a wrongly-called
+  // mobile number is a TCPA exposure, not just a bad lead.
+  if (lead.notDialable) return { ok: false, reason: "not_dialable", detail: lead.notDialableReason };
   if (!hasConsentBasis(lead)) return { ok: false, reason: "no_consent_basis" };
   if (!leadQueue.isWithinCallingHours(new Date(), lead.timezone || instance.timezone)) return { ok: false, reason: "outside_calling_hours" };
 

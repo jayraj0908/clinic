@@ -13,45 +13,45 @@
   ],
   "addOns": [
     { "name": "Extra location", "price": "$249/mo", "notes": "Multi plan only" },
-    { "name": "Outbound dialer", "price": "$149/mo", "notes": "Solo/Business only — included in Multi" },
+    { "name": "Outbound dialer", "price": "$149/mo", "notes": "Solo/Business only. Included in Multi" },
     { "name": "Extra agent beyond plan", "price": "$99/mo", "notes": "" },
     { "name": "Custom integration (PMS/POS/CRM)", "price": "$1,500 one-time + $99/mo", "notes": "scoped first" },
     { "name": "Compliance pack (FINRA/HIPAA review, A2P registration)", "price": "$750 one-time", "notes": "for regulated clients" }
   ],
   "included": [
-    "Their own deployment, own logins, own phone config, own data — never shared with another client",
-    "The brain map — every agent visible, what it did, when",
-    "Memory and Teach — correct the agent once, it stays corrected",
-    "Approval gates on anything consequential — nothing sends itself",
+    "Their own deployment, own logins, own phone config, own data. Never shared with another client",
+    "The brain map: every agent visible, what it did, when",
+    "Memory and Teach. Correct the agent once, it stays corrected",
+    "Approval gates on anything consequential. Nothing sends itself",
     "Emergency fallback: if the AI fails, calls forward to a human number",
     "An honest-limits review before go-live"
   ],
   "icp": {
     "dental": "A dental practice missing calls after hours or during chair time, one location, front desk already stretched thin. Buying trigger: a missed call on a Friday evening.",
     "restaurant": "A restaurant or quick-service kitchen that loses pickup orders during a dinner rush because the phone and the line both need the same two hands.",
-    "financial-services": "A single advisor or small firm with a real prospect list who needs someone dialing it every day, under real compliance constraints — not a call center.",
+    "financial-services": "A single advisor or small firm with a real prospect list who needs someone dialing it every day, under real compliance constraints. Not a call center.",
     "hospitality": "A hotel or venue group that loses group and event bookings because a planner's RFP sits in an inbox for two days while a competitor answers first.",
     "local-service": "A service business (HVAC, detailing, salon, auto shop) that books by phone, has no front desk, and loses jobs to whoever picks up first."
   },
   "whatWeDoNotDo": [
-    "No free tiers — a 15-day pilot, then a paid plan",
+    "No free tiers. A 15-day pilot, then a paid plan",
     "No month-to-month discounting to save a churning account",
     "No custom pricing below Solo",
-    "No unmetered plans — included minutes are a real, enforced cap",
-    "No self-serve signup or payment yet — every deployment is set up by us"
+    "No unmetered plans. Included minutes are a real, enforced cap",
+    "No self-serve signup or payment yet. Every deployment is set up by us"
   ],
   "honestLimits": [
     "The AI discloses it's an AI whenever asked, and where required by law",
     "It never promises a result, a price outside the published plans, or a timeline we haven't already hit for another client",
-    "It never quotes custom pricing — only the three published plans and their add-ons",
+    "It never quotes custom pricing. Only the three published plans and their add-ons",
     "If it doesn't know something, it says so and offers a callback from a person instead of guessing"
   ],
   "insuranceAccepted": [],
   "selfPay": "",
   "policies": [
-    "Sailz sells software, not investment, legal, medical, or tax advice — the AI never gives advice outside what a client's own business actually offers",
-    "Setup fee is not negotiable — it funds the build week",
+    "Sailz sells software, not investment, legal, medical, or tax advice. The AI never gives advice outside what a client's own business actually offers",
+    "Setup fee is not negotiable. It funds the build week",
     "A 15-day pilot precedes every paid plan; pilot terms live in clients/PILOT-AGREEMENT-TEMPLATE.md"
   ],
-  "aiDisclosure": "This is an AI assistant for Sailz. I can tell you about pricing and plans and get you on a 15-minute call with our team — I'm not able to negotiate custom terms."
+  "aiDisclosure": "This is an AI assistant for Sailz. I can tell you about pricing and plans and get you on a 15-minute call with our team. I'm not able to negotiate custom terms."
 }

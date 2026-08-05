@@ -563,6 +563,86 @@
     var openedAt = Date.now();
     var ENDPOINT = (window.SAILZ_LEAD_ENDPOINT || "").trim();
 
+    // Real conversation (server/siteHost.js + server/research.js, Claude
+    // Haiku) when it's live on this deployment; the scripted STEPS flow
+    // below is the automatic fallback whenever it isn't — disabled,
+    // rate-limited, erroring, or timing out. Same bubble/typing UI either
+    // way, so a visitor never sees which mode they're in.
+    var CHAT_ENDPOINT = "/api/site/chat";
+    var aiMode = null; // null = still probing, true = AI, false = scripted
+    var conversationId = null;
+    function withTimeout(ms) { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } }
+
+    function startAI() {
+      var t = typing();
+      status.textContent = "thinking";
+      fetch(CHAT_ENDPOINT, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "Hi" }), signal: withTimeout(12000),
+      })
+        .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .then(function (data) {
+          t.remove();
+          aiMode = true;
+          conversationId = data.conversationId;
+          bubble("them", esc(data.reply));
+          status.textContent = "ready when you are";
+          input.disabled = false; send.disabled = false;
+          try { input.focus({ preventScroll: true }); } catch (e) { /* older browsers */ }
+        })
+        .catch(function () {
+          t.remove();
+          aiMode = false;
+          start();
+        });
+    }
+
+    function submitAI(raw) {
+      var value = String(raw == null ? "" : raw).trim();
+      if (!value || busy || finished) return;
+      bubble("us", esc(value));
+      input.value = ""; busy = true; input.disabled = true; send.disabled = true;
+      var t = typing();
+      fetch(CHAT_ENDPOINT, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: conversationId, message: value }), signal: withTimeout(35000),
+      })
+        .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .then(function (data) {
+          t.remove();
+          bubble("them", esc(data.reply));
+          busy = false;
+          if (data.done) {
+            finished = true;
+            status.textContent = "sent";
+            input.disabled = true; send.disabled = true;
+          } else {
+            input.disabled = false; send.disabled = false;
+            try { input.focus({ preventScroll: true }); } catch (e) { /* older browsers */ }
+          }
+        })
+        .catch(function () {
+          t.remove();
+          busy = false;
+          // One AI turn failed mid-conversation — drop to the scripted
+          // flow rather than dead-ending the visitor.
+          aiMode = false;
+          bubble("them", esc("Let's switch to a quick form so this doesn't get lost."));
+          input.disabled = false; send.disabled = false;
+          askStep();
+        });
+    }
+
+    function switchToScriptedFlow() {
+      aiMode = false;
+      finished = false;
+      lead = {}; step = 0;
+      log.innerHTML = "";
+      input.disabled = false; send.disabled = false; input.value = "";
+      status.textContent = "ready when you are";
+      start();
+    }
+
     var STEPS = [
       {
         key: "vertical",
@@ -659,6 +739,11 @@
         bubble("them", esc(text));
         busy = false;
         send.disabled = false;
+        // Only relevant the first time: startAI() leaves the input
+        // disabled while it probes, and falls back to this scripted
+        // start() on failure — this is what re-enables typing for that
+        // path. A no-op every other time (input is already enabled).
+        input.disabled = false;
         if (after) after();
       }, delay || Math.min(1100, 320 + text.length * 11));
     }
@@ -761,17 +846,22 @@
         .catch(mailtoFallback);
     }
 
-    form.addEventListener("submit", function (e) { e.preventDefault(); submitAnswer(input.value); });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (aiMode) submitAI(input.value); else submitAnswer(input.value);
+    });
     quicks.addEventListener("click", function (e) {
       var b = e.target.closest("[data-v]");
-      if (b) submitAnswer(b.dataset.v);
+      if (b && !aiMode) submitAnswer(b.dataset.v);
     });
     $("bookReset").addEventListener("click", function () {
+      if (aiMode) { switchToScriptedFlow(); return; }
       lead = {}; step = 0; finished = false;
       log.innerHTML = ""; input.disabled = false; input.value = "";
       status.textContent = "ready when you are";
       start();
     });
+    $("bookUseForm").addEventListener("click", switchToScriptedFlow);
 
     // Pre-fill the intent when someone arrives from a pricing card.
     document.addEventListener("click", function (e) {
@@ -784,14 +874,18 @@
       say("Hello. I am the same kind of agent Sailz builds for its clients, "
         + "so this is a conversation rather than a form. It takes about a minute.", askStep, 700);
     }
+    // input/send start disabled: startAI() enables them once the probe
+    // resolves (either into AI mode, or into the scripted start() below,
+    // which enables them itself via say()/askStep()).
+    input.disabled = true; send.disabled = true;
     if ("IntersectionObserver" in window) {
       var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) {
-          if (e.isIntersecting && !opened) { opened = true; start(); }
+          if (e.isIntersecting && !opened) { opened = true; startAI(); }
         });
       }, { threshold: 0.3 });
       io.observe($("talk"));
-    } else { start(); }
+    } else { startAI(); }
     renderProgress();
   })();
 

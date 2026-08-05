@@ -247,7 +247,7 @@ app.get("/sms-terms.html", (req, res) => renderSmsLegalTemplate("sms-terms.html"
 // express.static(public) so a marketing host never falls through to the
 // dashboard's login screen. Inert on every client deployment.
 const SITE_ENABLED = SAILZ_ADMIN && process.env.SITE_ENABLED === "1";
-const siteMount = require("./siteHost").mount(app, { enabled: SITE_ENABLED });
+const siteMount = require("./siteHost").mount(app, { enabled: SITE_ENABLED, siteChatEnabled: SITE_CHAT });
 if (siteMount.mounted) console.log(`[site] marketing site served for: ${siteMount.hosts.join(", ")} (preview at /site)`);
 
 app.use(express.static(path.join(__dirname, "..", "public")));
@@ -1227,6 +1227,42 @@ app.post("/api/lead-batches/:id/enrich", auth, requireOwner, async (req, res) =>
   res.json({ enriched: done, total: leads.length });
 });
 
+// HQ-only ICP-based business lead sourcing (server/research.js) —
+// business information only, never a person's direct contact info, and
+// never itself a source of dialable numbers: every sourced lead lands as
+// status:"proposed" (the SAME approval queue proposed leads already use
+// elsewhere — POST /api/leads/:id/approve-proposed just below is the one
+// approval path, not a second one) with notDialable set unless a real
+// phone-type lookup confirmed a business landline. Approval is what
+// writes consentBasis, from the sourcing record's URL + date.
+app.post("/api/hq/research/source-leads", requireHQ, auth, requireOwner, async (req, res) => {
+  if (!RESEARCH_ENABLED) return res.status(404).end();
+  const icp = String(req.body?.icp || "").trim();
+  if (!icp) return res.status(400).json({ error: "Describe the ICP — vertical, geography, size signals." });
+  const count = Math.min(Math.max(Number(req.body?.count) || 10, 1), 25);
+  const db = load();
+  const result = await require("./research").sourceLeads(db, { icp, count });
+  save();
+  if (!result.ok) return res.status(422).json(result);
+  res.json(result);
+});
+// One cited question -> one cited answer (or unavailable) — used by the
+// site chat (Stage 4) to say something specific about a visitor's
+// business mid-conversation, and available directly for the owner too.
+app.post("/api/hq/research/query", requireHQ, auth, requireOwner, async (req, res) => {
+  if (!RESEARCH_ENABLED) return res.status(404).end();
+  const prompt = String(req.body?.prompt || "").trim();
+  if (!prompt) return res.status(400).json({ error: "prompt is required" });
+  const db = load();
+  const result = await require("./research").query(db, { prompt, job: req.body?.job === "strategy" ? "strategy" : "lookup" });
+  save();
+  res.json(result);
+});
+app.get("/api/hq/research/usage", requireHQ, auth, requireOwner, (req, res) => {
+  const db = load();
+  res.json({ usage: (db.settings.researchUsage || []).slice(-100) });
+});
+
 // One-tap pipeline actions for the mobile Leads tab — the same "new ->
 // contacted -> booked -> won/lost" stage grouping index.html's LEAD_STAGE
 // computes for display maps onto the real status vocabulary other code
@@ -1309,6 +1345,15 @@ app.post("/api/leads/:id/approve-proposed", auth, requireOwner, (req, res) => {
   if (!lead) return res.status(404).json({ error: "Lead not found" });
   if (lead.status !== "proposed") return res.status(400).json({ error: "Not a proposed lead" });
   lead.status = "new";
+  // A research-sourced lead (server/research.js) carries its own
+  // sourcing record — the source URLs and the date they were seen ARE
+  // this lead's consent basis, written only now, on explicit approval,
+  // never at sourcing time. Every other proposed-lead source (signal
+  // watcher) falls through to maybeAutoQueueLead's generic
+  // "inbound_inquiry" stamp below, unchanged.
+  if (lead.sourcing && !lead.consentBasis) {
+    lead.consentBasis = `hq_sourced:${(lead.sourcing.sourceUrls || []).join(",")}@${lead.sourcing.seenAt}`;
+  }
   leadQueue.maybeAutoQueueLead(db, lead);
   save();
   log("system", `${req.user.id} approved a proposed lead: ${lead.name}`);
