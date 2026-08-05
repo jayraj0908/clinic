@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sailz | An AI brain for your business</title>
+<meta name="description" content="Sailz builds and runs a team of AI agents for small businesses. One answers the phone, one works your list, one learns from every call. From $199 a month.">
+<meta property="og:title" content="Sailz | An AI brain for your business">
+<meta property="og:description" content="A team of AI agents that answers your phone, works your list, and learns from every call. Built, run and watched by us.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://sailz.org">
+<meta name="theme-color" content="#0a0a0d">
+<link rel="icon" href="favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="loading">
+
+<!-- ============================ loading screen ========================= -->
+<div id="loader">
+  <div class="load-mark">SAILZ</div>
+  <canvas id="loadCanvas" width="440" height="220" aria-hidden="true"></canvas>
+  <div class="load-bar"><i id="loadFill"></i></div>
+  <div class="load-meta">
+    <span>Waking the brain</span>
+    <b><span id="loadPct">0</span>%</b>
+  </div>
+</div>
+
+<!-- ================================ nav =============================== -->
+<nav id="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">SAILZ</a>
+    <div class="nav-links">
+      <a href="#brain">The brain</a>
+      <a href="#work">See it work</a>
+      <a href="#screens">Your dashboard</a>
+      <a href="#pricing">Pricing</a>
+      <a class="btn btn-primary" href="#talk">Book a call<span class="arrow">&rarr;</span></a>
+    </div>
+  </div>
+  <i id="navProgress"></i>
+</nav>
+
+<!-- =============================== hero =============================== -->
+<section id="hero">
+  <div id="heroMap" aria-hidden="true"></div>
+  <div class="hero-veil" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="eyebrow" data-reveal>AI operations for small business</div>
+    <h1 class="hero-h1" data-split>An AI brain that <em>runs the parts of your business you keep dropping.</em></h1>
+    <p class="lede" data-reveal data-d="3">Sailz builds your business its own team of AI agents. One answers
+      every call. One works your list. One reads every conversation and gets smarter.
+      We build it, we run it, we watch it. You approve what matters.</p>
+    <div class="hero-cta" data-reveal data-d="4">
+      <a class="btn btn-primary" href="#talk">Book a call<span class="arrow">&rarr;</span></a>
+      <a class="btn btn-ghost" href="#brain">See the brain</a>
+    </div>
+    <div class="hero-meta" data-reveal data-d="5">
+      <div><b>$199</b>a month to start</div>
+      <div><b>About a week</b>from call to live</div>
+      <div><b>Dental, restaurants, finance</b>running today</div>
+    </div>
+  </div>
+  <div class="scroll-cue" aria-hidden="true"><span>Scroll</span><i></i></div>
+</section>
+
+<!-- ============================== ticker ============================== -->
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-row" id="tickerRow"></div>
+</div>
+
+<!-- ============================= statement ============================ -->
+<section>
+  <div class="wrap stmt-grid">
+    <div>
+      <div class="eyebrow" data-reveal>The problem</div>
+      <p class="statement" data-reveal data-d="1" style="margin-top:20px">
+        Every business already has a full-time job nobody was hired for.
+        <span class="muted">Answering it, chasing it, remembering it.</span>
+      </p>
+    </div>
+    <div class="stmt-side">
+      <div class="stmt-fact" data-reveal data-d="2">
+        <b>6:10pm</b><span>The hour a new patient calls, gets voicemail, and dials the practice down the road.</span>
+      </div>
+      <div class="stmt-fact" data-reveal data-d="3">
+        <b>400</b><span>Companies a one-person consultancy should be calling. Nine get called on a good day.</span>
+      </div>
+      <div class="stmt-fact" data-reveal data-d="4">
+        <b>Six</b><span>Hotels an event planner emails at once. The first real reply wins the room block.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap"><div class="hr"></div></div>
+
+<!-- ============================== brain =============================== -->
+<section id="brain">
+  <div class="wrap">
+    <div class="eyebrow" data-reveal>The brain</div>
+    <h2 data-reveal data-d="1" style="margin:16px 0 16px">Every agent, and exactly what it does.</h2>
+    <p class="lede" data-reveal data-d="2">Pick your kind of business. This is the real shape of the brain you
+      would get, rendered by the same code that draws the map you log into every morning.
+      Click any node.</p>
+
+    <div class="verticals" id="verticals" role="tablist" aria-label="Business type" data-reveal data-d="3"></div>
+
+    <div class="stage-grid" data-reveal data-d="3">
+      <div class="stage" id="stage">
+        <div class="stage-core" id="stageCore">
+          <small>Your business</small>
+          <b id="hubName"></b>
+        </div>
+        <div class="stage-hint">Click a node</div>
+        <div class="node-list" id="nodeList"></div>
+      </div>
+      <aside class="panel" id="panel" aria-live="polite"></aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ see it work =========================== -->
+<section id="work">
+  <div class="wrap">
+    <div class="eyebrow" data-reveal>See it work</div>
+    <h2 data-reveal data-d="1" style="margin:16px 0 16px">While it talks, it is already working.</h2>
+    <p class="lede" data-reveal data-d="2" style="margin-bottom:30px">On the surface, an ordinary phone call.
+      Underneath, the calendar is checked, the slot is held, the lead is written, the confirmation is queued.</p>
+
+    <div class="demo-tabs" data-reveal data-d="2" id="demoTabs" role="tablist" aria-label="Call type"></div>
+
+    <div class="demo-grid">
+      <div class="phone" data-reveal data-d="3">
+        <div class="phone-top">
+          <div class="phone-av" id="demoGlyph">&#9742;</div>
+          <div>
+            <div class="phone-name" id="demoName">AI Receptionist</div>
+            <div class="phone-sub" id="demoSub">on the line</div>
+          </div>
+          <i class="live-dot"></i>
+        </div>
+        <div class="phone-body" id="demoBody"></div>
+      </div>
+      <div class="behind" data-reveal data-d="4">
+        <h4>Behind the scenes</h4>
+        <div id="demoSteps"></div>
+        <p class="panel-note" style="margin-top:22px" id="demoNote"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ your screens ========================== -->
+<section id="screens">
+  <div class="wrap">
+    <div class="eyebrow" data-reveal>Your dashboard</div>
+    <h2 data-reveal data-d="1" style="margin:16px 0 16px">Built for your business, not for everyone's.</h2>
+    <p class="lede" data-reveal data-d="2" style="margin-bottom:36px">A restaurant has no calendar. A dental
+      practice has no order queue. You only ever see the surfaces your own agents feed, which is
+      why the thing stays usable at 7pm on a Friday.</p>
+
+    <div class="screens">
+      <div class="screen" data-reveal data-d="2">
+        <div class="screen-bar"><i></i><i></i><i></i><span>Simple mode</span></div>
+        <div class="screen-body">
+          <div class="ui-hero"><div class="ui-hero-dot"></div><div class="ui-hero-label">Your brain is on</div></div>
+          <div class="ui-counts"><b>14</b> calls answered &middot; <b>6</b> booked today</div>
+          <div class="ui-sec">Needs you</div>
+          <button class="ui-need" type="button" tabindex="-1">Approve 3 things the brain learned yesterday</button>
+          <div class="ui-sec" style="margin-top:16px">Just happened</div>
+          <div class="ui-row"><span>New patient booked, Thursday 2pm</span><time>4m</time></div>
+          <div class="ui-row"><span>Caller asked about implants, message taken</span><time>26m</time></div>
+        </div>
+        <div class="screen-cap"><b>The daily surface</b><span>What an owner actually opens. One green dot, one number, one thing to approve.</span></div>
+      </div>
+
+      <div class="screen" data-reveal data-d="3">
+        <div class="screen-bar"><i></i><i></i><i></i><span>Leads</span></div>
+        <div class="screen-body">
+          <div class="ui-pipe">
+            <div class="ui-col"><h5>Queued</h5>
+              <div class="ui-card"><b>Bayside Dental</b><span>38 staff</span></div>
+              <div class="ui-card"><b>Fenton Group</b><span>120 staff</span></div>
+            </div>
+            <div class="ui-col"><h5>Called</h5>
+              <div class="ui-card"><b>Harlow &amp; Reed</b><span>callback Tue</span></div>
+            </div>
+            <div class="ui-col"><h5>Booked</h5>
+              <div class="ui-card"><b>Crest Partners</b><span>Thu 2:00pm</span></div>
+            </div>
+          </div>
+          <div class="ui-sec" style="margin-top:16px">Pacing</div>
+          <div class="ui-row"><span>Quiet hours honoured</span><time>8am to 8pm</time></div>
+          <div class="ui-row"><span>Do not call list</span><time>enforced</time></div>
+        </div>
+        <div class="screen-cap"><b>The pipeline</b><span>For businesses whose product is outbound. Pacing and consent are controls, not fine print.</span></div>
+      </div>
+
+      <div class="screen" data-reveal data-d="4">
+        <div class="screen-bar"><i></i><i></i><i></i><span>Chart</span></div>
+        <div class="screen-body">
+          <div class="ui-bars" id="uiBars"></div>
+          <div class="ui-sec">This week</div>
+          <div class="ui-row"><span>Calls answered</span><time>96%</time></div>
+          <div class="ui-row"><span>Booked on the call</span><time>41%</time></div>
+          <div class="ui-row"><span>After hours captured</span><time>22</time></div>
+        </div>
+        <div class="screen-cap"><b>The proof</b><span>Numbers pulled from what actually happened on the phone, not from a projection.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================== differentiators ======================== -->
+<section id="different">
+  <div class="wrap">
+    <div class="eyebrow" data-reveal>Agent or teammate</div>
+    <h2 data-reveal data-d="1" style="margin:16px 0 40px">Most AI tools run a task. Yours holds a job.</h2>
+    <div class="diffs">
+      <div class="diff" data-reveal>
+        <div class="diff-n">01</div>
+        <h3>It owns a lane, not a request</h3>
+        <div>
+          <p class="diff-them">Does the one thing you asked, hands it back, and waits.</p>
+          <p class="diff-us" style="margin-top:16px">Answers every call for the rest of the month without being opened.</p>
+        </div>
+      </div>
+      <div class="diff" data-reveal>
+        <div class="diff-n">02</div>
+        <h3>It remembers your business</h3>
+        <div>
+          <p class="diff-them">Starts from nothing each time. You are the memory.</p>
+          <p class="diff-us" style="margin-top:16px">Holds your prices, your hours, your services, and every correction you have given it.</p>
+        </div>
+      </div>
+      <div class="diff" data-reveal>
+        <div class="diff-n">03</div>
+        <h3>It waits for you on the things that matter</h3>
+        <div>
+          <p class="diff-them">Either does nothing, or does everything and tells you after.</p>
+          <p class="diff-us" style="margin-top:16px">Books freely. Never sends, publishes, or charges without your tap. That gate is in the code.</p>
+        </div>
+      </div>
+      <div class="diff" data-reveal>
+        <div class="diff-n">04</div>
+        <h3>Somebody is watching it</h3>
+        <div>
+          <p class="diff-them">When it quietly breaks, you find out from a customer.</p>
+          <p class="diff-us" style="margin-top:16px">We monitor every deployment. If your line goes quiet, we know before you do.</p>
+        </div>
+      </div>
+      <div class="diff" data-reveal>
+        <div class="diff-n">05</div>
+        <h3>It is installed, not subscribed</h3>
+        <div>
+          <p class="diff-them">You get software and the job of operating it.</p>
+          <p class="diff-us" style="margin-top:16px">You get a built brain, your own deployment, and the people who built it. Nothing to configure.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== pricing ============================= -->
+<section id="pricing">
+  <div class="wrap">
+    <div class="eyebrow" data-reveal>Pricing</div>
+    <h2 data-reveal data-d="1" style="margin:16px 0 16px">Three plans. No hourly billing, ever.</h2>
+    <p class="lede" data-reveal data-d="2" style="margin-bottom:40px">You are buying a brain, not seats. Every plan
+      includes your own deployment, your own data, memory that learns, and a human fallback number
+      for when the AI should get out of the way.</p>
+    <div class="prices" id="prices"></div>
+    <p class="price-foot" data-reveal>Pay annually and get two months free &middot; 15 day pilot before you commit
+      &middot; Cancel with 30 days notice, and your data comes with you.</p>
+  </div>
+</section>
+
+<!-- ============================== limits ============================== -->
+<section id="limits">
+  <div class="wrap">
+    <div class="eyebrow" data-reveal>Honest limits</div>
+    <h2 data-reveal data-d="1" style="margin:16px 0 16px">What it will not do.</h2>
+    <p class="lede" data-reveal data-d="2" style="margin-bottom:26px">We read this list out loud with every client
+      before go-live. It makes for a shorter sales pitch and a much longer relationship.</p>
+    <div class="limits" data-reveal data-d="2">
+      <div>
+        <div class="limit"><span class="limit-n">01</span><div><b>It does not send anything on its own.</b><span>Emails, texts, public posts, price changes, refunds. Every one of those waits for you, and that is enforced in the code rather than asked for in a prompt.</span></div></div>
+        <div class="limit"><span class="limit-n">02</span><div><b>It will not invent an answer.</b><span>If it has not been taught something it says so and takes a message. We would rather it sound limited than sound confident and wrong.</span></div></div>
+        <div class="limit"><span class="limit-n">03</span><div><b>It says it is an AI.</b><span>Whenever asked, and wherever the law requires. No pretending to be a person named Jessica.</span></div></div>
+      </div>
+      <div>
+        <div class="limit"><span class="limit-n">04</span><div><b>No medical, legal or financial advice.</b><span>It books, it answers logistics, it takes messages. Regulated advice goes to the human licensed to give it.</span></div></div>
+        <div class="limit"><span class="limit-n">05</span><div><b>Outbound follows the rules, not the funnel.</b><span>Quiet hours, do not call honoured instantly and permanently, consent required per lead. If that costs us dials, it costs us dials.</span></div></div>
+        <div class="limit"><span class="limit-n">06</span><div><b>When it fails, a human phone rings.</b><span>Fallback forwarding is set up and tested before go-live. Every client, no exceptions.</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ book a call =========================== -->
+<section id="talk">
+  <div class="wrap narrow">
+    <div class="eyebrow" data-reveal>Book a call</div>
+    <h2 data-reveal data-d="1" style="margin:16px 0 16px">Fifteen minutes. Bring your worst phone day.</h2>
+    <p class="lede" data-reveal data-d="2" style="margin-bottom:32px">Talk to it the way your customers would.
+      If Sailz is not the answer we will say so on the call. We would rather lose a sale than a client.</p>
+
+    <div class="book" data-reveal data-d="2">
+      <div class="book-top">
+        <div class="book-av">&#9670;</div>
+        <div>
+          <div class="book-title">Sailz intake</div>
+          <div class="book-sub" id="bookStatus">ready when you are</div>
+        </div>
+        <i class="live-dot"></i>
+      </div>
+      <div id="bookLog" role="log" aria-live="polite"></div>
+      <div class="book-progress" id="bookProgress" aria-hidden="true"></div>
+      <div class="book-foot">
+        <form class="book-input" id="bookForm" autocomplete="on">
+          <input id="hpWebsite" name="company_website" type="text" tabindex="-1" autocomplete="off"
+                 aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+          <input id="bookInput" type="text" placeholder="Type your answer" aria-label="Your answer" autocomplete="off">
+          <button class="book-send" type="submit" id="bookSend" aria-label="Send">&rarr;</button>
+        </form>
+        <div class="quicks" id="bookQuicks"></div>
+      </div>
+    </div>
+    <button class="book-esc" id="bookReset" type="button">Start the conversation over</button>
+  </div>
+</section>
+
+<!-- =============================== footer ============================= -->
+<footer>
+  <div class="wrap">
+    <div class="foot-in">
+      <div>
+        <div class="foot-brand">SAILZ</div>
+        <p class="foot-note">AI operations for small business. Built and run out of Richmond, Virginia.</p>
+      </div>
+      <div class="foot-links">
+        <a href="#brain">The brain</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#talk">Book a call</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+        <a href="mailto:hello@sailz.org">hello@sailz.org</a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>&copy; <span id="yr"></span> Sailz LLC</span>
+      <span>Every agent on this page is real and running today.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Relative on purpose. Served from Sailz HQ the endpoint is same-origin;
+  // on any other static host the POST 404s and app.js falls back to the
+  // visitor's mail client, so the booking chat is never a dead end.
+  window.SAILZ_LEAD_ENDPOINT = "/api/site/lead";
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+<script src="data.js"></script>
+<script src="map.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

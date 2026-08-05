@@ -1,11 +1,12 @@
 {
-  "_note": "Sailz's own internal deployment — the admin, not a client. This is the only instance that should ever set SAILZ_ADMIN=1. See DEPLOY.md in this folder for the full deployment checklist.",
+  "_note": "Sailz's own internal deployment — the admin console AND (as of HQ_LIVE) Sailz's own first-class client instance: HQ sells Sailz on Sailz, same engine, same guardrails, same code path a paying client uses. This is the only instance that should ever set SAILZ_ADMIN=1. See DEPLOY.md in this folder for the admin-console checklist; HQ_LIVE's own setup (Vapi/Twilio/Google Calendar) is separate and documented inline below.",
   "id": "sailz-hq",
   "name": "Sailz",
   "vertical": "hq",
   "brandColor": "#c9a066",
   "timezone": "America/New_York",
-  "agents": ["librarian"],
-  "_tabsNote": "HQ doesn't take calls, capture leads, or book appointments — those tabs are meaningless here. Map stays (client-node visualization is a later HQ stage); Dashboards and Chart still show real librarian activity.",
-  "tabs": ["dash", "work"]
+  "_agentsNote": "receptionist + calling + librarian + researcher + signal-watcher run for real here (anthropic, and HQ's own vapi/gcal keys once provisioned) — this is Sailz's real sales line and outbound sourcing pipeline, the same code path (server/dialer.js, server/catalog.js) every client uses. leads and rfp-responder are listed active too, per the HQ build spec, but are honestly idle in practice: leads only does real work with META_LEAD_ADS_TOKEN (Sailz doesn't run Meta/Google lead ads today) and rfp-responder only fires from an inbound Resend email webhook (Sailz doesn't run an event-RFP inbox) — both stay visible and truthfully report 'nothing to do' rather than being silently omitted. audit and billing are clinical-visit/claims agents and do not apply to Sailz's own business at all — left out of the active set (available, not activated) rather than force-activated into something meaningless, same treatment VERTICAL-BLUEPRINTS.md's dental/restaurant blueprints give an agent that doesn't fit.",
+  "agents": ["receptionist", "calling", "leads", "librarian", "researcher", "signal-watcher", "rfp-responder"],
+  "_tabsNote": "HQ is a real sales business now (VERTICAL-BLUEPRINTS.md's hq blueprint) — dash/calls/leads/calendar/teach/work, the same sales-surface set financial-services gets, since Sailz's own primary agents (receptionist inbound, calling outbound) produce calls, leads, and booked calendar slots exactly like a client's would.",
+  "tabs": ["dash", "calls", "leads", "calendar", "teach", "work"]
 }

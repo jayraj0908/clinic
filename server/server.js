@@ -67,15 +67,42 @@ const VAPI_ASSISTANT_REQUEST = process.env.VAPI_ASSISTANT_REQUEST === "1" || pro
 // calls use — same assistant, same guardrails, same pacing/DNC/
 // calling-hours/consent checks. Off by default everywhere; enabled
 // per-deployment (currently just rprg).
-const TEST_CALL_ENABLED = process.env.TEST_CALL_ENABLED === "1";
+const TEST_CALL_ENABLED = process.env.TEST_CALL_ENABLED !== "0"; // on by default; set 0 to disable
 // Lets the owner request public-business-info research on a lead's
 // company (server/researcher.js) — never personal contact data, never a
 // dialable number. Off by default everywhere; enabled per-deployment
 // (currently just rprg).
 const ENRICHMENT_ENABLED = process.env.ENRICHMENT_ENABLED === "1";
 
+// HQ-as-a-client: Sailz's own sales line, outbound sourcing, research, and
+// site chat, all running on sailz-hq through the exact same engine code a
+// paying client uses (server/dialer.js, server/catalog.js, etc.) — never a
+// parallel system. Off by default everywhere; requires BOTH SAILZ_ADMIN=1
+// (this is the HQ instance) AND HQ_LIVE=1 (HQ's own sales-agent behavior is
+// deliberately a second gate on top of the admin-console gate, so turning
+// on the provisioning console never silently turns on real outbound
+// calling too). Every /api/site/* route and every HQ_LIVE-gated route
+// 404s identically on Shine/Burg/RPRG whether or not they happen to set
+// SAILZ_ADMIN (they never do, but this is belt-and-suspenders).
+const HQ_LIVE = SAILZ_ADMIN && (process.env.HQ_LIVE === "1" || process.env.HQ_LIVE === "true");
+// Provider-agnostic research module (server/research.js — Perplexity by
+// default, server/researcher.js's direct-fetch path as fallback). Separate
+// from the existing per-lead ENRICHMENT_ENABLED flag above: RESEARCH_ENABLED
+// gates HQ's own ICP-based lead SOURCING routes specifically. Off by
+// default; only meaningful with SAILZ_ADMIN=1.
+const RESEARCH_ENABLED = SAILZ_ADMIN && process.env.RESEARCH_ENABLED === "1";
+// The Haiku qualification chat replacing the site's contact form
+// (POST /api/site/chat) — HQ-only, off by default. The form itself is
+// never removed; this only adds a second path in front of it.
+const SITE_CHAT = HQ_LIVE && process.env.SITE_CHAT === "1";
+
 function requireHQ(req, res, next) {
   if (!SAILZ_ADMIN) return res.status(404).end();
+  next();
+}
+
+function requireHQLive(req, res, next) {
+  if (!HQ_LIVE) return res.status(404).end();
   next();
 }
 
@@ -214,6 +241,15 @@ function renderSmsLegalTemplate(filename, res) {
 }
 app.get("/sms-privacy.html", (req, res) => renderSmsLegalTemplate("sms-privacy.html", res));
 app.get("/sms-terms.html", (req, res) => renderSmsLegalTemplate("sms-terms.html", res));
+// The public marketing site (site/), served from THIS deployment when it is
+// HQ and SITE_ENABLED=1 — host-routed in server/siteHost.js so sailz.org
+// gets the site and hq.sailz.org keeps the dashboard. Registered before
+// express.static(public) so a marketing host never falls through to the
+// dashboard's login screen. Inert on every client deployment.
+const SITE_ENABLED = SAILZ_ADMIN && process.env.SITE_ENABLED === "1";
+const siteMount = require("./siteHost").mount(app, { enabled: SITE_ENABLED });
+if (siteMount.mounted) console.log(`[site] marketing site served for: ${siteMount.hosts.join(", ")} (preview at /site)`);
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 if (!process.env.JWT_SECRET) {
@@ -2218,7 +2254,7 @@ app.post("/api/dialer/pacing", auth, requireOwner, requireApprovedTenant, (req, 
 // honest, immediate feedback instead of a 30s guessing game.
 const testCallLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 3, standardHeaders: true, legacyHeaders: false, message: { error: "Test call limit reached — 3 per hour. Try again later." } });
 app.post("/api/dialer/test-call", auth, requireOwner, testCallLimiter, async (req, res) => {
-  if (!TEST_CALL_ENABLED) return res.status(404).end();
+  if (!TEST_CALL_ENABLED) return res.status(404).json({ error: "Test call is disabled on this deployment (TEST_CALL_ENABLED=0)." });
   const phone = leadImport.normalizePhoneE164(req.body?.phone);
   if (!phone) return res.status(400).json({ error: "Enter a valid phone number, e.g. (804) 555-0100." });
   const name = String(req.body?.name || "Test call").slice(0, 80);

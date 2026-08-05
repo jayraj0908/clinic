@@ -1,0 +1,17 @@
+{
+  "vertical": "hospitality",
+  "label": "Hotels & venues",
+  "shortLabel": "Hotels",
+  "headline": "The RFP gets answered first.",
+  "pain": "A planner emails six hotels at once. The one that replies within the hour with real numbers wins the room block. You replied Tuesday.",
+  "primary": "rfp-responder",
+  "coPrimary": "signal-watcher",
+  "agents": ["rfp-responder", "signal-watcher", "researcher", "receptionist", "librarian"],
+  "dormant": [],
+  "tabs": ["dash", "leads", "calls", "teach", "work"],
+  "hiddenTabs": ["calendar", "orders"],
+  "kpis": ["RFP response time", "Response rate", "RFPs won"],
+  "plan": "multi",
+  "compliance": "Nothing sends without approval. Never invents capacity, pricing, or availability.",
+  "liveExample": "In proposal: a Myrtle Beach hotel group"
+}

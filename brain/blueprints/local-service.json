@@ -1,0 +1,17 @@
+{
+  "vertical": "local-service",
+  "label": "Local service businesses",
+  "shortLabel": "Local service",
+  "headline": "The truck doesn't stop for the phone.",
+  "pain": "You're under a car, on a roof, or elbow-deep in a wash bay. The phone rings twelve times a day and you catch four.",
+  "primary": "receptionist",
+  "coPrimary": null,
+  "agents": ["receptionist", "librarian"],
+  "dormant": ["calling"],
+  "tabs": ["dash", "calls", "calendar", "teach", "work"],
+  "hiddenTabs": ["leads", "orders"],
+  "kpis": ["Bookings", "After-hours capture", "Win-backs"],
+  "plan": "solo",
+  "compliance": "Quotes only what's in the price list. Escalates anything it hasn't been taught.",
+  "liveExample": "In discovery: a Richmond car wash"
+}

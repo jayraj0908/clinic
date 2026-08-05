@@ -1,0 +1,17 @@
+{
+  "vertical": "restaurant",
+  "label": "Restaurants & food service",
+  "shortLabel": "Restaurant",
+  "headline": "Orders get taken during the rush.",
+  "pain": "Friday 7pm. Three people on hold, one hangs up, and the kitchen never hears about the order that walked away.",
+  "primary": "receptionist",
+  "coPrimary": null,
+  "agents": ["receptionist", "librarian"],
+  "dormant": ["rfp-responder"],
+  "tabs": ["dash", "calls", "orders", "teach", "work"],
+  "hiddenTabs": ["leads", "calendar"],
+  "kpis": ["Orders captured", "Average ticket", "Calls missed at peak"],
+  "plan": "business",
+  "compliance": "Allergy mentions escalate to a human, always. Never quotes an unverified wait time.",
+  "liveExample": "Live: a restaurant in Richmond, VA"
+}

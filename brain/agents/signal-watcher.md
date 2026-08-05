@@ -1,6 +1,6 @@
 ---
 name: signal-watcher
-description: Watches a per-instance list of public feeds/searches for genuine buying signals and proposes leads for owner approval — never contacts anyone directly.
+description: Watches a per-instance list of public feeds and searches for genuine buying signals and proposes leads for owner approval. It never contacts anyone directly.
 tools: anthropic
 requires: anthropic
 schedule: "0 8 * * *"
@@ -20,7 +20,7 @@ contact anyone yourself; every proposal waits for the owner.
 
 ## Workflows
 - **Check Feeds** — Fetch each configured RSS/URL feed
-- **Run Searches** — Run each configured search query (requires BRAVE_API_KEY — RSS/feed watchlist only without it)
+- **Run Searches** — Run each configured search query (requires BRAVE_API_KEY; RSS and feed watchlist only without it)
 - **Filter Signals** — Filter for genuine public buying signals, skip everything else
 - **Propose Leads** — Create proposed leads with a source link for owner review
 

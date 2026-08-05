@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: Reads the last 24h of calls, leads, and appointments and drafts durable facts for the owner to review — never edits what the phone assistant says without approval.
+description: Reads the last 24h of calls, leads, and appointments and drafts durable facts for the owner to review. It never edits what the phone assistant says without approval.
 tools: anthropic
 requires: anthropic
 schedule: "0 2 * * *"
@@ -19,9 +19,9 @@ yourself.
 
 ## Workflows
 - **Review Activity** — Review the last 24h of calls, leads, and appointments
-- **Extract Facts** — Extract durable, generalizable facts only — not one-off noise
+- **Extract Facts** — Extract durable, generalizable facts only, never one-off noise
 - **Classify Fact** — Type each fact: faq_gap, policy_correction, preference, or signal
-- **Propose for Review** — Propose facts for owner review — never mark anything approved
+- **Propose for Review** — Propose facts for owner review. Never mark anything approved
 
 ## Results
 - Patterns from real calls and leads surface as reviewable facts, not lost in call logs

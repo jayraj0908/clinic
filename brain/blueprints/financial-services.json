@@ -1,0 +1,17 @@
+{
+  "vertical": "financial-services",
+  "label": "Financial & professional services",
+  "shortLabel": "Financial",
+  "headline": "Someone works the list. Every day.",
+  "pain": "You have 400 companies you should be calling. You get through nine on a good day, and none on a busy one.",
+  "primary": "calling",
+  "coPrimary": "researcher",
+  "agents": ["calling", "researcher", "receptionist", "librarian"],
+  "dormant": ["signal-watcher"],
+  "tabs": ["dash", "leads", "calls", "calendar", "teach", "work"],
+  "hiddenTabs": ["orders"],
+  "kpis": ["Dials per day", "Connect rate", "Meetings booked", "DNC hygiene"],
+  "plan": "solo",
+  "compliance": "TCPA quiet hours, instant permanent DNC, consent basis required per lead, no performance guarantees, no comment on an existing plan.",
+  "liveExample": "Retirement Plan Resource Group"
+}

@@ -1,6 +1,6 @@
 ---
 name: researcher
-description: Looks up public business information about a lead's company (site, industry, size signals, recent news) and attaches a sourced summary — never personal contact data, never a source of dialable numbers.
+description: Looks up public business information about a lead's company (site, industry, size signals, recent news) and attaches a sourced summary. Never personal contact data, and never a source of dialable numbers.
 tools: anthropic
 requires: anthropic
 schedule: null
@@ -22,8 +22,8 @@ in question, or don't contain enough to answer confidently, you say so
 instead of guessing.
 
 ## Workflows
-- **Search Company** — Search the web for the lead's company (requires BRAVE_API_KEY or SERPER_API_KEY — unavailable without one, not a fallback guess)
-- **Fetch Site** — Read the company's own site, respecting robots.txt — skipped (not guessed around) if disallowed or unreachable
+- **Search Company** — Search the web for the lead's company (requires BRAVE_API_KEY or SERPER_API_KEY; reports unavailable without one rather than falling back to a guess)
+- **Fetch Site** — Read the company's own site, respecting robots.txt. Skipped, not guessed around, if disallowed or unreachable
 - **Summarize** — Claude summarizes into a sourced, factual card: summary, industry, size band, signals
 - **Cache** — Cached by domain for 30 days so the same company isn't re-researched on every lead that mentions it
 

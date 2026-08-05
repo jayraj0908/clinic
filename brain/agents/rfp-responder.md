@@ -1,6 +1,6 @@
 ---
 name: rfp-responder
-description: Reads inbound RFP emails, extracts the event details, and drafts a tailored response from the instance's own profile — human approves, then it sends. Speed is the product.
+description: Reads inbound RFP emails, extracts the event details, and drafts a tailored response from the instance's own profile. A human approves, then it sends. Speed is the product.
 tools: resend, anthropic
 requires: resend, anthropic
 schedule: null
@@ -23,7 +23,7 @@ profile.
 - **Read RFP Email** — Parse an inbound RFP email (webhook /webhooks/email)
 - **Extract Details** — Extract event date, headcount, budget hints, space needs, contact, and deadline
 - **Draft Response** — Draft a tailored reply from the instance profile's real spaces/capacities/rates
-- **Queue for Approval** — Save as a draft awaiting owner approval — never sends on its own
+- **Queue for Approval** — Save as a draft awaiting owner approval. It never sends on its own
 - **Send on Approval** — On approval, send the drafted reply and log the elapsed time from received to sent
 
 ## Results

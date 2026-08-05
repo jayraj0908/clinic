@@ -1,0 +1,17 @@
+{
+  "vertical": "dental",
+  "label": "Dental & medical",
+  "shortLabel": "Dental",
+  "headline": "The phone gets answered.",
+  "pain": "A new patient calls at 6:10pm on a Friday, gets voicemail, and calls the practice down the road. That call was worth $1,200.",
+  "primary": "receptionist",
+  "coPrimary": null,
+  "agents": ["receptionist", "librarian", "leads", "calling"],
+  "dormant": ["researcher", "audit", "billing"],
+  "tabs": ["dash", "calls", "leads", "calendar", "teach", "work"],
+  "hiddenTabs": ["orders"],
+  "kpis": ["Calls answered", "Appointments booked", "After-hours capture"],
+  "plan": "business",
+  "compliance": "HIPAA posture, PHI masking on, no clinical advice, AI disclosure on request.",
+  "liveExample": "Live: a dental practice in Richmond, VA"
+}
