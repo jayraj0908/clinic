@@ -67,7 +67,7 @@ const VAPI_ASSISTANT_REQUEST = process.env.VAPI_ASSISTANT_REQUEST === "1" || pro
 // calls use — same assistant, same guardrails, same pacing/DNC/
 // calling-hours/consent checks. Off by default everywhere; enabled
 // per-deployment (currently just rprg).
-const TEST_CALL_ENABLED = process.env.TEST_CALL_ENABLED !== "0"; // on by default; set 0 to disable
+const TEST_CALL_ENABLED = process.env.TEST_CALL_ENABLED === "1"; // off by default; enabled per-deployment (currently just rprg)
 // Lets the owner request public-business-info research on a lead's
 // company (server/researcher.js) — never personal contact data, never a
 // dialable number. Off by default everywhere; enabled per-deployment
