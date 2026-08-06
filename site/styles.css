@@ -23,7 +23,6 @@ body{
   margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
   line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden;
 }
-body.loading{overflow:hidden}
 a{color:inherit;text-decoration:none}
 img{max-width:100%;display:block}
 ::selection{background:rgba(201,160,102,.28)}
@@ -45,27 +44,6 @@ p{margin:0}
 section{position:relative;padding:clamp(72px,8.5vw,124px) 0}
 section[id]{scroll-margin-top:80px}
 .hr{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent)}
-
-/* ============================ loading screen ============================ */
-#loader{
-  position:fixed;inset:0;z-index:999;background:var(--bg);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
-  transition:opacity .7s var(--ease),visibility .7s;
-}
-#loader.done{opacity:0;visibility:hidden}
-.load-mark{
-  font-family:var(--serif);font-size:26px;letter-spacing:.52em;color:var(--ink);
-  padding-left:.52em;opacity:0;animation:fadeUp .9s var(--ease) .15s forwards;
-}
-#loadCanvas{width:220px;height:110px}
-.load-bar{width:200px;height:1px;background:rgba(232,230,224,.1);overflow:hidden}
-.load-bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s linear}
-.load-meta{
-  font:400 10px var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--dimmer);
-  display:flex;gap:14px;
-}
-.load-meta b{color:var(--dim);font-weight:400;font-variant-numeric:tabular-nums}
-@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 
 /* ================================= nav ================================== */
 nav{

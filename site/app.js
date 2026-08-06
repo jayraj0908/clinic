@@ -17,85 +17,15 @@
     });
   }
 
-  /* ============================ loading screen ========================= */
-  // A short, honest loader: it draws the same core cluster the brain map
-  // uses, assembling from scattered dust. It never fakes a long wait; the
-  // bar tracks real font and script readiness and then finishes.
-  (function loader() {
-    var el = $("loader"), fill = $("loadFill"), pct = $("loadPct");
-    var cv = $("loadCanvas"), ctx = cv && cv.getContext ? cv.getContext("2d") : null;
-    var value = 0, target = 12, done = false;
-
-    var dust = [];
-    if (ctx) {
-      for (var i = 0; i < 180; i++) {
-        var a = Math.random() * Math.PI * 2;
-        var r = Math.pow(Math.random(), 0.6) * 46;
-        dust.push({
-          hx: 220 + Math.cos(a) * r, hy: 110 + Math.sin(a) * r * 0.8,
-          sx: Math.random() * 440, sy: Math.random() * 220,
-          s: Math.random() * 1.6 + 0.4, al: Math.random() * 0.6 + 0.25,
-        });
-      }
-    }
-    var PAL = ["#f0e6c8", "#d9c78f", "#fff8e8", "#e8d9a8", "#e0904a"];
-
-    function paint(p) {
-      if (!ctx) return;
-      ctx.clearRect(0, 0, 440, 220);
-      var g = ctx.createRadialGradient(220, 110, 0, 220, 110, 90);
-      g.addColorStop(0, "rgba(168,56,74," + (0.3 * p) + ")");
-      g.addColorStop(1, "rgba(168,56,74,0)");
-      ctx.fillStyle = g; ctx.fillRect(0, 0, 440, 220);
-      for (var i = 0; i < dust.length; i++) {
-        var d = dust[i];
-        var x = d.sx + (d.hx - d.sx) * p, y = d.sy + (d.hy - d.sy) * p;
-        ctx.globalAlpha = d.al * (0.25 + 0.75 * p);
-        ctx.fillStyle = PAL[i % PAL.length];
-        ctx.beginPath(); ctx.arc(x, y, d.s, 0, 7); ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    function tick() {
-      value += (target - value) * 0.08;
-      if (target >= 100 && target - value < 0.6) value = 100;
-      var v = Math.round(value);
-      if (fill) fill.style.width = v + "%";
-      if (pct) pct.textContent = v;
-      paint(value / 100);
-      if (v >= 100) { finish(); return; }
-      requestAnimationFrame(tick);
-    }
-
-    function finish() {
-      if (done) return;
-      done = true;
-      if (fill) fill.style.width = "100%";
-      if (pct) pct.textContent = "100";
-      el.classList.add("done");
-      document.body.classList.remove("loading");
-      window.dispatchEvent(new Event("sailz:ready"));
-    }
-
-    // Fonts are the only thing worth waiting for; they are what would cause a
-    // visible reflow. Deliberately NOT window.load, which waits on the PixiJS
-    // CDN bundle that first paint does not need.
-    target = 40;
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(function () { target = 100; });
-    } else { target = 100; }
-    setTimeout(function () { target = 100; }, 500);
-
-    // A hard, timer-driven ceiling. requestAnimationFrame is throttled to
-    // roughly 1fps in a background tab, so a loader that only advances on
-    // animation frames leaves anyone who switches tabs staring at a frozen
-    // percentage when they come back. This finishes regardless.
-    setTimeout(finish, 1400);
-
-    if (reduce) finish();
-    else requestAnimationFrame(tick);
-  })();
+  // There is deliberately no loading screen. A full-screen pre-loader on a
+  // marketing site is pure cost: it hides the content someone came for, and
+  // because browsers throttle both animation frames and timers in background
+  // tabs, anyone who switches away can come back to a frozen percentage and a
+  // black page. The hero is static HTML and paints immediately; the dust
+  // canvas and the map layer themselves in afterwards.
+  requestAnimationFrame(function () {
+    window.dispatchEvent(new Event("sailz:ready"));
+  });
 
   /* =============================== nav ================================ */
   (function nav() {
