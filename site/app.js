@@ -87,7 +87,16 @@
         });
       }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
     }
-    Array.prototype.forEach.call(els, function (e) { e.classList.add("seen"); revealIO.observe(e); });
+    var vh = window.innerHeight || 800;
+    Array.prototype.forEach.call(els, function (e) {
+      e.classList.add("seen");
+      // An element the viewport has already passed will never intersect, so
+      // it would stay at opacity 0 forever. That happens on any deep link
+      // (sailz.org/#pricing) and on a refresh partway down the page. Show
+      // anything already at or above the fold instead of observing it.
+      if (e.getBoundingClientRect().top < vh) { e.classList.add("in"); return; }
+      revealIO.observe(e);
+    });
   }
   window.sailzObserveReveals = observeReveals;
 
@@ -1053,8 +1062,17 @@
     var target = document.querySelector(hash);
     if (!target) return;
     setTimeout(function () {
-      target.scrollIntoView({ behavior: "auto", block: "start" });
-    }, 260);
+      // html has scroll-behavior:smooth for in-page nav clicks, which would
+      // otherwise animate this correction through every section on the way.
+      // A deep link should just be there.
+      var root = document.documentElement;
+      var prev = root.style.scrollBehavior;
+      root.style.scrollBehavior = "auto";
+      target.scrollIntoView({ block: "start" });
+      // Re-register: sections we just skipped past need showing.
+      observeReveals(document);
+      root.style.scrollBehavior = prev;
+    }, 120);
   });
 
   window.addEventListener("load", function () {
