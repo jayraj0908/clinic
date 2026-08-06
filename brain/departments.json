@@ -1,0 +1,80 @@
+{
+  "_note": "The department ring the brain map renders: seven hubs, their colours, glyphs and decorative branches. This is a lift of DEPT_DEFS_BASE + AGENT_DEPT, which currently live inline in public/index.html. The public site reads THIS file (via scripts/build-site-data.mjs) so the marketing map and the dashboard map show the same seven departments in the same order with the same colours. Follow-up worth doing: make public/index.html read this file too and delete its inline copies, so there is genuinely one source. Until then, if you change a colour or add a department, change it in both places.",
+
+  "departments": [
+    {
+      "name": "INTELLIGENCE",
+      "sub": "signals · memory · research",
+      "color": "#4a7fd6",
+      "glyph": "⚛",
+      "branches": [
+        { "root": "Market Scans", "forks": ["Competitor Watch", "Trend Lines"] },
+        { "root": "Research Memos", "forks": ["Knowledge Base"] }
+      ]
+    },
+    {
+      "name": "CUSTOMER",
+      "sub": "care · retention · voice",
+      "color": "#d668a0",
+      "glyph": "☉",
+      "branches": [{ "root": "Reviews", "forks": ["Escalations"] }]
+    },
+    {
+      "name": "BACK OFFICE",
+      "sub": "invoices · docs · payroll",
+      "color": "#d9b35c",
+      "glyph": "⧉",
+      "branches": [{ "root": "Invoicing", "forks": ["Payroll", "Document Filing"] }]
+    },
+    {
+      "name": "SALES",
+      "sub": "inbound · outreach · closing",
+      "color": "#e0673f",
+      "glyph": "◈",
+      "branches": []
+    },
+    {
+      "name": "DEALS",
+      "sub": "terms · diligence · renewals",
+      "color": "#a8384a",
+      "glyph": "◆",
+      "branches": [
+        { "root": "Deal Rooms", "forks": ["Negotiation Prep", "Renewals"] },
+        { "root": "Due Diligence", "forks": ["Partner Deals"] }
+      ]
+    },
+    {
+      "name": "MARKETING",
+      "sub": "content · brand · demand",
+      "color": "#8f6fd6",
+      "glyph": "▷",
+      "branches": [
+        { "root": "Content Calendar", "forks": ["Paid Ads", "Email Nurture"] },
+        { "root": "Brand Deals", "forks": ["Insights"] }
+      ]
+    },
+    {
+      "name": "OPERATIONS",
+      "sub": "onboarding · systems · qa",
+      "color": "#3fb894",
+      "glyph": "⬡",
+      "branches": [
+        { "root": "Onboarding", "forks": ["Scheduling", "QA Audits"] },
+        { "root": "Automation Jobs", "forks": ["Compliance"] }
+      ]
+    }
+  ],
+
+  "_agentDeptNote": "Which department each catalog agent lives in. Every agent in brain/agents/ needs an entry here or it has nowhere to render. scripts/build-site-data.mjs fails the build if one is missing.",
+  "agentDept": {
+    "leads": "SALES",
+    "calling": "SALES",
+    "rfp-responder": "SALES",
+    "receptionist": "CUSTOMER",
+    "audit": "BACK OFFICE",
+    "billing": "BACK OFFICE",
+    "librarian": "INTELLIGENCE",
+    "signal-watcher": "INTELLIGENCE",
+    "researcher": "INTELLIGENCE"
+  }
+}

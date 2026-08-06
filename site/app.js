@@ -216,18 +216,9 @@
     observeReveals($("prices"));
   })();
 
-  /* ============================== ui bars ============================= */
-  (function bars() {
-    var el = $("uiBars");
-    if (!el) return;
-    var vals = [38, 52, 44, 71, 63, 88, 76];
-    el.innerHTML = vals.map(function (v, i) {
-      return '<i style="height:' + v + "%;animation-delay:" + (i * 0.07) + 's"></i>';
-    }).join("");
-  })();
-
   /* =============================== brain ============================== */
   var mapApi = null, heroApi = null;
+  var activeWorkflow = null, focusedDept = null;
   var Q = new URLSearchParams(window.location.search);
   var current = BPS.filter(function (b) { return b.vertical === Q.get("v"); })[0] || BPS[0] || null;
   var selected = (current && AGENTS[Q.get("a")]) ? Q.get("a") : null;
@@ -255,54 +246,108 @@
     }).join("");
   }
 
+  // The drawer is detail only: one department, or one agent. It opens over
+  // the canvas and the renderer shifts the camera clear of it.
   function renderPanel() {
     var panel = $("panel");
     if (!current) {
-      panel.innerHTML = '<div class="panel-kicker">Map unavailable</div>'
-        + '<p class="panel-desc">The agent map could not load. Everything else on this page works, '
-        + 'or you can <a href="#talk" style="color:var(--accent)">book a call</a> and we will '
-        + "walk you through it live.</p>";
+      panel.classList.remove("open");
+      panel.innerHTML = "";
       return;
     }
-    if (!selected) {
-      panel.innerHTML =
-        '<div class="panel-kicker">' + esc(current.label) + "</div>"
-        + "<h3>" + esc(current.headline) + "</h3>"
-        + '<p class="panel-desc">' + esc(current.pain) + "</p>"
-        + '<div><div class="panel-sub">What you would watch</div><div class="chips">'
+
+    var close = '<button class="panel-close" id="panelClose" type="button" aria-label="Close">&times;</button>';
+
+    if (selected && AGENTS[selected]) {
+      var a = AGENTS[selected];
+      var isPrimary = selected === current.primary || selected === current.coPrimary;
+      var isDormant = (current.dormant || []).indexOf(selected) !== -1;
+      panel.innerHTML = close
+        + '<div class="panel-kicker" style="color:' + esc(a.color) + '">'
+          + (isPrimary ? "Primary agent" : isDormant ? "Available, not switched on" : "Supporting agent")
+        + "</div>"
+        + "<h3>" + esc(a.name) + "</h3>"
+        + '<p class="panel-desc">' + esc(a.description) + "</p>"
+        + ((a.workflows && a.workflows.length)
+            ? '<div><div class="panel-sub">What it actually does</div>'
+              + a.workflows.map(function (w) {
+                  var on = activeWorkflow === w.label;
+                  return '<div class="wf"' + (on ? ' style="background:rgba(201,160,102,.07)"' : "") + '>'
+                    + '<span class="wf-dot" style="background:' + esc(a.color) + '"></span>'
+                    + "<span><b>" + esc(w.label) + "</b><span>" + esc(w.detail) + "</span></span></div>";
+                }).join("") + "</div>"
+            : "")
+        + '<div><div class="panel-sub">Runs on</div><div class="chips">'
+          + (a.tools || []).map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("")
+          + '<span class="chip">' + (a.schedule ? "on a schedule" : "event driven") + "</span>"
+        + "</div></div>"
+        + (isDormant
+            ? '<div class="panel-note">This one ships switched off. It shows on your map from day one '
+              + "and turns on when you want it. No rebuild, no new contract.</div>"
+            : "");
+      panel.classList.add("open");
+      wireClose();
+      return;
+    }
+
+    if (focusedDept) {
+      var dept = (D.departments || []).filter(function (x) { return x.name === focusedDept; })[0];
+      var here = rosterFor(current).filter(function (r) { return (D.agentDept || {})[r.id] === focusedDept; });
+      panel.innerHTML = close
+        + '<div class="panel-kicker"' + (dept ? ' style="color:' + esc(dept.color) + '"' : "") + '>Department</div>'
+        + "<h3>" + esc(focusedDept) + "</h3>"
+        + '<p class="panel-desc">' + esc(dept ? dept.sub : "") + "</p>"
+        + (here.length
+            ? '<div><div class="panel-sub">' + (here.length === 1 ? "Agent here" : "Agents here") + "</div>"
+              + here.map(function (r) {
+                  var ag = AGENTS[r.id];
+                  return '<button class="dept-agent' + (r.dormant ? " dormant" : "") + '" type="button" '
+                    + 'data-agent="' + esc(r.id) + '">'
+                    + '<span class="nb-glyph" style="background:' + esc(ag.color) + "22;color:" + esc(ag.color) + '">'
+                      + esc(ag.glyph) + "</span>"
+                    + "<span><span class=\"nb-name\">" + esc(ag.name) + "</span>"
+                    + '<span class="nb-tag">' + esc(r.dormant ? "available, not switched on" : ag.tagline)
+                    + "</span></span></button>";
+                }).join("") + "</div>"
+            : '<div class="panel-note">Nothing runs here for a '
+              + esc((current.shortLabel || current.label).toLowerCase())
+              + " business, so it stays dark on your map. The branches you can see are what could go here "
+              + "if you ever needed it.</div>");
+      panel.classList.add("open");
+      wireClose();
+      return;
+    }
+
+    panel.classList.remove("open");
+  }
+
+  function wireClose() {
+    var c = $("panelClose");
+    if (c) c.addEventListener("click", function () {
+      selected = null; activeWorkflow = null; focusedDept = null;
+      if (mapApi) { mapApi.back(); mapApi.setPanelOpen(false); }
+      markPressed(); renderPanel(); syncUrl();
+    });
+  }
+
+  // Always-visible context under the map, so the canvas itself stays clean.
+  function renderSummary() {
+    var el = $("vsummary");
+    if (!el || !current) return;
+    el.innerHTML =
+      "<div>"
+      + '<div class="vs-head">' + esc(current.headline) + "</div>"
+      + '<p class="vs-pain">' + esc(current.pain) + "</p>"
+      + '<div class="vs-live"><i></i>' + esc(current.liveExample || "") + "</div>"
+      + "</div>"
+      + '<div class="vs-col">'
+        + '<div class="vs-block"><div class="panel-sub">What you would watch</div><div class="chips">'
           + (current.kpis || []).map(function (k) { return '<span class="chip on">' + esc(k) + "</span>"; }).join("")
         + "</div></div>"
-        + '<div><div class="panel-sub">Your dashboard has exactly these tabs</div>'
+        + '<div class="vs-block"><div class="panel-sub">Your dashboard has exactly these tabs</div>'
           + '<div class="chips">' + tabChips(current) + "</div></div>"
-        + '<div class="panel-note">Struck through tabs do not exist on your dashboard. '
-          + "You only ever see the surfaces your own agents feed.</div>"
-        + '<div class="panel-note">' + esc(current.compliance) + "</div>";
-      return;
-    }
-    var a = AGENTS[selected];
-    var isPrimary = selected === current.primary || selected === current.coPrimary;
-    var isDormant = (current.dormant || []).indexOf(selected) !== -1;
-    panel.innerHTML =
-      '<div class="panel-kicker" style="color:' + esc(a.color) + '">'
-        + (isPrimary ? "Primary agent" : isDormant ? "Available, not switched on" : "Supporting agent")
-      + "</div>"
-      + "<h3>" + esc(a.name) + "</h3>"
-      + '<p class="panel-desc">' + esc(a.description) + "</p>"
-      + ((a.workflows && a.workflows.length)
-          ? '<div><div class="panel-sub">What it actually does</div>'
-            + a.workflows.map(function (w) {
-                return '<div class="wf"><span class="wf-dot" style="background:' + esc(a.color) + '"></span>'
-                  + "<span><b>" + esc(w.label) + "</b><span>" + esc(w.detail) + "</span></span></div>";
-              }).join("") + "</div>"
-          : "")
-      + '<div><div class="panel-sub">Runs on</div><div class="chips">'
-        + (a.tools || []).map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("")
-        + '<span class="chip">' + (a.schedule ? "on a schedule" : "event driven") + "</span>"
-      + "</div></div>"
-      + (isDormant
-          ? '<div class="panel-note">This one ships switched off. It shows on your map from day one '
-            + "and turns on when you want it. No rebuild, no new contract.</div>"
-          : "");
+        + '<div class="panel-note">' + esc(current.compliance) + "</div>"
+      + "</div>";
   }
 
   function syncUrl() {
@@ -320,26 +365,78 @@
     if (core) core.classList.toggle("hide", !!selected);
   }
 
-  function select(id, fromMap) {
+  function select(id, fromMap, workflow) {
     selected = (selected === id) ? null : id;
+    activeWorkflow = selected ? (workflow || null) : null;
     markPressed();
     renderPanel();
     syncUrl();
-    if (mapApi && !fromMap) { if (selected) mapApi.focus(selected); else mapApi.clearFocus(); }
+    if (mapApi && !fromMap) {
+      if (selected) mapApi.focusAgent(selected, activeWorkflow);
+      else mapApi.back();
+    }
+    if (mapApi) mapApi.setPanelOpen(!!selected);
   }
 
+  // A department was clicked that holds more than one agent, so there is no
+  // single agent to open. Show what lives there instead of doing nothing.
+  function selectDept(dept) {
+    selected = null;
+    activeWorkflow = null;
+    focusedDept = dept;
+    markPressed();
+    renderPanel();
+    syncUrl();
+  }
+
+  // Small screens and the no-WebGL fallback get a grouped list, not one long
+  // run of agents. Department first, expand to its agents, tap one for the
+  // detail. Same information as the canvas, in a shape a thumb can work.
+  var openDept = null;
   function buildNodeList() {
     var list = $("nodeList");
-    list.innerHTML = rosterFor(current).map(function (r) {
-      var a = AGENTS[r.id];
-      return '<button class="nodebtn' + (r.dormant ? " dormant" : "") + '" type="button" '
-        + 'data-agent="' + esc(r.id) + '" aria-pressed="false">'
-        + '<span class="nb-glyph" style="background:' + esc(a.color) + "22;color:" + esc(a.color) + '">'
-          + esc(a.glyph) + "</span>"
-        + "<span><span class=\"nb-name\">" + esc(a.name) + "</span>"
-        + '<span class="nb-tag">' + esc(r.dormant ? "available, not switched on" : a.tagline) + "</span></span>"
-        + (r.primary ? '<span class="nb-badge">Primary</span>' : "")
-        + "</button>";
+    var roster = rosterFor(current);
+    // Open the primary agent's department by default so a visitor on a phone
+    // lands on something, rather than seven closed rows.
+    if (openDept === null && current && current.primary) {
+      openDept = (D.agentDept || {})[current.primary] || null;
+    }
+    var byDept = {};
+    roster.forEach(function (r) {
+      var d = (D.agentDept || {})[r.id];
+      if (!d) return;
+      (byDept[d] = byDept[d] || []).push(r);
+    });
+
+    list.innerHTML = (D.departments || []).map(function (def) {
+      var mine = byDept[def.name] || [];
+      var isOpen = openDept === def.name;
+      var count = mine.length
+        ? mine.length + (mine.length === 1 ? " agent" : " agents")
+        : "nothing here for you";
+      return '<div class="deptrow' + (mine.length ? "" : " empty") + (isOpen ? " open" : "") + '">'
+        + '<button class="deptrow-head" type="button" data-dept="' + esc(def.name) + '"'
+          + (mine.length ? "" : " disabled") + ' aria-expanded="' + isOpen + '">'
+          + '<span class="deptrow-dot" style="background:' + esc(def.color) + '"></span>'
+          + "<span><span class=\"deptrow-name\">" + esc(def.name) + "</span>"
+          + '<span class="deptrow-sub">' + esc(def.sub) + "</span></span>"
+          + '<span class="deptrow-count">' + esc(count) + "</span>"
+        + "</button>"
+        + (isOpen && mine.length
+            ? '<div class="deptrow-body">' + mine.map(function (r) {
+                var a = AGENTS[r.id];
+                return '<button class="nodebtn' + (r.dormant ? " dormant" : "") + '" type="button" '
+                  + 'data-agent="' + esc(r.id) + '" aria-pressed="' + (selected === r.id) + '">'
+                  + '<span class="nb-glyph" style="background:' + esc(a.color) + "22;color:" + esc(a.color) + '">'
+                    + esc(a.glyph) + "</span>"
+                  + "<span><span class=\"nb-name\">" + esc(a.name) + "</span>"
+                  + '<span class="nb-tag">' + esc(r.dormant ? "available, not switched on" : a.tagline)
+                  + "</span></span>"
+                  + (r.primary ? '<span class="nb-badge">Primary</span>' : "")
+                  + "</button>";
+              }).join("") + "</div>"
+            : "")
+        + "</div>";
     }).join("");
   }
 
@@ -349,9 +446,10 @@
     if (selected && (!AGENTS[selected] || !inRoster)) selected = null;
     $("hubName").textContent = current.shortLabel || current.label;
     buildNodeList();
+    renderSummary();
     if (mapApi) {
-      mapApi.setBlueprint(rosterFor(current));
-      if (selected) mapApi.focus(selected);
+      mapApi.setBlueprint(current);
+      if (selected) mapApi.focusAgent(selected, activeWorkflow);
     }
     markPressed();
     renderPanel();
@@ -369,13 +467,19 @@
       if (!b) return;
       var bp = BPS.filter(function (x) { return x.vertical === b.dataset.v; })[0];
       if (!bp || bp === current) return;
-      current = bp; selected = null;
+      current = bp; selected = null; activeWorkflow = null; focusedDept = null; openDept = null;
       Array.prototype.forEach.call(vt.children, function (c) {
         c.setAttribute("aria-selected", String(c === b));
       });
       renderBrain();
     });
     $("stage").addEventListener("click", function (e) {
+      var d = e.target.closest("[data-dept]");
+      if (d && !d.disabled) {
+        openDept = (openDept === d.dataset.dept) ? null : d.dataset.dept;
+        buildNodeList();
+        return;
+      }
       var b = e.target.closest("[data-agent]");
       if (b) select(b.dataset.agent);
     });
@@ -383,46 +487,150 @@
   })();
 
   /* ============================ pixi map boot ========================= */
-  window.addEventListener("sailz:ready", function () {
-    if (reduce) return;
+  // Building the map costs a WebGL context, textures and several hundred
+  // display objects. A visitor who never scrolls past the hero should not
+  // pay for any of it, so it is built the first time the section comes
+  // within a screen of the viewport.
+  function initMap() {
     var stage = $("stage");
-    mapApi = window.SailzMap ? window.SailzMap(stage, {
-      agents: AGENTS,
-      onSelect: function (id) { select(id || selected, true); },
+    var tip = $("mapTip");
+
+    mapApi = window.SailzShowcaseMap ? window.SailzShowcaseMap(stage, {
+      data: D,
+      blueprint: current,
+      onSelect: function (agentId, dept, workflow) {
+        if (agentId) select(agentId, true, workflow);
+        else selectDept(dept);
+      },
+      onHover: function (payload) {
+        if (!tip) return;
+        if (!payload) { tip.classList.remove("show"); return; }
+        tip.innerHTML = '<b>' + esc(payload.label) + '</b>'
+          + (payload.sub ? '<span>' + esc(payload.sub) + '</span>' : '');
+        // onHover gives page-space coordinates already offset for the
+        // canvas, so the tooltip can be positioned straight from them.
+        tip.style.left = payload.x + "px";
+        tip.style.top = payload.y + "px";
+        tip.classList.add("show");
+      },
+      onFocusChange: function (dept) {
+        focusedDept = dept;
+        var back = $("mapBack");
+        if (back) back.classList.toggle("show", !!dept);
+        var core = $("stageCore");
+        if (core) core.classList.toggle("hide", !!dept);
+        if (!dept) { selected = null; activeWorkflow = null; markPressed(); renderPanel(); syncUrl(); }
+      },
     }) : null;
+
     if (!mapApi) {
-      // No WebGL. The DOM list is already rendered and carries everything.
+      // No WebGL, or PIXI blocked. The DOM list is already rendered and
+      // carries the same information as real buttons.
       stage.classList.add("nogl");
-    } else {
-      mapApi.setBlueprint(rosterFor(current));
-      if (selected) mapApi.focus(selected);
+    } else if (selected) {
+      mapApi.focusAgent(selected, activeWorkflow);
     }
 
-    var hero = $("heroMap");
-    if (hero && window.innerWidth > 780 && window.SailzMap) {
-      heroApi = window.SailzMap(hero, { agents: AGENTS, ambient: true });
-      if (heroApi) heroApi.setBlueprint(rosterFor(BPS[0]));
-    }
+    var back = $("mapBack");
+    if (back) back.addEventListener("click", function () { if (mapApi) mapApi.back(); });
 
-    // Pause whichever canvas is off screen. Two live WebGL contexts on a
-    // laptop is fine; two rendering at 60fps when nobody can see them is
-    // not.
-    if ("IntersectionObserver" in window) {
-      var vis = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) {
-          var api = e.target === hero ? heroApi : mapApi;
-          if (!api) return;
-          if (e.isIntersecting) api.resume(); else api.pause();
-        });
-      }, { threshold: 0 });
-      if (mapApi) vis.observe(stage);
-      if (heroApi) vis.observe(hero);
-    }
     window.addEventListener("resize", function () {
       if (mapApi) mapApi.resize();
-      if (heroApi) heroApi.resize();
     });
+  }
+
+  window.addEventListener("sailz:ready", function () {
+    if (reduce) { $("stage").classList.add("nogl"); return; }
+    // Small screens never build the canvas at all: they get the grouped
+    // department list, which is the readable and tappable version.
+    if (window.innerWidth <= 1000) { $("stage").classList.add("nogl"); return; }
+    if (!("IntersectionObserver" in window)) { initMap(); return; }
+    var once = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) {
+        once.disconnect();
+        initMap();
+      }
+    }, { rootMargin: "100% 0px" });
+    once.observe($("brain"));
   });
+
+  /* ============================== hero dust =========================== */
+  // The hero used to run a second full WebGL map. Two live PIXI contexts on
+  // one page is a lot of GPU for scenery that nobody can click, and at any
+  // reasonable size it collided with the headline. This is the Sailz core
+  // on its own: one 2D canvas, ~200 particles, capped at 30fps, paused the
+  // moment it scrolls out of view.
+  (function heroDust() {
+    var cv = $("heroDust");
+    if (!cv || reduce) return;
+    var ctx = cv.getContext ? cv.getContext("2d") : null;
+    if (!ctx) return;
+
+    var PAL = ["#f0e6c8", "#d9c78f", "#fff8e8", "#e8d9a8", "#e0904a"];
+    var dust = [], W = 0, H = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var running = true, last = 0;
+
+    function size() {
+      var r = cv.getBoundingClientRect();
+      W = r.width; H = r.height;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      dust = [];
+      var cx = W / 2, cy = H / 2;
+      for (var i = 0; i < 200; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var rad = Math.pow(Math.random(), 0.6) * Math.min(W, H) * 0.16;
+        dust.push({
+          x: cx + Math.cos(a) * rad, y: cy + Math.sin(a) * rad * 0.85,
+          r: Math.random() * 1.5 + 0.35, a: Math.random() * 0.6 + 0.25,
+          drift: Math.random() * 1.2 + 0.4, phase: Math.random() * 6.283,
+          c: PAL[i % PAL.length],
+        });
+      }
+    }
+
+    function frame(now) {
+      if (!running) return;
+      // 30fps is plenty for drifting dust and halves the work.
+      if (now - last < 33) { requestAnimationFrame(frame); return; }
+      last = now;
+      var t = now / 1000;
+      ctx.clearRect(0, 0, W, H);
+
+      var cx = W / 2, cy = H / 2;
+      var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W, H) * 0.42);
+      g.addColorStop(0, "rgba(168,56,74,.20)");
+      g.addColorStop(0.55, "rgba(201,160,102,.055)");
+      g.addColorStop(1, "rgba(168,56,74,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      for (var i = 0; i < dust.length; i++) {
+        var d = dust[i];
+        ctx.globalAlpha = d.a * (0.65 + 0.35 * Math.sin(t * 1.1 + d.phase));
+        ctx.fillStyle = d.c;
+        ctx.beginPath();
+        ctx.arc(d.x + Math.sin(t * 0.35 * d.drift + d.phase) * 3.5,
+                d.y + Math.cos(t * 0.3 * d.drift + d.phase) * 3, d.r, 0, 6.284);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(frame);
+    }
+
+    size();
+    window.addEventListener("resize", size);
+    requestAnimationFrame(frame);
+
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting && !running) { running = true; requestAnimationFrame(frame); }
+          else if (!e.isIntersecting) running = false;
+        });
+      }, { threshold: 0 }).observe(cv);
+    }
+  })();
 
   /* ============================= call demo ============================ */
   (function demo() {
@@ -574,6 +782,10 @@
     function withTimeout(ms) { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } }
 
     function startAI() {
+      // No fetch at all (an old browser, or a locked-down one) is not an
+      // error to catch later, it throws right here. Fall back to the
+      // scripted intake before touching the network.
+      if (typeof fetch !== "function" || !CHAT_ENDPOINT) { aiMode = false; start(); return; }
       var t = typing();
       status.textContent = "thinking";
       fetch(CHAT_ENDPOINT, {
@@ -895,9 +1107,16 @@
   // Arriving on sailz.org/#pricing scrolls before the fonts and the
   // injected sections have settled, so the browser's first jump lands in
   // the wrong place. Re-aim once the page has stopped moving.
+  // syncUrl() rewrites the query string with replaceState, so the browser
+  // has seen this URL before and will happily restore an old scroll offset
+  // over the top of our own hash aim. Take that over.
+  if (window.history && "scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+  }
+
   window.addEventListener("load", function () {
     var hash = window.location.hash;
-    if (!hash || hash === "#top") return;
+    if (!hash || hash === "#top") { window.scrollTo(0, 0); return; }
     var target = document.querySelector(hash);
     if (!target) return;
     setTimeout(function () {

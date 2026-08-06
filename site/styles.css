@@ -122,12 +122,16 @@ nav.stuck{background:rgba(10,10,13,.82);backdrop-filter:blur(16px);border-bottom
 
 /* ================================ hero ================================== */
 #hero{min-height:100svh;display:flex;align-items:center;padding-top:70px;overflow:hidden}
-#heroMap{position:absolute;top:0;bottom:0;right:-4%;width:58%;z-index:0;opacity:.85}
-#heroMap canvas{width:100%!important;height:100%!important}
+/* Scenery only. Deliberately small and well clear of the headline: the old
+   full-width WebGL map fought the type and cost a second GPU context. */
+#heroDust{position:absolute;top:50%;right:4%;transform:translateY(-50%);
+  width:min(46vw,560px);height:min(46vw,560px);z-index:0;pointer-events:none;
+  opacity:.9;display:block}
 .hero-veil{position:absolute;inset:0;z-index:1;pointer-events:none;
-  background:linear-gradient(90deg,var(--bg) 44%,rgba(10,10,13,.72) 58%,transparent 80%),
-             linear-gradient(180deg,var(--bg) 0%,transparent 20%,transparent 74%,var(--bg) 100%)}
-@media(max-width:1100px){#heroMap{width:70%;right:-14%;opacity:.5}}
+  background:linear-gradient(90deg,var(--bg) 46%,rgba(10,10,13,.6) 62%,transparent 82%),
+             linear-gradient(180deg,var(--bg) 0%,transparent 18%,transparent 78%,var(--bg) 100%)}
+@media(max-width:1100px){#heroDust{width:70vw;height:70vw;right:-12%;opacity:.45}}
+@media(max-width:700px){#heroDust{opacity:.3}}
 #hero .wrap{position:relative;z-index:2;width:100%}
 .hero-h1{margin:18px 0 24px;max-width:19ch}
 .hero-h1 em{font-style:normal;color:var(--accent)}
@@ -170,37 +174,76 @@ nav.stuck{background:rgba(10,10,13,.82);backdrop-filter:blur(16px);border-bottom
 .stmt-fact span{font-size:13.5px;color:var(--dim)}
 
 /* ============================== brain map =============================== */
-.verticals{display:flex;gap:8px;flex-wrap:wrap;margin:30px 0 24px}
+.verticals{display:flex;gap:8px;flex-wrap:wrap;margin:30px 0 22px}
 .vpill{background:transparent;color:var(--dim);border:1px solid var(--line);border-radius:999px;
   padding:11px 20px;font:500 11px var(--sans);letter-spacing:.11em;text-transform:uppercase;
   cursor:pointer;transition:.3s var(--ease);font-family:var(--sans)}
 .vpill:hover{color:var(--ink);border-color:rgba(232,230,224,.24);transform:translateY(-1px)}
 .vpill[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 
-.stage-grid{display:grid;grid-template-columns:1fr 400px;gap:24px}
-@media(max-width:1000px){.stage-grid{grid-template-columns:1fr}}
-.stage{position:relative;height:620px;border:1px solid var(--line);border-radius:22px;
-  background:radial-gradient(ellipse at 50% 48%,rgba(201,160,102,.05),transparent 62%),var(--panel);
-  overflow:hidden}
-.stage canvas{width:100%!important;height:100%!important}
-.stage-hint{position:absolute;left:20px;bottom:18px;z-index:3;pointer-events:none;
+/* Full bleed, like the product. The panel is an overlay drawer rather than a
+   column, so the renderer's own setPanelOpen() camera shift is what keeps the
+   focused department clear of it, exactly as on the dashboard. */
+.stage{position:relative;height:min(70vh,700px);min-height:520px;
+  border:1px solid var(--line);border-radius:22px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 50%,rgba(201,160,102,.045),transparent 62%),var(--panel)}
+.stage canvas{width:100%!important;height:100%!important;display:block}
+.stage-hint{position:absolute;left:22px;bottom:20px;z-index:3;pointer-events:none;
   font:400 9.5px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer)}
 .stage-core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
-  text-align:center;pointer-events:none;transition:opacity .4s}
+  text-align:center;pointer-events:none;transition:opacity .45s var(--ease)}
 .stage-core.hide{opacity:0}
 .stage-core small{font:400 9px var(--mono);letter-spacing:.26em;text-transform:uppercase;color:var(--dimmer)}
 .stage-core b{display:block;font-family:var(--serif);font-size:23px;font-weight:600;margin-top:4px}
 
-/* DOM fallback, and the mobile layout */
-.node-list{display:none;flex-direction:column;gap:9px;padding:18px}
-.stage.nogl{height:auto}
+.map-back{position:absolute;left:20px;top:20px;z-index:4;display:none;align-items:center;gap:8px;
+  padding:10px 18px;border-radius:999px;border:1px solid var(--line);background:rgba(10,10,13,.82);
+  backdrop-filter:blur(8px);color:var(--ink);cursor:pointer;font-family:var(--sans);
+  font:600 10px var(--sans);letter-spacing:.16em;text-transform:uppercase;transition:.28s var(--ease)}
+.map-back.show{display:flex}
+.map-back:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Hover readout. Positioned from the renderer's page-space coordinates. */
+.map-tip{position:fixed;z-index:70;pointer-events:none;opacity:0;transform:translate(-50%,-160%);
+  background:rgba(10,10,13,.94);border:1px solid var(--line);border-radius:10px;padding:9px 13px;
+  backdrop-filter:blur(10px);transition:opacity .18s var(--ease);white-space:nowrap;
+  box-shadow:0 12px 34px rgba(0,0,0,.55)}
+.map-tip.show{opacity:1}
+.map-tip b{display:block;font:600 12px var(--sans);letter-spacing:.01em}
+.map-tip span{display:block;font:400 9.5px var(--mono);color:var(--dimmer);margin-top:3px;
+  letter-spacing:.08em;text-transform:uppercase}
+
+/* DOM fallback, and the whole map on small screens. */
+.node-list{display:none;flex-direction:column;gap:9px;padding:20px}
+.stage.nogl{height:auto;min-height:0}
 .stage.nogl .node-list{display:flex}
-.stage.nogl .stage-core,.stage.nogl .stage-hint{display:none}
+.stage.nogl .stage-core,.stage.nogl .stage-hint,.stage.nogl .map-back{display:none}
+.stage.nogl .panel{position:static;transform:none;opacity:1;width:auto;margin:0 20px 20px;
+  max-height:none;border-radius:16px}
 @media(max-width:1000px){
-  .stage{height:auto}
-  .stage canvas,.stage-core,.stage-hint{display:none!important}
+  .stage{height:auto;min-height:0}
+  .stage canvas,.stage-core,.stage-hint,.map-back,.map-tip{display:none!important}
   .node-list{display:flex}
+  .panel{position:static!important;transform:none!important;opacity:1!important;
+    width:auto!important;margin:0 20px 20px;max-height:none!important;border-radius:16px}
 }
+.deptrow{border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background:rgba(255,255,255,.015);transition:border-color .25s var(--ease)}
+.deptrow.open{border-color:rgba(201,160,102,.35)}
+.deptrow.empty{opacity:.42}
+.deptrow-head{display:flex;align-items:center;gap:13px;width:100%;text-align:left;
+  background:transparent;border:0;padding:16px 16px;color:var(--ink);cursor:pointer;
+  font-family:var(--sans)}
+.deptrow-head:disabled{cursor:default}
+.deptrow-dot{width:9px;height:9px;border-radius:50%;flex:none;box-shadow:0 0 9px currentColor}
+.deptrow-name{display:block;font:600 12px var(--sans);letter-spacing:.14em}
+.deptrow-sub{display:block;font:400 9.5px var(--mono);color:var(--dimmer);margin-top:3px;
+  letter-spacing:.04em;text-transform:uppercase}
+.deptrow-count{margin-left:auto;font:400 9.5px var(--mono);color:var(--dimmer);
+  letter-spacing:.06em;flex:none;text-align:right}
+.deptrow-body{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.deptrow-head[aria-expanded="true"] .deptrow-name{color:var(--accent)}
+
 .nodebtn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;cursor:pointer;
   background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:13px;
   padding:13px 15px;color:var(--ink);transition:.28s var(--ease);font-family:var(--sans)}
@@ -213,9 +256,23 @@ nav.stuck{background:rgba(10,10,13,.82);backdrop-filter:blur(16px);border-bottom
 .nb-badge{margin-left:auto;font:600 8px var(--sans);letter-spacing:.14em;text-transform:uppercase;
   color:#14110c;background:var(--accent);padding:3px 9px;border-radius:999px;flex:none}
 
-.panel{border:1px solid var(--line);border-radius:22px;background:var(--panel);padding:28px;
-  display:flex;flex-direction:column;gap:17px;min-height:0}
-.panel-kicker{font:400 9.5px var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
+/* The drawer. Slides in from the right over the canvas when something is
+   selected; the camera moves out of its way rather than the layout reflowing. */
+.panel{position:absolute;right:18px;top:18px;bottom:18px;width:380px;z-index:5;
+  border:1px solid var(--line);border-radius:18px;background:rgba(14,14,18,.93);
+  backdrop-filter:blur(18px);padding:26px;display:flex;flex-direction:column;gap:16px;
+  overflow-y:auto;opacity:0;transform:translateX(18px);pointer-events:none;
+  transition:opacity .45s var(--ease),transform .45s var(--ease);
+  box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.panel.open{opacity:1;transform:none;pointer-events:auto}
+.panel::-webkit-scrollbar{width:4px}
+.panel::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.panel-close{position:absolute;right:18px;top:18px;width:28px;height:28px;border-radius:50%;
+  border:1px solid var(--line);background:transparent;color:var(--dim);cursor:pointer;
+  font-size:13px;line-height:1;transition:.25s var(--ease)}
+.panel-close:hover{color:var(--ink);border-color:var(--ink)}
+.panel-kicker{font:400 9.5px var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--accent);
+  padding-right:34px}
 .panel-desc{font-size:14px;color:var(--dim)}
 .panel-sub{font:600 9.5px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--dimmer);
   margin-bottom:10px}
@@ -230,6 +287,28 @@ nav.stuck{background:rgba(10,10,13,.82);backdrop-filter:blur(16px);border-bottom
 .chip.off{color:var(--dimmer);opacity:.45;text-decoration:line-through}
 .panel-note{font-size:12.5px;color:var(--dimmer);line-height:1.55;border-left:2px solid var(--line);
   padding-left:13px}
+.dept-agent{display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;
+  background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;color:var(--ink);font-family:var(--sans);transition:.25s var(--ease);
+  margin-bottom:8px}
+.dept-agent:hover{border-color:var(--accent);transform:translateX(3px)}
+.dept-agent.dormant{opacity:.6;border-style:dashed}
+
+/* Under the map: what this vertical actually gets. Always on, so the map
+   itself stays uncluttered and the drawer is only ever for detail. */
+.vsummary{display:grid;grid-template-columns:1.25fr 1fr;gap:34px;margin-top:30px;
+  padding-top:30px;border-top:1px solid var(--line-soft)}
+@media(max-width:900px){.vsummary{grid-template-columns:1fr;gap:24px}}
+.vs-head{font-family:var(--serif);font-size:clamp(22px,2.4vw,30px);font-weight:600;line-height:1.2}
+.vs-pain{font-size:14.5px;color:var(--dim);margin-top:12px;max-width:52ch}
+.vs-live{font:400 10px var(--mono);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--dimmer);margin-top:16px;display:flex;align-items:center;gap:9px}
+.vs-live i{width:5px;height:5px;border-radius:50%;background:var(--good);flex:none;
+  box-shadow:0 0 8px var(--good)}
+.vs-col .panel-sub{margin-bottom:9px}
+.vs-col+.vs-col{margin-top:0}
+.vs-block{margin-bottom:20px}
+.vs-block:last-child{margin-bottom:0}
 
 /* ========================== call demo (it works) ======================== */
 .demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:26px;align-items:start}
@@ -320,10 +399,31 @@ nav.stuck{background:rgba(10,10,13,.82);backdrop-filter:blur(16px);border-bottom
   padding:8px 9px;font-size:11px;margin-bottom:7px}
 .ui-card b{display:block;font-weight:600;font-size:11.5px}
 .ui-card span{color:var(--dimmer);font:400 9.5px var(--mono)}
-.ui-bars{display:flex;align-items:flex-end;gap:7px;height:110px;margin-bottom:14px}
-.ui-bars i{flex:1;background:linear-gradient(180deg,var(--accent),rgba(201,160,102,.18));
-  border-radius:3px 3px 0 0;transform-origin:bottom;animation:grow 1.1s var(--ease) backwards}
-@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.ui-chart{width:100%;height:120px;display:block;margin-bottom:16px;overflow:visible}
+.ui-grid{stroke:rgba(232,230,224,.06);stroke-width:1}
+.ui-line{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:1000;stroke-dashoffset:1000}
+.ui-area{fill:url(#chartFill);opacity:0}
+.ui-dots circle{fill:var(--accent);opacity:0}
+/* The reveal observer puts .in on the card; the drawing follows from there. */
+.screen.in .ui-line{animation:draw 1.6s var(--ease) .2s forwards}
+.screen.in .ui-area{animation:fadeArea .9s var(--ease) 1.1s forwards}
+.screen.in .ui-dots circle{animation:popDot .4s var(--ease) forwards}
+.screen.in .ui-dots circle:nth-child(1){animation-delay:.35s}
+.screen.in .ui-dots circle:nth-child(2){animation-delay:.55s}
+.screen.in .ui-dots circle:nth-child(3){animation-delay:.75s}
+.screen.in .ui-dots circle:nth-child(4){animation-delay:.95s}
+.screen.in .ui-dots circle:nth-child(5){animation-delay:1.15s}
+.screen.in .ui-dots circle:nth-child(6){animation-delay:1.35s}
+.screen.in .ui-dots circle:nth-child(7){animation-delay:1.55s}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes fadeArea{to{opacity:1}}
+@keyframes popDot{from{opacity:0;transform:scale(.2)}to{opacity:1;transform:scale(1)}}
+.ui-dots circle{transform-box:fill-box;transform-origin:center}
+@media(prefers-reduced-motion:reduce){
+  .ui-line{stroke-dashoffset:0}.ui-area,.ui-dots circle{opacity:1}
+  .screen.in .ui-line,.screen.in .ui-area,.screen.in .ui-dots circle{animation:none}
+}
 
 /* ========================= numbered differentiators ===================== */
 .diffs{border-top:1px solid var(--line)}

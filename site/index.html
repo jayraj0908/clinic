@@ -47,7 +47,7 @@
 
 <!-- =============================== hero =============================== -->
 <section id="hero">
-  <div id="heroMap" aria-hidden="true"></div>
+  <canvas id="heroDust" aria-hidden="true"></canvas>
   <div class="hero-veil" aria-hidden="true"></div>
   <div class="wrap">
     <div class="eyebrow" data-reveal>AI operations for small business</div>
@@ -104,23 +104,28 @@
   <div class="wrap">
     <div class="eyebrow" data-reveal>The brain</div>
     <h2 data-reveal data-d="1" style="margin:16px 0 16px">Every agent, and exactly what it does.</h2>
-    <p class="lede" data-reveal data-d="2">Pick your kind of business. This is the real shape of the brain you
-      would get, rendered by the same code that draws the map you log into every morning.
-      Click any node.</p>
+    <p class="lede" data-reveal data-d="2">Pick your kind of business. This is not a picture of the product.
+      It is the product's own map renderer, running here with your industry's agents in it.
+      Click a department to open it, then any branch inside.</p>
 
     <div class="verticals" id="verticals" role="tablist" aria-label="Business type" data-reveal data-d="3"></div>
 
-    <div class="stage-grid" data-reveal data-d="3">
-      <div class="stage" id="stage">
-        <div class="stage-core" id="stageCore">
-          <small>Your business</small>
-          <b id="hubName"></b>
-        </div>
-        <div class="stage-hint">Click a node</div>
-        <div class="node-list" id="nodeList"></div>
+    <div class="stage" id="stage" data-reveal data-d="3">
+      <div class="stage-core" id="stageCore">
+        <small>Your business</small>
+        <b id="hubName"></b>
       </div>
+      <div class="stage-hint">Click a department, then a branch</div>
+      <button class="map-back" id="mapBack" type="button">
+        <span aria-hidden="true">&larr;</span> All departments
+      </button>
+      <div class="map-tip" id="mapTip" aria-hidden="true"></div>
+      <div class="node-list" id="nodeList"></div>
       <aside class="panel" id="panel" aria-live="polite"></aside>
     </div>
+
+    <!-- What this vertical gets, always visible, so the map stays clean. -->
+    <div class="vsummary" id="vsummary" data-reveal data-d="4"></div>
   </div>
 </section>
 
@@ -204,7 +209,32 @@
       <div class="screen" data-reveal data-d="4">
         <div class="screen-bar"><i></i><i></i><i></i><span>Chart</span></div>
         <div class="screen-body">
-          <div class="ui-bars" id="uiBars"></div>
+          <!-- Drawn, not animated with JS: the line strokes itself on with
+               stroke-dasharray and the area fades under it, driven purely by
+               the .in class the reveal observer adds. Nothing to schedule,
+               nothing to get out of sync. -->
+          <svg class="ui-chart" viewBox="0 0 300 120" role="img"
+               aria-label="Calls answered per day, trending up across the week">
+            <defs>
+              <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#c9a066" stop-opacity=".34"/>
+                <stop offset="100%" stop-color="#c9a066" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <line class="ui-grid" x1="0" y1="30" x2="300" y2="30"/>
+            <line class="ui-grid" x1="0" y1="60" x2="300" y2="60"/>
+            <line class="ui-grid" x1="0" y1="90" x2="300" y2="90"/>
+            <path class="ui-area"
+                  d="M0,86 L50,72 L100,80 L150,44 L200,55 L250,22 L300,32 L300,120 L0,120 Z"/>
+            <path class="ui-line"
+                  d="M0,86 L50,72 L100,80 L150,44 L200,55 L250,22 L300,32"/>
+            <g class="ui-dots">
+              <circle cx="0" cy="86" r="2.5"/><circle cx="50" cy="72" r="2.5"/>
+              <circle cx="100" cy="80" r="2.5"/><circle cx="150" cy="44" r="2.5"/>
+              <circle cx="200" cy="55" r="2.5"/><circle cx="250" cy="22" r="2.5"/>
+              <circle cx="300" cy="32" r="2.5"/>
+            </g>
+          </svg>
           <div class="ui-sec">This week</div>
           <div class="ui-row"><span>Calls answered</span><time>96%</time></div>
           <div class="ui-row"><span>Booked on the call</span><time>41%</time></div>
@@ -368,6 +398,9 @@
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
 <script src="data.js"></script>
+<!-- The dashboard's own renderer, copied in at build time. map.js is only
+     the adapter that feeds it department and agent data. -->
+<script src="brain-map.js"></script>
 <script src="map.js"></script>
 <script src="app.js"></script>
 </body>

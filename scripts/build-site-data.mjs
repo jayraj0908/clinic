@@ -21,7 +21,14 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const AGENTS_DIR = path.join(ROOT, "brain", "agents");
 const BLUEPRINTS_DIR = path.join(ROOT, "brain", "blueprints");
-const OUT = path.join(ROOT, "site", "data.js");
+const DEPARTMENTS = path.join(ROOT, "brain", "departments.json");
+const SITE_DIR = path.join(ROOT, "site");
+const OUT = path.join(SITE_DIR, "data.js");
+// The site renders the dashboard's own map renderer. Copying it in rather
+// than duplicating it keeps one implementation: change the dashboard map
+// and the marketing map changes with it on the next build.
+const MAP_SRC = path.join(ROOT, "public", "js", "brain-map.js");
+const MAP_DEST = path.join(SITE_DIR, "brain-map.js");
 
 // Same flat key: value frontmatter shape server/brain.js parses. Kept
 // deliberately independent of that module (it's CommonJS and pulls in
@@ -106,7 +113,27 @@ if (missing.length) {
 const ORDER = ["dental", "restaurant", "financial-services", "hospitality", "local-service"];
 blueprints.sort((a, b) => ORDER.indexOf(a.vertical) - ORDER.indexOf(b.vertical));
 
-const payload = { generatedAt: new Date().toISOString(), agents, blueprints };
+const deptFile = JSON.parse(fs.readFileSync(DEPARTMENTS, "utf8"));
+const departments = deptFile.departments;
+const agentDept = deptFile.agentDept;
+
+// An agent with no department has nowhere to render and would silently
+// vanish from the map. The dashboard crashes on this; here it fails the
+// build instead, which is the earlier and cheaper place to find out.
+const homeless = Object.keys(agents).filter((id) => !agentDept[id]);
+if (homeless.length) {
+  console.error("These agents have no department in brain/departments.json:\n  " + homeless.join("\n  "));
+  process.exit(1);
+}
+const deptNames = new Set(departments.map((d) => d.name));
+const badDept = Object.entries(agentDept).filter(([, d]) => !deptNames.has(d));
+if (badDept.length) {
+  console.error("agentDept points at departments that do not exist:\n  "
+    + badDept.map(([a, d]) => a + " -> " + d).join("\n  "));
+  process.exit(1);
+}
+
+const payload = { generatedAt: new Date().toISOString(), agents, blueprints, departments, agentDept };
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(
@@ -116,4 +143,19 @@ fs.writeFileSync(
     "window.SAILZ_DATA = " + JSON.stringify(payload, null, 2) + ";\n"
 );
 
-console.log(`site/data.js — ${Object.keys(agents).length} agents, ${blueprints.length} blueprints`);
+if (!fs.existsSync(MAP_SRC)) {
+  console.error("public/js/brain-map.js is missing. The site cannot render the map without it.");
+  process.exit(1);
+}
+fs.writeFileSync(
+  MAP_DEST,
+  "/* COPIED from public/js/brain-map.js by scripts/build-site-data.mjs.\n"
+    + "   Do not edit here. Edit the original and rebuild, so the dashboard\n"
+    + "   and the public site never drift apart. */\n"
+    + fs.readFileSync(MAP_SRC, "utf8")
+);
+
+console.log(
+  `site/data.js — ${Object.keys(agents).length} agents, ${blueprints.length} blueprints, `
+  + `${departments.length} departments\nsite/brain-map.js — copied from public/js/`
+);

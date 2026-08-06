@@ -44,25 +44,26 @@ client's data, and no client is named anywhere on the site.
 
 ## The map
 
-`map.js` is a port of the PixiJS constellation in `public/index.html`:
-the same seeded starfield, core dust cluster, glow hubs, curved edges
-with travelling pulses, and the camera tween that focuses a hub and
-expands its workflows as leaves.
+There is no second map any more. `site/brain-map.js` is a **build-time copy
+of `public/js/brain-map.js`**, the exact renderer the client dashboard uses,
+written by `scripts/build-site-data.mjs` on every build. `site/map.js` is a
+thin adapter: it turns the seven departments in `brain/departments.json`
+plus one vertical's agent roster into the `{nodes, edges}` shape that
+renderer expects, the same way the dashboard's own `deptDefsToMapData()`
+does. Change the dashboard map and the marketing map changes with it.
 
-Two modes. `ambient:true` drifts behind the hero with no interaction.
-`ambient:false` is the interactive one in the brain section. Both pause
-when scrolled off screen, so there is never a WebGL context burning
-frames nobody can see.
+That means the site gets the real thing for free: the ring-to-tree morph,
+the camera tweens, semantic zoom, hover glow, click-to-focus, the dust core.
+Departments light up only when this vertical actually has an agent there,
+dim with a plus when one could be switched on, and stay dark when nothing
+belongs there. Identical semantics to the dashboard.
 
-If WebGL is unavailable the module returns `null` and the page falls back
-to the DOM node list, which carries exactly the same information as real
-buttons. A prospect on a locked-down work laptop must never see a black
-rectangle.
+`brain/departments.json` is the shared taxonomy. `public/index.html` still
+has its own inline copy of the same constants; collapsing that is the
+obvious follow-up, and until then a colour change needs making in both.
 
-**When prompt 20 stage 3 lands**, the dashboard's map becomes
-`public/js/brain-map.js` and this file should be replaced by an import of
-it. Until then the two are deliberate siblings, and a change to the
-dashboard map needs mirroring here.
+If WebGL is unavailable the adapter returns `null` and the page falls back
+to the DOM agent list, which carries the same information as real buttons.
 
 ## The booking conversation
 
