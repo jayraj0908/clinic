@@ -396,12 +396,14 @@
   // visitor's mail client, so the booking chat is never a dead end.
   window.SAILZ_LEAD_ENDPOINT = "/api/site/lead";
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
-<script src="data.js"></script>
-<!-- The dashboard's own renderer, copied in at build time. map.js is only
-     the adapter that feeds it department and agent data. -->
-<script src="brain-map.js"></script>
-<script src="map.js"></script>
-<script src="app.js"></script>
+<!-- PixiJS and the renderer are only needed once someone scrolls to the map,
+     which is built lazily. Deferring them keeps ~450KB off the critical path
+     so the hero paints without waiting on a CDN. data.js and app.js are
+     deferred too, so all four still execute in order, after parsing. -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+<script defer src="data.js"></script>
+<script defer src="brain-map.js"></script>
+<script defer src="map.js"></script>
+<script defer src="app.js"></script>
 </body>
 </html>

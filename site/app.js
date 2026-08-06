@@ -64,34 +64,37 @@
       if (fill) fill.style.width = v + "%";
       if (pct) pct.textContent = v;
       paint(value / 100);
-      if (v >= 100 && !done) {
-        done = true;
-        setTimeout(function () {
-          el.classList.add("done");
-          document.body.classList.remove("loading");
-          window.dispatchEvent(new Event("sailz:ready"));
-        }, 260);
-        return;
-      }
+      if (v >= 100) { finish(); return; }
       requestAnimationFrame(tick);
     }
 
-    // Real signals rather than a timer pretending to be one.
-    target = 30;
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(function () { target = Math.max(target, 68); });
-    } else { target = 68; }
-    window.addEventListener("load", function () { target = 100; });
-    setTimeout(function () { target = Math.max(target, 82); }, 700);
-    setTimeout(function () { target = 100; }, 2600); // never trap a visitor behind a stalled asset
-
-    if (reduce) {
+    function finish() {
+      if (done) return;
+      done = true;
+      if (fill) fill.style.width = "100%";
+      if (pct) pct.textContent = "100";
       el.classList.add("done");
       document.body.classList.remove("loading");
       window.dispatchEvent(new Event("sailz:ready"));
-    } else {
-      requestAnimationFrame(tick);
     }
+
+    // Fonts are the only thing worth waiting for; they are what would cause a
+    // visible reflow. Deliberately NOT window.load, which waits on the PixiJS
+    // CDN bundle that first paint does not need.
+    target = 40;
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { target = 100; });
+    } else { target = 100; }
+    setTimeout(function () { target = 100; }, 500);
+
+    // A hard, timer-driven ceiling. requestAnimationFrame is throttled to
+    // roughly 1fps in a background tab, so a loader that only advances on
+    // animation frames leaves anyone who switches tabs staring at a frozen
+    // percentage when they come back. This finishes regardless.
+    setTimeout(finish, 1400);
+
+    if (reduce) finish();
+    else requestAnimationFrame(tick);
   })();
 
   /* =============================== nav ================================ */
