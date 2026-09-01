@@ -4,7 +4,7 @@
   "description": "Sailz engine: client-agnostic AI front-office automation. One deployment per instance (instances/<client>/).",
   "main": "index.js",
   "scripts": {
-    "start": "node server/server.js",
+    "start": "node server/boot.js",
     "seed": "node server/seed.js"
   },
   "keywords": [],
